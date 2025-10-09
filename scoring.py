@@ -14,6 +14,10 @@ class SingleValue(ScoringRule):
         self.points = points
 
     def match(self, dice: List[int]) -> Tuple[int, List[int]]:
+        # If there are three or more of this value, defer entirely to a ThreeOfAKind
+        # (or higher) rule so we don't consume some of the dice and block the set.
+        if dice.count(self.value) >= 3:
+            return 0, []
         indices = [i for i, d in enumerate(dice) if d == self.value]
         score = len(indices) * self.points
         return score, indices
