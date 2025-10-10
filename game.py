@@ -1,25 +1,27 @@
 import pygame, random, sys
 from game_state_manager import GameStateManager
-from goal import Goal
 from scoring import ScoringRules, SingleValue, ThreeOfAKind, Straight6
 from die import Die
-
-# Shared UI constants (expect pygame.init done by caller)
-WIDTH, HEIGHT = 800, 600
-DICE_SIZE = 80
-MARGIN = 20
-ROLL_BTN = pygame.Rect(WIDTH//2 - 200, HEIGHT - 100, 120, 50)
-LOCK_BTN = pygame.Rect(WIDTH//2 - 60, HEIGHT - 100, 120, 50)
-BANK_BTN = pygame.Rect(WIDTH//2 + 80, HEIGHT - 100, 120, 50)
-NEXT_BTN = pygame.Rect(WIDTH//2 - 60, HEIGHT - 160, 120, 50)
+from level import Level, LevelState
+from player import Player
+from actions import handle_lock as action_handle_lock, handle_roll as action_handle_roll, handle_bank as action_handle_bank, handle_next_turn as action_handle_next_turn
+from renderer import GameRenderer
+from settings import WIDTH, HEIGHT, DICE_SIZE, MARGIN, ROLL_BTN, LOCK_BTN, BANK_BTN, NEXT_BTN
 
 class Game:
-    def __init__(self, screen, font, clock, target_goal: int = 2000, max_turns: int = 2):
+    def __init__(self, screen, font, clock, level: Level | None = None):
         self.screen = screen
         self.font = font
+        # Small font for auxiliary text
+        try:
+            self.small_font = pygame.font.Font(None, 22)
+        except Exception:
+            self.small_font = font
         self.clock = clock
-        self.target_goal = target_goal
-        self.max_turns = max_turns
+        # Use provided level or default prototype (multi-goal capable)
+        self.level = level or Level.single(name="Invocation Rite", target_goal=300, max_turns=2, description="Basic ritual to avert a minor omen.")
+        self.level_state = LevelState(self.level)
+        self.active_goal_index: int = 0
         self.rules = ScoringRules()
         self._init_rules()
         self.state_manager = GameStateManager()
@@ -27,8 +29,15 @@ class Game:
         self.turn_score = 0
         self.current_roll_score = 0
         self.message = "Click ROLL to start!"
-        self.goal = Goal(self.target_goal)
-        self.turns_left = self.max_turns
+        self.level_index = 1
+        # Pending scores per goal index (raw points before multiplier applied at bank time)
+        self.pending_goal_scores: dict[int, int] = {}
+        # Track whether at least one scoring combo has been locked since the most recent roll
+        self.locked_after_last_roll = False
+        # Player meta progression container
+        self.player = Player()
+        # Renderer handles all drawing/UI composition
+        self.renderer = GameRenderer(self)
         self.reset_dice()
 
     def _init_rules(self):
@@ -46,13 +55,15 @@ class Game:
         self.dice = [Die(random.randint(1, 6), 100 + i * (DICE_SIZE + MARGIN), HEIGHT // 2 - DICE_SIZE // 2) for i in range(6)]
 
     def reset_game(self):
+        # When called after win/lose we keep current level (already advanced on win)
         self.reset_dice()
         self.turn_score = 0
         self.current_roll_score = 0
         self.message = "Click ROLL to start!"
         self.state_manager = GameStateManager()
-        self.goal = Goal(self.target_goal)
-        self.turns_left = self.max_turns
+        self.level_state.reset()
+        self.active_goal_index = 0
+        self.pending_goal_scores.clear()
 
     def reset_turn(self):
         for d in self.dice:
@@ -62,14 +73,19 @@ class Game:
         self.current_roll_score = 0
         self.message = "Click ROLL to start!"
         self.mark_scoring_dice()
-        self.turns_left = max(0, self.turns_left - 1)
+        self.level_state.consume_turn()
         self.state_manager.transition_to_start()
+        self.active_goal_index = 0
+        self.pending_goal_scores.clear()
+        self.locked_after_last_roll = False
 
     def roll_dice(self):
         for d in self.dice:
             if not d.held:
                 d.value = random.randint(1, 6)
                 d.selected = False
+        # After a roll, require a new lock before rolling again
+        self.locked_after_last_roll = False
 
     def calculate_score_from_dice(self):
         selected: list[int] = [int(d.value) for d in self.dice if d.selected]
@@ -92,11 +108,10 @@ class Game:
         for d in self.dice:
             d.reset()
             d.value = random.randint(1, 6)
-        self.message = "HOT DICE! You can roll all 6 dice again!"
+        self.set_message("HOT DICE! You can roll all 6 dice again!")
         self.mark_scoring_dice()
-
-    def can_roll_again(self):
-        return self.state_manager.get_state() == self.state_manager.state.START or any(d.held for d in self.dice)
+        # Reset lock requirement after hot dice
+        self.locked_after_last_roll = False
 
     def mark_scoring_dice(self):
         for d in self.dice:
@@ -109,52 +124,33 @@ class Game:
         for i in contributing:
             unheld[i].scoring_eligible = True
 
-    def has_partial_set_selected(self) -> bool:
-        if self.state_manager.get_state() != self.state_manager.state.ROLLING:
-            return False
-        unheld = [d for d in self.dice if not d.held]
-        counts = {}
-        for d in unheld:
-            counts[d.value] = counts.get(d.value, 0) + 1
-        for value, cnt in counts.items():
-            if cnt >= 3:
-                selected_cnt = sum(1 for d in unheld if d.value == value and d.selected)
-                if 0 < selected_cnt < 3:
-                    return True
-        return False
-
     def any_scoring_selection(self) -> bool:
         return any(d.selected and d.scoring_eligible for d in self.dice)
 
     def selection_is_single_combo(self) -> bool:
-        """Return True if current selection corresponds to exactly one scoring rule.
-        We treat a valid combo as either:
-          - Exactly the contributing dice for one rule evaluation (e.g., triple, straight, singles of same face)
-        Mixed singles (e.g., a 1 and a 5 together) count as multiple combos and are disallowed.
+        """Generic: a selection is a single combo if exactly one rule fully covers it and
+        its contributing indices count equals that rule's combo_size AND equals the number of selected dice.
+
+        If multiple rules match the selection, choose the rule with the largest combo_size; if there is a tie
+        (two different rule types same size) or more than one rule of that max size matches, treat as not single.
+        This prevents combining smaller atomic units (e.g., two single-value dice) from counting as one combo.
         """
-        selected_values = [d.value for d in self.dice if d.selected]
+        selected_values = [int(d.value) for d in self.dice if d.selected]
         if not selected_values:
             return False
-        # Evaluate full selection using rules; we need to detect if multiple distinct scoring groups are present.
-        # Approach: count occurrences; if length > 1 and not all same and not straight and not triple-of-kind alone, reject.
-        from collections import Counter
-        c = Counter(selected_values)
-        # Straight case (must be exactly 6 unique forming 1..6)
-        if sorted(selected_values) == [1,2,3,4,5,6]:
-            return True
-        if len(c) == 1:
-            # All same value. Accept only if size is 1 (single allowed only if value is 1 or 5) or exactly 3 for triple handled by rules.
-            v = next(iter(c))
-            count = c[v]
-            if count == 1 and v in (1,5):
-                return True
-            if count == 3:
-                return True
-            # Could extend for 4/5/6 of a kind later; for now restrict.
+        matches = self.rules.evaluate_matches(selected_values)
+        if not matches:
             return False
-        # Multiple distinct values.
-        # If all are singles AND exactly one scoring single (should be length 1, already handled) -> unreachable here.
-        # Mixed 1s and 5s is multiple combos => False
+        # Filter only rules whose contributing indices span the entire selection
+        full_cover = [m for m in matches if len(m[2]) == len(selected_values)]
+        if not full_cover:
+            return False
+        # Determine max combo size among full-cover matches
+        max_size = max(m[0].combo_size for m in full_cover if hasattr(m[0], 'combo_size'))
+        best = [m for m in full_cover if getattr(m[0], 'combo_size', 0) == max_size]
+        # Accept only if exactly one best match and its combo_size equals number of selected dice.
+        if len(best) == 1 and best[0][0].combo_size == len(selected_values):
+            return True
         return False
 
     def update_current_selection_score(self):
@@ -163,121 +159,67 @@ class Game:
         else:
             self.current_roll_score = 0
 
-    def handle_lock(self):
-        if self.state_manager.get_state() not in (self.state_manager.state.START, self.state_manager.state.ROLLING):
-            return
-        if not self.any_scoring_selection():
-            self.message = "Select scoring dice first."
-            return
-        if not self.selection_is_single_combo():
-            self.message = "Lock only one combo at a time."
-            return
-        if self.has_partial_set_selected():
-            self.message = "Select ALL dice of the three-of-a-kind or deselect them."
-            return
-        if self.state_manager.get_state() == self.state_manager.state.START:
-            self.state_manager.transition_to_rolling()
+    def _auto_lock_selection(self, verb: str = "Auto-locked") -> bool:
+        """Lock selected dice if they form exactly one valid scoring combo.
+
+        Adds raw score to pending goal, updates turn score, holds dice, updates message.
+        verb: prefix for status message (e.g. 'Auto-locked', 'Locked').
+        Returns True on success, False if selection invalid or score zero.
+        """
+        if not (self.selection_is_single_combo() and self.any_scoring_selection()):
+            return False
         add_score, _ = self.calculate_score_from_dice()
         if add_score <= 0:
-            self.message = "No score in selection."
-            return
+            return False
+        self.pending_goal_scores[self.active_goal_index] = self.pending_goal_scores.get(self.active_goal_index, 0) + add_score
         self.turn_score += add_score
         self.current_roll_score = 0
         for d in self.dice:
             if d.selected:
                 d.hold()
-        self.message = f"Locked {add_score} points. Roll or lock more." if self.turn_score > 0 else "Select dice to lock."
+        gname = self.level.goals[self.active_goal_index][0]
+        self.message = f"{verb} {add_score} to {gname}."
         self.mark_scoring_dice()
+        self.locked_after_last_roll = True
+        return True
+
+    def handle_lock(self):
+        action_handle_lock(self)
 
     def handle_roll(self):
-        if any(d.selected for d in self.dice):
-            self.message = "Lock selected dice before rolling."
-            return
-        if not self.can_roll_again():
-            self.message = "You must lock at least one scoring die first!"
-            return
-        if self.state_manager.get_state() == self.state_manager.state.START:
-            self.state_manager.transition_to_rolling()
-        if self.all_dice_held():
-            self.hot_dice_reset()
-            self.message = "HOT DICE! Roll all 6 again!"
-        else:
-            self.roll_dice()
-        self.mark_scoring_dice()
-        if self.check_farkle():
-            self.state_manager.transition_to_farkle()
-            self.message = "Farkle! You lose this turn's points."
-            self.turn_score = 0
-            self.current_roll_score = 0
+        action_handle_roll(self)
 
     def handle_bank(self):
-        if self.state_manager.get_state() != self.state_manager.state.ROLLING:
-            return
-        if any(d.selected for d in self.dice):
-            self.message = "Lock or deselect dice before banking."
-            return
-        if (self.turn_score) <= 0:
-            return
-        banked_points = self.turn_score
-        self.goal.subtract(banked_points)
-        self.turn_score = 0
-        self.current_roll_score = 0
-        self.state_manager.transition_to_banked()
-        if self.goal.is_fulfilled():
-            self.message = f"Goal fulfilled! You reached {self.goal.target_score} points!"
-        else:
-            self.message = f"Banked {banked_points} points! Points to goal: {self.goal.get_remaining()}"
+        action_handle_bank(self)
 
     def handle_next_turn(self):
-        if self.state_manager.get_state() in (self.state_manager.state.FARKLE, self.state_manager.state.BANKED):
-            self.reset_turn()
+        action_handle_next_turn(self)
+
+    def create_next_level(self):
+        self.level_index += 1
+        # Delegate progression logic to Level.advance for consistency
+        self.level = Level.advance(self.level, self.level_index)
+        self.level_state = LevelState(self.level)
+        self.active_goal_index = 0
+        self.pending_goal_scores.clear()
+        # Gold persists; player_gold not reset here.
 
     def draw(self):
-        self.screen.fill((40, 120, 40))
-        if self.state_manager.get_state() in (self.state_manager.state.ROLLING, self.state_manager.state.FARKLE, self.state_manager.state.BANKED):
-            for d in self.dice:
-                d.draw(self.screen)
-        # Buttons
-        pygame.draw.rect(self.screen, (250, 200, 50), ROLL_BTN, border_radius=10)
-        lock_enabled = self.selection_is_single_combo() and self.any_scoring_selection() and not self.has_partial_set_selected()
-        lock_color = (180, 180, 250) if lock_enabled else (120, 120, 150)
-        pygame.draw.rect(self.screen, lock_color, LOCK_BTN, border_radius=10)
-        pygame.draw.rect(self.screen, (100, 200, 100), BANK_BTN, border_radius=10)
-        self.screen.blit(self.font.render("ROLL", True, (0, 0, 0)), (ROLL_BTN.x + 25, ROLL_BTN.y + 10))
-        self.screen.blit(self.font.render("LOCK", True, (0, 0, 0)), (LOCK_BTN.x + 25, LOCK_BTN.y + 10))
-        self.screen.blit(self.font.render("BANK", True, (0, 0, 0)), (BANK_BTN.x + 25, BANK_BTN.y + 10))
-        if self.state_manager.get_state() in (self.state_manager.state.FARKLE, self.state_manager.state.BANKED):
-            pygame.draw.rect(self.screen, (200, 50, 50), NEXT_BTN, border_radius=10)
-            self.screen.blit(self.font.render("Next Turn", True, (255, 255, 255)), (NEXT_BTN.x + 10, NEXT_BTN.y + 10))
-        # Info lines
-        self.screen.blit(self.font.render(self.message, True, (255, 255, 255)), (80, 60))
-        # Live turn score preview includes locked plus current selection (if valid)
-        preview_score = self.turn_score + (self.current_roll_score if self.selection_is_single_combo() else 0)
-        self.screen.blit(self.font.render(f"Turn Score: {preview_score}", True, (255, 255, 255)), (80, 100))
-        if self.selection_is_single_combo() and self.current_roll_score > 0:
-            self.screen.blit(self.font.render(f"+ Selecting: {self.current_roll_score}", True, (200, 200, 50)), (80, 130))
-            y_goal = 160
-        else:
-            y_goal = 130
-        self.screen.blit(self.font.render(f"Points to Goal: {self.goal.get_remaining()}", True, (255, 255, 0)), (80, y_goal))
-        circle_radius = 12
-        circle_margin = 8
-        for i in range(self.turns_left):
-            x = WIDTH - 30 - i * (circle_radius * 2 + circle_margin)
-            y = 30
-            pygame.draw.circle(self.screen, (0, 0, 0), (x, y), circle_radius)
-        pygame.display.flip()
+        self.renderer.draw()
+
+    # Rendering helpers moved to GameRenderer.
 
     def check_end_conditions(self):
-        if self.goal.is_fulfilled():
-            self.message = f"Congratulations! You win! Goal of {self.goal.target_score} reached!"
-            self.draw()
-            pygame.time.wait(2000)
+        if self.level_state.completed:
+            self.set_message(f"Omen averted! ({self.level.name})")
+            self.draw(); pygame.time.wait(1200)
+            self.create_next_level()
             self.reset_game()
-        elif self.turns_left <= 0 and not self.goal.is_fulfilled():
-            self.message = "Sorry, you lose! Goal not reached in time."
-            self.draw()
-            pygame.time.wait(2000)
+        elif self.level_state.failed:
+            unfinished = [self.level.goals[i][0] for i in self.level_state.mandatory_indices if not self.level_state.goals[i].is_fulfilled()]
+            unf_txt = ", ".join(unfinished) if unfinished else "(none)"
+            self.set_message(f"Ritual failed. Unfinished: {unf_txt}")
+            self.draw(); pygame.time.wait(1200)
             self.reset_game()
 
     def run(self):
@@ -293,8 +235,19 @@ class Game:
                             if not d.held and d.scoring_eligible:
                                 d.toggle_select()
                                 self.update_current_selection_score()
-                    if ROLL_BTN.collidepoint(mx, my) and self.state_manager.get_state() in (self.state_manager.state.START, self.state_manager.state.ROLLING):
-                        self.handle_roll()
+                    if hasattr(self.renderer, 'goal_boxes'):
+                        for idx, rect in enumerate(self.renderer.goal_boxes):
+                            if rect.collidepoint(mx, my):
+                                self.active_goal_index = idx
+                                break
+                    if ROLL_BTN.collidepoint(mx, my):
+                        current_state = self.state_manager.get_state()
+                        valid_combo_selected = self.selection_is_single_combo() and self.any_scoring_selection()
+                        can_roll = (current_state == self.state_manager.state.START) or (current_state == self.state_manager.state.ROLLING and (self.locked_after_last_roll or valid_combo_selected))
+                        if can_roll:
+                            self.handle_roll()
+                        else:
+                            self.set_message("Lock a scoring combo before rolling again.")
                     if LOCK_BTN.collidepoint(mx, my):
                         self.handle_lock()
                     if BANK_BTN.collidepoint(mx, my):
@@ -302,7 +255,14 @@ class Game:
                     if NEXT_BTN.collidepoint(mx, my):
                         self.handle_next_turn()
             self.check_end_conditions()
-            self.draw()
+            self.renderer.draw()
             self.clock.tick(30)
         pygame.quit()
         sys.exit()
+
+    def set_message(self, text: str):
+        """Set current UI status message.
+
+        Future extension: maintain a history or timestamp for debugging/logs.
+        """
+        self.message = text
