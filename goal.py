@@ -94,11 +94,23 @@ class Goal(GameObject):
                 except Exception:
                     pass
         elif et == GameEventType.BANK:
-            # Apply accumulated pending (if any) on bank
+            # On BANK: request scoring application instead of applying directly.
             if self.pending_raw > 0 and not self.is_fulfilled():
-                before = self.remaining
-                adjusted = int(self.pending_raw * self.game.level.score_multiplier)
-                if adjusted > 0:
+                from game_event import GameEvent as GE, GameEventType as GET
+                self.game.event_listener.publish(GE(GET.SCORE_APPLY_REQUEST, payload={
+                    "goal": self,
+                    "pending_raw": self.pending_raw
+                }))
+            else:
+                # Nothing pending; just ensure cleared
+                self.pending_raw = 0
+        elif et == GameEventType.SCORE_APPLIED:
+            # Player has computed adjusted score; payload includes goal reference
+            target = event.get("goal")
+            if target is self and not self.is_fulfilled():
+                adjusted = int(event.get("adjusted", 0))
+                if adjusted > 0 and self.pending_raw > 0:
+                    before = self.remaining
                     self.subtract(adjusted)
                     delta = before - self.remaining
                     from game_event import GameEvent as GE, GameEventType as GET
@@ -115,8 +127,8 @@ class Goal(GameObject):
                         }))
                         if self.game.level_state._all_mandatory_fulfilled():
                             self.game.level_state.completed = True
-            # Clear pending whether applied or not
-            self.pending_raw = 0
+                # Clear pending after application
+                self.pending_raw = 0
         elif et == GameEventType.FARKLE:
             # Lose pending points for the turn
             self.pending_raw = 0

@@ -37,7 +37,7 @@ class PendingScoringTests(unittest.TestCase):
         # Bank applies 200 * multiplier
         pre_remaining = goal.remaining
         self.game.handle_bank()
-        expected = int(200 * self.game.level.score_multiplier)
+        expected = int(200 * self.game.player.get_score_multiplier())
         self.assertEqual(pre_remaining - goal.remaining, expected)
 
     def test_locks_across_two_goals(self):
@@ -55,7 +55,7 @@ class PendingScoringTests(unittest.TestCase):
                 name=self.game.level.name,
                 max_turns=self.game.level.max_turns,
                 description=self.game.level.description,
-                score_multiplier=self.game.level.score_multiplier,
+                # score_multiplier removed from Level; no field to pass now
                 goals=self.game.level.goals + (("Temp", 150, False, 0),)
             )
         g0, g1 = self.game.level_state.goals[0], self.game.level_state.goals[1]
@@ -82,7 +82,7 @@ class PendingScoringTests(unittest.TestCase):
         # Bank: both apply
         pre0, pre1 = g0.remaining, g1.remaining
         self.game.handle_bank()
-        mult = self.game.level.score_multiplier
+        mult = self.game.player.get_score_multiplier()
         self.assertEqual(pre0 - g0.remaining, int(100*mult))
         self.assertEqual(pre1 - g1.remaining, int(100*mult))
 

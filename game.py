@@ -5,13 +5,12 @@ from die import Die
 from dice_container import DiceContainer
 from level import Level, LevelState
 from player import Player
-from goal import Goal
 from game_event import GameEvent, GameEventType
 from event_listener import EventListener
 from actions import handle_lock as action_handle_lock, handle_roll as action_handle_roll, handle_bank as action_handle_bank, handle_next_turn as action_handle_next_turn
 from input_controller import InputController
 from renderer import GameRenderer
-from settings import WIDTH, HEIGHT, DICE_SIZE, MARGIN, ROLL_BTN, LOCK_BTN, BANK_BTN, NEXT_BTN
+from settings import ROLL_BTN, LOCK_BTN, BANK_BTN, NEXT_BTN
 
 class Game:
     def __init__(self, screen, font, clock, level: Level | None = None):
@@ -86,28 +85,58 @@ class Game:
         for g in self.level_state.goals:
             g.pending_raw = 0
         advancing = getattr(self, "_advancing_level", False)
-        # Capture existing non-goal subscribers so we can preserve them across listener reset
-        preserved_callbacks: list = []
-        try:
-            from goal import Goal as _Goal
-            for cb in getattr(self.event_listener, "_subs_all", []):
-                bound_self = getattr(cb, "__self__", None)
-                if bound_self is None or not isinstance(bound_self, _Goal):
-                    preserved_callbacks.append(cb)
-        except Exception:
-            pass
-        self._subscribe_core_objects(reset=True)
-        # Re-subscribe preserved callbacks (e.g., external test collectors)
-        for cb in preserved_callbacks:
+        if advancing:
+            # During advancement do NOT replace the event_listener (keeps queued events like LEVEL_GENERATED intact)
             try:
-                self.event_listener.subscribe(cb)
+                from goal import Goal as _Goal
+                # Remove old goal callbacks
+                filtered = []
+                for cb in list(getattr(self.event_listener, "_subs_all", [])):
+                    bound_self = getattr(cb, "__self__", None)
+                    if bound_self is not None and isinstance(bound_self, _Goal):
+                        # remove
+                        try:
+                            self.event_listener.unsubscribe(cb)
+                        except Exception:
+                            pass
+                    else:
+                        filtered.append(cb)
+                # Re-subscribe new goals with updated level_state
+                for g in self.level_state.goals:
+                    g.game = self  # type: ignore[attr-defined]
+                    self.event_listener.subscribe(g.on_event)
+                # Ensure game.on_event still subscribed
+                if self.on_event not in getattr(self.event_listener, "_subs_all", []):
+                    self.event_listener.subscribe(self.on_event)
             except Exception:
                 pass
-        # Emit a TURN_START for new level (done in __init__ for first level)
-        try:
-            self.event_listener.publish(GameEvent(GameEventType.TURN_START, payload={"level": self.level.name, "turn_index": 1}))
-        except Exception:
-            pass
+        else:
+            # Non-advancement path: full reset including listener replacement (retain external subscribers)
+            preserved_callbacks: list = []
+            try:
+                from goal import Goal as _Goal
+                for cb in getattr(self.event_listener, "_subs_all", []):
+                    bound_self = getattr(cb, "__self__", None)
+                    if bound_self is None or not isinstance(bound_self, _Goal):
+                        preserved_callbacks.append(cb)
+            except Exception:
+                pass
+            self._subscribe_core_objects(reset=True)
+            for cb in preserved_callbacks:
+                try:
+                    self.event_listener.subscribe(cb)
+                except Exception:
+                    pass
+        # Emit TURN_START only for non-advancement resets; advancement path handles after LEVEL_GENERATED.
+        if not advancing:
+            try:
+                self.event_listener.publish(GameEvent(GameEventType.TURN_START, payload={
+                    "level": self.level.name,
+                    "turn_index": 1,
+                    "advancing": False
+                }))
+            except Exception:
+                pass
         # If we are in the middle of advancement, now emit LEVEL_ADVANCE_FINISHED (after new TURN_START)
         if advancing:
             try:
@@ -258,6 +287,29 @@ class Game:
         # Finish advancement by resetting game state for new level (without losing meta state)
         self._advancing_level = True
         self.reset_game()
+        # Emit TURN_START for new level now (guaranteed after LEVEL_GENERATED)
+        try:
+            self.event_listener.publish(GameEvent(GameEventType.TURN_START, payload={
+                "level": self.level.name,
+                "turn_index": 1,
+                "advancing": True
+            }))
+        except Exception:
+            pass
+        # Fallback (should be redundant now) retained for safety
+        try:
+            recent_types = [e.type for e in getattr(self, '_recent_events', [])[-20:]]
+            gen_positions = [i for i,t in enumerate(recent_types) if t == GameEventType.LEVEL_GENERATED]
+            if gen_positions:
+                last_gen = gen_positions[-1]
+                if GameEventType.TURN_START not in recent_types[last_gen+1:]:
+                    self.event_listener.publish(GameEvent(GameEventType.TURN_START, payload={
+                        "level": self.level.name,
+                        "turn_index": 1,
+                        "fallback": True
+                    }))
+        except Exception:
+            pass
 
     def draw(self):
         self.renderer.draw()
@@ -317,11 +369,39 @@ class Game:
                 # After completion we wait for TURN_END if not already ended; if turn already ended (banked) we advance immediately.
                 if any(e.type == GameEventType.TURN_END for e in getattr(self, '_recent_events', [])):
                     self._advance_level_post_turn()
+        elif et == GameEventType.BANK:
+            # Initialize tracking of outstanding score applications for this bank.
+            # Count goals with pending_raw > 0 at bank time.
+            pending_goals = sum(1 for g in self.level_state.goals if getattr(g, 'pending_raw', 0) > 0 and not g.is_fulfilled())
+            self._bank_applications_expected = pending_goals
+            self._bank_applications_seen = 0
+            # Edge case: no pending goals -> emit TURN_END immediately (bank of zero pending shouldn't happen due to guard but be safe)
+            if pending_goals == 0:
+                try:
+                    self.event_listener.publish(GameEvent(GameEventType.TURN_END, payload={"reason": "banked"}))
+                except Exception:
+                    pass
+        elif et == GameEventType.SCORE_APPLIED:
+            # Increment seen count; when all expected have applied, emit TURN_END.
+            if hasattr(self, '_bank_applications_expected'):
+                self._bank_applications_seen += 1
+                if self._bank_applications_seen >= getattr(self, '_bank_applications_expected', 0):
+                    try:
+                        self.event_listener.publish(GameEvent(GameEventType.TURN_END, payload={"reason": "banked"}))
+                    except Exception:
+                        pass
+                    # Cleanup tracking vars
+                    self._bank_applications_expected = 0
+                    self._bank_applications_seen = 0
         elif et == GameEventType.TURN_END:
             reason = event.get("reason")
             # If the level just completed this turn, advance now
             if self.level_state.completed and reason in ("banked", "farkle", "level_complete"):
                 self._advance_level_post_turn()
+            if reason == "banked":
+                # Now that scoring application cycle finished, clear per-turn tallies
+                self.turn_score = 0
+                self.current_roll_score = 0
             # Failure detection: out of turns and not complete
             if not self.level_state.completed and self.level_state.turns_left == 0 and not self.level_state._all_mandatory_fulfilled():
                 if not self.level_state.failed:

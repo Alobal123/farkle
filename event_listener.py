@@ -14,6 +14,9 @@ class EventListener:
         # Map event type -> list[callable]
         self._subs_all: list[Callable[[GameEvent], None]] = []
         self._subs_specific: dict[GameEventType, list[Callable[[GameEvent], None]]] = defaultdict(list)
+        # Simple reentrancy-safe queue so events published during a callback are processed afterward
+        self._queue: list[GameEvent] = []
+        self._dispatching: bool = False
 
     def subscribe(self, callback: Callable[[GameEvent], None], types: Optional[Iterable[GameEventType]] = None):
         if types is None:
@@ -33,14 +36,23 @@ class EventListener:
                 lst.remove(callback)
 
     def publish(self, event: GameEvent):
-        # Dispatch to all-subscribers then type-specific
-        for cb in list(self._subs_all):
-            try:
-                cb(event)
-            except Exception:
-                pass
-        for cb in list(self._subs_specific.get(event.type, [])):
-            try:
-                cb(event)
-            except Exception:
-                pass
+        self._queue.append(event)
+        if self._dispatching:
+            return
+        self._dispatching = True
+        try:
+            while self._queue:
+                ev = self._queue.pop(0)
+                # Dispatch to all-subscribers then type-specific
+                for cb in list(self._subs_all):
+                    try:
+                        cb(ev)
+                    except Exception:
+                        pass
+                for cb in list(self._subs_specific.get(ev.type, [])):
+                    try:
+                        cb(ev)
+                    except Exception:
+                        pass
+        finally:
+            self._dispatching = False

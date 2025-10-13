@@ -19,6 +19,9 @@ class GameEventType(Enum):
     GOAL_PROGRESS = auto()
     GOAL_FULFILLED = auto()
     GOLD_GAINED = auto()
+    # Scoring application (player-mediated multiplier)
+    SCORE_APPLY_REQUEST = auto()
+    SCORE_APPLIED = auto()
     # Level lifecycle
     LEVEL_COMPLETE = auto()
     LEVEL_FAILED = auto()

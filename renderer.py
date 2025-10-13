@@ -62,8 +62,14 @@ class GameRenderer:
 
     def compute_preview_scores(self) -> Tuple[int, int]:
         g = self.game
+        player_mult = 1.0
+        if hasattr(g, 'player') and hasattr(g.player, 'get_score_multiplier'):
+            try:
+                player_mult = float(g.player.get_score_multiplier())  # type: ignore[attr-defined]
+            except Exception:
+                player_mult = 1.0
         if g.selection_is_single_combo() and g.current_roll_score > 0:
-            adjusted = int(g.current_roll_score * g.level.score_multiplier)
+            adjusted = int(g.current_roll_score * player_mult)
         else:
             adjusted = 0
         return g.turn_score + adjusted, adjusted
@@ -120,13 +126,19 @@ class GameRenderer:
             base_remaining = goal.get_remaining()
             # Per-goal pending stored directly on goal
             pending_raw = getattr(goal, 'pending_raw', 0)
-            pending_adjusted = int(pending_raw * g.level.score_multiplier) if pending_raw else 0
+            player_mult = 1.0
+            if hasattr(g, 'player') and hasattr(g.player, 'get_score_multiplier'):
+                try:
+                    player_mult = float(g.player.get_score_multiplier())  # type: ignore[attr-defined]
+                except Exception:
+                    player_mult = 1.0
+            pending_adjusted = int(pending_raw * player_mult) if pending_raw else 0
             if goal.is_fulfilled():
                 remaining_text = "Done"
             else:
                 if pending_adjusted > 0:
                     show_remaining = max(0, base_remaining - pending_adjusted)
-                    remaining_text = f"Rem: {base_remaining} (-{pending_raw} * {g.level.score_multiplier:.2f} = {pending_adjusted}) -> {show_remaining}"
+                    remaining_text = f"Rem: {base_remaining} (-{pending_raw} * {player_mult:.2f} = {pending_adjusted}) -> {show_remaining}"
                 else:
                     remaining_text = f"Rem: {base_remaining}"
             reward_text = f"Reward: {goal.reward_gold}g" if goal.reward_gold > 0 else ""

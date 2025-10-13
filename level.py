@@ -14,21 +14,20 @@ class Level:
     name: str
     max_turns: int
     description: str = ""
-    score_multiplier: float = 1.0
     goals: Tuple[Tuple[str, int, bool, int], ...] = ()  # sequence of (goal_name, target, mandatory, reward_gold)
 
     @staticmethod
-    def single(name: str, target_goal: int, max_turns: int, description: str = "", score_multiplier: float = 1.0, reward_gold: int = 50):
+    def single(name: str, target_goal: int, max_turns: int, description: str = "", reward_gold: int = 50):
         """Helper to create a legacy single-goal Level definition."""
         # Use the level name as the goal name for display consistency.
-        return Level(name=name, max_turns=max_turns, description=description, score_multiplier=score_multiplier,
+        return Level(name=name, max_turns=max_turns, description=description,
                      goals=((name, target_goal, True, reward_gold),))
 
     @staticmethod
     def advance(prev: 'Level', next_index: int) -> 'Level':
         """Return the next level using progression rules:
         targets += 400 + 50*index; add optional goal every 2 levels; +1 turn every 3 levels;
-        multiplier grows 0.05 per level after first.
+    (Score multiplier progression removed; now tied to Player abilities.)
 
         Reward scaling: existing goals' gold increased by 10 * level_index; optional goals get base + scaling.
         """
@@ -47,7 +46,6 @@ class Level:
             name=f"Rite {next_index}",
             max_turns=max_turns,
             description="An intensified supplication to sterner deities.",
-            score_multiplier=1.0 + (next_index - 1) * 0.05,
             goals=tuple(new_goals)
         )
 

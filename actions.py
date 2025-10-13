@@ -78,14 +78,13 @@ def handle_bank(game) -> bool:
             game.set_message("Invalid selection: deselect or lock a single combo before banking."); return False
     if game.turn_score <= 0:
         return False
-    # Goals now apply their own pending in response to BANK event
-    game.turn_score = 0
-    game.current_roll_score = 0
+    # Goals now apply their own pending in response to BANK event.
+    # Defer zeroing scores until after SCORE_APPLIED / TURN_END so UI can still show pre-bank total if needed.
     game.state_manager.transition_to_banked()
     try:
         game.event_listener.publish(GameEvent(GameEventType.BANK, payload={}))
         game.event_listener.publish(GameEvent(GameEventType.TURN_BANKED, payload={"banked": True}))
-        game.event_listener.publish(GameEvent(GameEventType.TURN_END, payload={"reason": "banked"}))
+        # TURN_END now emitted after all SCORE_APPLY_REQUEST/SCORE_APPLIED cycles finish (in Game.on_event)
     except Exception:
         pass
     if game.level_state.completed:
