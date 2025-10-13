@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 from game_object import GameObject
 from score_modifiers import ScoreModifierChain, ScoreModifier, ScoreMultiplier
+from game_event import GameEventType
 
 @dataclass
 class Relic(GameObject):
@@ -30,6 +31,23 @@ class Relic(GameObject):
 
     # Placeholder for event reaction if relics will respond to events
     def on_event(self, event):  # type: ignore[override]
+        # Apply selective (non-global) modifiers during SCORE_PRE_MODIFIERS
+        if event.type == GameEventType.SCORE_PRE_MODIFIERS:
+            score_obj = event.get('score_obj')
+            if not score_obj:
+                return
+            from score_modifiers import ScoreMultiplier as _SM
+            context = type('TmpCtx',(object,),{})()
+            setattr(context, 'score_obj', score_obj)
+            # Fold non-global modifiers modifying parts (adjusted values written in parts)
+            for m in self.modifier_chain.snapshot():
+                if isinstance(m, _SM):
+                    continue
+                try:
+                    # base passed is ignored by CompositePartModifier except for arithmetic
+                    _ = m.apply(score_obj.total_effective, context)  # type: ignore[arg-type]
+                except Exception:
+                    pass
         return
 
     def draw(self, surface):  # type: ignore[override]

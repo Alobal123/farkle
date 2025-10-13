@@ -58,7 +58,8 @@ class RelicShopTests(unittest.TestCase):
                     captured.update(ev.payload)
             self.game.event_listener.subscribe(cap2)
             self.game.handle_bank()
-            self.assertEqual(captured.get("pending_raw"), 50)
+            # Pending raw now includes flat mutation (+50) -> 100 total
+            self.assertEqual(captured.get("pending_raw"), 100)
             self.assertEqual(captured.get("adjusted"), 100)
 
 if __name__ == '__main__':

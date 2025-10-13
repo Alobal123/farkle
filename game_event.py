@@ -22,6 +22,7 @@ class GameEventType(Enum):
     # Scoring application (player-mediated multiplier)
     SCORE_APPLY_REQUEST = auto()
     SCORE_APPLIED = auto()
+    SCORE_PRE_MODIFIERS = auto()
     # Level lifecycle
     LEVEL_COMPLETE = auto()
     LEVEL_FAILED = auto()

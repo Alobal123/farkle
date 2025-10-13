@@ -16,8 +16,12 @@ class RuleSpecificModifierTests(unittest.TestCase):
 
     def setUp(self):
         self.game = Game(self.screen, self.font, self.clock)
-        # Inject a rule-specific multiplier doubling only SingleValue 5's
-        self.game.player.modifier_chain.add(RuleSpecificMultiplier(rule_key="SingleValue:5", mult=2.0))
+        # Inject a relic with a rule-specific multiplier doubling only SingleValue 5's
+        from relic import Relic
+        relic = Relic(name="Test Sigil")
+        relic.add_modifier(RuleSpecificMultiplier(rule_key="SingleValue:5", mult=2.0))
+        self.game.relic_manager.active_relics.append(relic)
+        self.game.event_listener.subscribe(relic.on_event)
 
     def test_double_only_single_fives(self):
         # Force dice: two scoring singles 5 (should be 2 * 50 = 100 raw) and one single 1 (100) -> separate locks
@@ -53,8 +57,8 @@ class RuleSpecificModifierTests(unittest.TestCase):
         self.game.handle_bank()
         # Simulate progression of SCORE_APPLY_REQUEST cycle
         # (Events triggered synchronously inside handle_bank())
-        self.assertGreater(captured.get("adjusted", 0), 100)
-        # Base multiplier is 1.0 so doubling only the 5s -> adjusted should be 200
+        # Pending raw now reflects mutated total after selective doubling (100 -> 200)
+        self.assertEqual(captured.get("pending_raw"), 200)
         self.assertEqual(captured.get("adjusted"), 200)
         # Ensure score structure present and reflects selective doubling
         self.assertIn("score", captured)
@@ -63,6 +67,7 @@ class RuleSpecificModifierTests(unittest.TestCase):
         parts = score_obj["parts"]
         self.assertEqual(len(parts), 1)
         self.assertEqual(parts[0]["rule_key"], "SingleValue:5")
+        # Raw still reports pre-mutation aggregated raw; adjusted reflects doubled value
         self.assertEqual(parts[0]["raw"], 100)
         self.assertEqual(parts[0]["adjusted"], 200)
 

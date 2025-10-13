@@ -238,3 +238,55 @@ Note the absence of an additional `TURN_START` after `SHOP_CLOSED`; gameplay res
 * Relic rarity tiers with UI differentiation.
 * Non-multiplicative modifiers (flat adders, conditional chains) for richer strategy.
 * Persistence layer to save acquired relics across sessions.
+
+## Unified Scoring Modifier Flow (Selective + Global)
+
+The score adjustment pipeline is now fully event-driven and split into two phases:
+
+1. `SCORE_APPLY_REQUEST` (emitted by a Goal when banking) – payload includes:
+	* `pending_raw` – the original raw points accumulated for that goal this bank cycle (pre‑modification).
+	* `score` – serialized parts (raw + adjusted fields). Adjusted values may be `null` at this point.
+2. `SCORE_PRE_MODIFIERS` (immediate synchronous dispatch) – Player publishes this with a mutable `score_obj` built from the serialized parts.
+	* All relics AND the player receive this event and may mutate `score_obj.parts` (e.g., add flat bonuses, multiply specific rule parts).
+	* Selective (rule-specific / flat) effects occur here only; the Player no longer iterates these later.
+3. Global multiplier aggregation – After `SCORE_PRE_MODIFIERS`, the Player:
+	* Recomputes a mutated base = `sum(part.adjusted or part.raw)`.
+	* Multiplies that base by the product of all `ScoreMultiplier` instances across player + active relics.
+4. `SCORE_APPLIED` – Final event with payload:
+	* `pending_raw` – now reflects the mutated total AFTER selective modifications (note: legacy meaning changed from "raw locked score").
+	* `adjusted` – final post-global-multiplier integer.
+	* `multiplier` – aggregated global multiplier product.
+	* `score` – serialized structure (see below) including both aggregated and detailed parts.
+
+### Score Serialization Fields
+Inside the `score` dict (when present):
+
+| Field | Meaning |
+|-------|---------|
+| `parts` | Aggregated by `rule_key`: `raw` is sum of original raws, `adjusted` is sum of effective (mutated) values for that rule. |
+| `detailed_parts` | Each individual part (lock instance) prior to aggregation. |
+| `total_raw` | Sum of original `raw` values across detailed parts. |
+| `total_effective` | Sum of each part's effective value (`adjusted` if set else `raw`) after selective mutations. |
+| `final_global_adjusted` | The same number as top-level `adjusted` (post global multipliers). |
+
+### Rationale
+Separating selective part mutation (`SCORE_PRE_MODIFIERS`) from global scaling keeps ordering deterministic and lets future relics implement exotic behaviors (e.g., inserting synthetic parts, converting one pattern into another) without entangling global multipliers or requiring Player internals.
+
+### Authoring New Selective Effects
+Implement a relic `on_event` handler listening for `SCORE_PRE_MODIFIERS`:
+
+```python
+def on_event(self, event):
+	 if event.type == GameEventType.SCORE_PRE_MODIFIERS:
+		  score_obj = event.get('score_obj')
+		  if not score_obj: return
+		  # Example: flat +25 to every SingleValue:5 part
+		  for part in score_obj.parts:
+				if part.rule_key == 'SingleValue:5':
+					 part.adjusted = (part.adjusted or part.raw) + 25
+```
+
+Global modifiers still use `ScoreMultiplier` objects added to a chain (player or relic) and are applied uniformly after all selective changes settle.
+
+### Migrated Field Semantics NOTE
+Legacy tests expected `pending_raw` to equal the unmodified raw sum. After unification, `pending_raw` equals the mutated selective total. If you need *both* values for analytics or UI, extend `SCORE_APPLIED` with an `original_raw` field (not yet added) – the infrastructure supports this with minimal change.

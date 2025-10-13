@@ -21,6 +21,100 @@ class GameRenderer:
         # Help overlay state
         self.help_icon_rect = pygame.Rect(10, self.game.screen.get_height() - 50, 40, 40)
         self.show_help = False
+        # Debug toggle for showing active relics (always on for now)
+        self.show_relic_debug = True
+
+    # --- debug helpers -------------------------------------------------
+    def get_active_relic_debug_lines(self) -> List[str]:
+        """Return human-readable lines describing currently active relics.
+
+        Format per relic: Name (+flat bonuses, multipliers).
+        Example: "Charm of Fives [+50 SingleValue:5]" or "Glyph of Triples [x1.50 ThreeOfAKind:*]".
+        """
+        lines: List[str] = []
+        rm = getattr(self.game, 'relic_manager', None)
+        if not rm:
+            return ["Relics: (manager missing)"]
+        if not rm.active_relics:
+            return ["Relics: (none)"]
+        from score_modifiers import FlatRuleBonus, RuleSpecificMultiplier, ScoreMultiplier
+        for relic in rm.active_relics:
+            parts: List[str] = []
+            try:
+                for m in relic.modifier_chain.snapshot():
+                    if isinstance(m, FlatRuleBonus):
+                        parts.append(f"+{m.amount} {m.rule_key}")
+                    elif isinstance(m, RuleSpecificMultiplier):
+                        # Collapse rule_key tail for readability
+                        rk = getattr(m, 'rule_key', '')
+                        parts.append(f"x{getattr(m,'mult',1.0):.2f} {rk}")
+                    elif isinstance(m, ScoreMultiplier):
+                        if getattr(m, 'mult', 1.0) != 1.0:
+                            parts.append(f"x{m.mult:.2f} GLOBAL")
+            except Exception:
+                pass
+            suffix = (" [" + ", ".join(parts) + "]") if parts else ""
+            lines.append(f"{relic.name}{suffix}")
+        return lines
+
+    def _compute_goal_pending_final(self, goal) -> int:
+        """Return the projected final (post selective + global) score for this goal's current pending_raw.
+
+        Rebuild a Score from the goal's internal _pending_score parts (if present) and reapply selective
+        modifiers (to ensure each part receives flat/mult bonuses) then multiply by all global multipliers.
+        Falls back to pending_raw if anything fails.
+        """
+        pending_raw = getattr(goal, 'pending_raw', 0)
+        if pending_raw <= 0:
+            return 0
+        g = self.game
+        orig_score_obj = None
+        try:
+            orig_score_obj = getattr(goal, '_pending_score', None)
+        except Exception:
+            orig_score_obj = None
+        if orig_score_obj is None:
+            return pending_raw
+        try:
+            # Work on a clone to avoid mutating real pending parts (idempotent preview)
+            score_obj = orig_score_obj.clone()
+            # Re-run selective modifiers across each part (non-global only). Use same logic as preview.
+            from score_modifiers import ScoreMultiplier as _SM
+            # Build a lightweight context carrying score_obj
+            ctx = type('TmpCtx',(object,),{'score_obj':score_obj, 'pending_raw':pending_raw})()
+            # Player selective modifiers
+            for m in g.player.modifier_chain.snapshot():
+                if isinstance(m, _SM):
+                    continue
+                try:
+                    _ = m.apply(score_obj.total_effective, ctx)  # type: ignore[arg-type]
+                except Exception:
+                    pass
+            # Relic selective modifiers
+            relic_manager = getattr(g, 'relic_manager', None)
+            if relic_manager is not None:
+                for r in relic_manager.active_relics:
+                    for m in r.modifier_chain.snapshot():
+                        if isinstance(m, _SM):
+                            continue
+                        try:
+                            _ = m.apply(score_obj.total_effective, ctx)  # type: ignore[arg-type]
+                        except Exception:
+                            pass
+            selective_total = score_obj.total_effective
+            # Global multipliers
+            total_mult = 1.0
+            for m in g.player.modifier_chain.snapshot():
+                if isinstance(m, _SM):
+                    total_mult *= m.mult
+            if relic_manager is not None:
+                for r in relic_manager.active_relics:
+                    for m in r.modifier_chain.snapshot():
+                        if isinstance(m, _SM):
+                            total_mult *= m.mult
+            return int(selective_total * total_mult)
+        except Exception:
+            return pending_raw
 
     # Internal helper so click handling can ensure rects exist even before first post-open draw flip
     def _compute_shop_rects(self):
@@ -44,12 +138,12 @@ class GameRenderer:
             return True
         # Shop click handling has priority
         if getattr(g, 'relic_manager', None) and g.relic_manager.shop_open:
-            # Ensure rects are available even if user clicked before first draw cycle after shop opened
-            if self.shop_purchase_rect is None or self.shop_skip_rect is None:
-                self._compute_shop_rects()
-            if self.shop_purchase_rect and self.shop_purchase_rect.collidepoint(mx, my):
-                g.event_listener.publish(GameEvent(GameEventType.REQUEST_BUY_RELIC))
-                return True
+            # Multi-offer support: purchase buttons stored as list
+            purchase_buttons = getattr(self, 'shop_purchase_rects', [])
+            for idx, rect in enumerate(purchase_buttons):
+                if rect.collidepoint(mx, my):
+                    g.event_listener.publish(GameEvent(GameEventType.REQUEST_BUY_RELIC, payload={"offer_index": idx}))
+                    return True
             if self.shop_skip_rect and self.shop_skip_rect.collidepoint(mx, my):
                 g.event_listener.publish(GameEvent(GameEventType.REQUEST_SKIP_SHOP))
                 return True
@@ -107,6 +201,39 @@ class GameRenderer:
             adjusted = 0
         return g.turn_score + adjusted, adjusted
 
+    # New unified selection preview returning (raw, selective, final, total_mult)
+    def get_selection_preview(self) -> Tuple[int,int,int,float]:
+        g = self.game
+        if not (g.selection_is_single_combo() and g.any_scoring_selection()):
+            return (0,0,0,1.0)
+        # Raw score for the selection (single combo restriction already ensures atomicity)
+        raw, _ = g.calculate_score_from_dice()
+        if raw <= 0:
+            return (0,0,0,1.0)
+        # Determine rule_key
+        try:
+            rk = g.dice_container.selection_rule_key()
+        except Exception:
+            rk = None
+        # Selective adjusted using game's helper
+        selective = g._preview_selective_adjust(rk, raw) if rk else raw
+        # Global multipliers (player + relic ScoreMultiplier)
+        from score_modifiers import ScoreMultiplier as _SM
+        total_mult = 1.0
+        try:
+            for m in g.player.modifier_chain:
+                if isinstance(m, _SM): total_mult *= m.mult
+        except Exception:
+            pass
+        try:
+            for r in getattr(g, 'relic_manager', []).active_relics:  # type: ignore[union-attr]
+                for m in r.modifier_chain.snapshot():
+                    if isinstance(m, _SM): total_mult *= m.mult
+        except Exception:
+            pass
+        final_val = int(selective * total_mult)
+        return (raw, selective, final_val, total_mult)
+
     def draw(self):
         g = self.game
         screen = g.screen
@@ -142,10 +269,21 @@ class GameRenderer:
         # Score preview
         dice_bottom_y = HEIGHT // 2 - DICE_SIZE // 2 + DICE_SIZE
         score_y = dice_bottom_y + 15
-        preview_score, adjusted_selection = self.compute_preview_scores()
+        # New richer selection preview
+        preview_score, _ = self.compute_preview_scores()  # legacy total including only global mult for current selection
         screen.blit(g.font.render(f"Turn Score: {preview_score}", True, TEXT_PRIMARY), (100, score_y))
-        if adjusted_selection > 0:
-            screen.blit(g.font.render(f"+ Selecting: {adjusted_selection}", True, TEXT_ACCENT), (100, score_y + 25))
+        raw_sel, selective_sel, final_sel, total_mult = self.get_selection_preview()
+        if raw_sel > 0:
+            # Build preview string
+            if selective_sel != raw_sel and final_sel != selective_sel and total_mult != 1.0:
+                sel_text = f"Selecting: {raw_sel} -> {selective_sel} -> {final_sel}"
+            elif selective_sel != raw_sel:
+                sel_text = f"Selecting: {raw_sel} -> {selective_sel}"
+            elif final_sel != raw_sel and total_mult != 1.0:
+                sel_text = f"Selecting: {raw_sel} -> {final_sel}"
+            else:
+                sel_text = f"Selecting: {raw_sel}"
+            screen.blit(g.font.render(sel_text, True, TEXT_ACCENT), (100, score_y + 25))
         # Goals layout
         panel_y = 90
         self.goal_boxes = []
@@ -174,9 +312,11 @@ class GameRenderer:
             if goal.is_fulfilled():
                 remaining_text = "Done"
             else:
-                if pending_adjusted > 0:
-                    show_remaining = max(0, base_remaining - pending_adjusted)
-                    remaining_text = f"Rem: {base_remaining} (-{pending_adjusted}) -> {show_remaining}"
+                if pending_raw > 0:
+                    projected = self._compute_goal_pending_final(goal)
+                    # Clamp projection so it doesn't show negative remaining
+                    show_after = max(0, base_remaining - projected)
+                    remaining_text = f"Rem: {base_remaining} (pending {projected})"
                 else:
                     remaining_text = f"Rem: {base_remaining}"
             reward_text = f"Reward: {goal.reward_gold}g" if goal.reward_gold > 0 else ""
@@ -233,6 +373,25 @@ class GameRenderer:
         for s in line_surfs:
             screen.blit(s, (hud_rect.x + hud_padding, y))
             y += s.get_height() + 2
+        # Active relic debug list (below HUD, right side)
+        if self.show_relic_debug and not shop_open:
+            try:
+                relic_lines = self.get_active_relic_debug_lines()
+            except Exception:
+                relic_lines = ["Relics: (error)"]
+            # Render in small font, top-right under HUD box
+            rpad = 6
+            r_line_surfs = [g.small_font.render(ln, True, (220,220,230)) for ln in relic_lines]
+            r_width = max(s.get_width() for s in r_line_surfs) + rpad*2
+            r_height = sum(s.get_height() for s in r_line_surfs) + rpad*2 + 4
+            # Position just under hud_rect with slight gap
+            relic_rect = pygame.Rect(hud_rect.right - r_width, hud_rect.bottom + 8, r_width, r_height)
+            pygame.draw.rect(screen, (35,50,62), relic_rect, border_radius=6)
+            pygame.draw.rect(screen, (80,120,155), relic_rect, width=1, border_radius=6)
+            ry = relic_rect.y + rpad
+            for rs in r_line_surfs:
+                screen.blit(rs, (relic_rect.x + rpad, ry))
+                ry += rs.get_height() + 2
         # Draw shop overlay (before single flip) so no flicker from double buffering
         if shop_open:
             self._draw_shop_overlay(screen)
@@ -252,36 +411,54 @@ class GameRenderer:
         panel_rect = pygame.Rect((WIDTH - panel_w)//2, (HEIGHT - panel_h)//2, panel_w, panel_h)
         pygame.draw.rect(screen, (50,70,95), panel_rect, border_radius=12)
         pygame.draw.rect(screen, (120,170,210), panel_rect, width=2, border_radius=12)
-        offer = getattr(g.relic_manager, 'current_offer', None)
-        lines = ["Shop", "", "Relic Offer:"]
-        if offer:
-            lines.append(f"{offer.relic.name}")
-            mult = offer.relic.get_effective_multiplier()
-            lines.append(f"Multiplier: x{mult:.2f}")
-            lines.append(f"Cost: {offer.cost}g (You: {g.player.gold}g)")
-        else:
-            lines.append("(No offer)")
         font = g.font
-        y = panel_rect.y + 20
-        for ln in lines:
-            surf = font.render(ln, True, (250,250,250))
-            screen.blit(surf, (panel_rect.x + 20, y))
-            y += surf.get_height() + 4
-        # Buttons
-        btn_h = 40
-        btn_w = 160
-        gap = 30
-        purchase_rect = pygame.Rect(panel_rect.x + 40, panel_rect.bottom - 60, btn_w, btn_h)
-        skip_rect = pygame.Rect(panel_rect.right - btn_w - 40, panel_rect.bottom - 60, btn_w, btn_h)
-        can_afford = offer and g.player.gold >= offer.cost
-        pygame.draw.rect(screen, (80,200,110) if can_afford else (60,90,70), purchase_rect, border_radius=8)
+        title_surf = font.render("Shop", True, (250,250,250))
+        screen.blit(title_surf, (panel_rect.x + 20, panel_rect.y + 16))
+        gold_surf = font.render(f"Your Gold: {g.player.gold}", True, (230,230,230))
+        screen.blit(gold_surf, (panel_rect.x + 20, panel_rect.y + 16 + title_surf.get_height() + 6))
+        offers = getattr(g.relic_manager, 'offers', [])
+        # Layout offers in columns (up to 3)
+        offer_area_top = panel_rect.y + 90
+        offer_width = (panel_rect.width - 80) // 3
+        offer_height = panel_rect.height - 150
+        self.shop_purchase_rects = []
+        for idx, offer in enumerate(offers):
+            col_x = panel_rect.x + 20 + idx * (offer_width + 20)
+            box_rect = pygame.Rect(col_x, offer_area_top, offer_width, offer_height)
+            pygame.draw.rect(screen, (65,90,120), box_rect, border_radius=8)
+            pygame.draw.rect(screen, (120,170,210), box_rect, width=2, border_radius=8)
+            y = box_rect.y + 12
+            name_surf = font.render(offer.relic.name, True, (255,255,255))
+            screen.blit(name_surf, (box_rect.x + 10, y))
+            y += name_surf.get_height() + 6
+            mult = offer.relic.get_effective_multiplier()
+            if mult != 1.0:
+                msurf = g.small_font.render(f"Multiplier: x{mult:.2f}", True, (230,230,230))
+                screen.blit(msurf, (box_rect.x + 10, y)); y += msurf.get_height() + 4
+            # Flat bonuses enumeration
+            from score_modifiers import FlatRuleBonus
+            for m in offer.relic.modifier_chain.snapshot():
+                if isinstance(m, FlatRuleBonus):
+                    fsurf = g.small_font.render(f"+{m.amount} {m.rule_key}", True, (255,200,140))
+                    screen.blit(fsurf, (box_rect.x + 10, y)); y += fsurf.get_height() + 2
+            csurf = g.small_font.render(f"Cost: {offer.cost}g", True, (210,210,210))
+            screen.blit(csurf, (box_rect.x + 10, y)); y += csurf.get_height() + 8
+            # Purchase button
+            btn_h = 32
+            btn_rect = pygame.Rect(box_rect.x + 10, box_rect.bottom - btn_h - 10, box_rect.width - 20, btn_h)
+            can_afford = g.player.gold >= offer.cost
+            pygame.draw.rect(screen, (80,200,110) if can_afford else (60,90,70), btn_rect, border_radius=6)
+            ptxt = g.small_font.render("Purchase", True, (0,0,0) if can_afford else (120,120,120))
+            screen.blit(ptxt, (btn_rect.centerx - ptxt.get_width()//2, btn_rect.centery - ptxt.get_height()//2))
+            self.shop_purchase_rects.append(btn_rect)
+        # Legacy single rect reference for tests expecting shop_purchase_rect
+        if self.shop_purchase_rects:
+            self.shop_purchase_rect = self.shop_purchase_rects[0]
+        # Skip button across bottom
+        skip_rect = pygame.Rect(panel_rect.centerx - 80, panel_rect.bottom - 50, 160, 40)
         pygame.draw.rect(screen, (180,80,60), skip_rect, border_radius=8)
-        ptxt = font.render("Purchase", True, (0,0,0) if can_afford else (120,120,120))
         stxt = font.render("Skip", True, (0,0,0))
-        screen.blit(ptxt, (purchase_rect.centerx - ptxt.get_width()//2, purchase_rect.centery - ptxt.get_height()//2))
         screen.blit(stxt, (skip_rect.centerx - stxt.get_width()//2, skip_rect.centery - stxt.get_height()//2))
-        # Persist rects for click handling
-        self.shop_purchase_rect = purchase_rect
         self.shop_skip_rect = skip_rect
 
     def _draw_help_icon(self, screen):

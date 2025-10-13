@@ -56,3 +56,21 @@ class EventListener:
                         pass
         finally:
             self._dispatching = False
+
+    def publish_immediate(self, event: GameEvent):
+        """Dispatch an event synchronously even during another publish.
+
+        Used for hook-style events (e.g., SCORE_PRE_MODIFIERS) where immediate
+        mutation is required before subsequent logic proceeds.
+        """
+        # Directly invoke without queuing to guarantee ordering
+        for cb in list(self._subs_all):
+            try:
+                cb(event)
+            except Exception:
+                pass
+        for cb in list(self._subs_specific.get(event.type, [])):
+            try:
+                cb(event)
+            except Exception:
+                pass

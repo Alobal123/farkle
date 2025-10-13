@@ -238,6 +238,40 @@ class Game:
         else:
             self.current_roll_score = 0
 
+    def _preview_selective_adjust(self, rule_key: str | None, raw: int) -> int:
+        """Compute the post-selective adjusted value for a single combo prior to banking.
+
+        Applies all non-global (non-ScoreMultiplier) modifiers from player + active relics to a synthetic
+        ScorePart matching rule_key (if provided). If rule_key is None, returns raw.
+        """
+        if raw <= 0 or not rule_key:
+            return raw
+        try:
+            from score_types import Score, ScorePart
+            from score_modifiers import ScoreMultiplier as _SM
+            score_obj = Score(parts=[ScorePart(rule_key=rule_key, raw=raw)])
+            # Apply non-global modifiers (mirrors relic/player SCORE_PRE_MODIFIERS handling)
+            # Player chain
+            for m in self.player.modifier_chain.snapshot():
+                if isinstance(m, _SM):
+                    continue
+                try:
+                    _ = m.apply(score_obj.total_effective, type('Ctx',(object,),{'score_obj':score_obj})())  # type: ignore[arg-type]
+                except Exception:
+                    pass
+            # Relic chains
+            for r in self.relic_manager.active_relics:
+                for m in r.modifier_chain.snapshot():
+                    if isinstance(m, _SM):
+                        continue
+                    try:
+                        _ = m.apply(score_obj.total_effective, type('Ctx',(object,),{'score_obj':score_obj})())  # type: ignore[arg-type]
+                    except Exception:
+                        pass
+            return score_obj.total_effective
+        except Exception:
+            return raw
+
     def _auto_lock_selection(self, verb: str = "Auto-locked") -> bool:
         """Lock selected dice if they form exactly one valid scoring combo.
 
@@ -262,7 +296,26 @@ class Game:
         # Delegate holding & event emission to container
         self.dice_container.hold_selected_publish()
         gname = self.level.goals[self.active_goal_index][0]
-        self.message = f"{verb} {add_score} to {gname}."
+        # Preview selective adjusted value (pre global multipliers) for transparency
+        preview = self._preview_selective_adjust(rule_key, add_score)
+        if preview != add_score:
+            # Compute global multiplier preview (player + relic ScoreMultipliers)
+            from score_modifiers import ScoreMultiplier as _SM
+            total_mult = 1.0
+            for m in self.player.modifier_chain:
+                if isinstance(m, _SM):
+                    total_mult *= m.mult
+            for r in self.relic_manager.active_relics:
+                for m in r.modifier_chain.snapshot():
+                    if isinstance(m, _SM):
+                        total_mult *= m.mult
+            final_preview = int(preview * total_mult)
+            if total_mult != 1.0 and final_preview != preview:
+                self.message = f"{verb} {add_score} -> {preview} -> {final_preview} to {gname}."
+            else:
+                self.message = f"{verb} {add_score} -> {preview} to {gname}."
+        else:
+            self.message = f"{verb} {add_score} to {gname}."
         self.mark_scoring_dice()
         self.locked_after_last_roll = True
         # Emit LOCK event so the target goal can accumulate pending

@@ -42,8 +42,8 @@ class FiveFlatBonusRelicTests(unittest.TestCase):
                 captured.update(ev.payload)
         self.game.event_listener.subscribe(cap)
         self.game.handle_bank()
-        # Raw should be 50 + flat 50 -> adjusted 100
-        self.assertEqual(captured.get("pending_raw"), 50)
+        # Unified hook model mutates parts pre-multiplier; pending_raw now reflects mutated total
+        self.assertEqual(captured.get("pending_raw"), 100)
         self.assertEqual(captured.get("adjusted"), 100)
         score = captured.get("score")
         self.assertIsNotNone(score)
@@ -70,7 +70,7 @@ class FiveFlatBonusRelicTests(unittest.TestCase):
                 captured.update(ev.payload)
         self.game.event_listener.subscribe(cap)
         self.game.handle_bank()
-        self.assertEqual(captured.get("pending_raw"), 100)
+        self.assertEqual(captured.get("pending_raw"), 200)
         self.assertEqual(captured.get("adjusted"), 200)
         parts = captured.get("score", {}).get("parts", [])
         self.assertEqual(parts[0]["raw"], 100)
