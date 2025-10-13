@@ -4,6 +4,7 @@ Separating rendering concerns from game logic (Game class) keeps game.py smaller
 focuses Game on state transitions, scoring, and input handling.
 """
 import pygame
+from game_event import GameEvent, GameEventType
 from typing import List, Tuple
 from die import Die
 from settings import (
@@ -19,6 +20,39 @@ class GameRenderer:
     def __init__(self, game):
         self.game = game
         self.goal_boxes: List[pygame.Rect] = []
+
+    def handle_click(self, pos):
+        """Handle a mouse click position for dice and goal selection.
+
+        Returns True if the click was consumed (on a die or goal), else False.
+        Responsible for publishing DIE_SELECTED / DIE_DESELECTED events.
+        """
+        g = self.game
+        mx, my = pos
+        consumed = False
+        # Dice selection logic
+        if g.state_manager.get_state() == g.state_manager.state.ROLLING:
+            for d in g.dice:
+                if d.rect().collidepoint(mx, my) and (not d.held) and d.scoring_eligible:
+                    before = d.selected
+                    d.toggle_select()
+                    g.update_current_selection_score()
+                    g.event_listener.publish(
+                        GameEvent(
+                            GameEventType.DIE_SELECTED if d.selected else GameEventType.DIE_DESELECTED,
+                            payload={"index": g.dice.index(d)}
+                        )
+                    )
+                    consumed = True
+                    break
+        # Goal selection boxes
+        if hasattr(self, 'goal_boxes'):
+            for idx, rect in enumerate(self.goal_boxes):
+                if rect.collidepoint(mx, my):
+                    g.active_goal_index = idx
+                    consumed = True
+                    break
+        return consumed
 
     def compute_button_states(self) -> Tuple[bool, bool, bool]:
         g = self.game
@@ -95,7 +129,8 @@ class GameRenderer:
         prepared = []
         for i, goal in enumerate(g.level_state.goals):
             base_remaining = goal.get_remaining()
-            pending_raw = g.pending_goal_scores.get(i, 0)
+            # Per-goal pending stored directly on goal
+            pending_raw = getattr(goal, 'pending_raw', 0)
             pending_adjusted = int(pending_raw * g.level.score_multiplier) if pending_raw else 0
             if goal.is_fulfilled():
                 remaining_text = "Done"

@@ -1,10 +1,15 @@
-import pygame, random, sys
+import pygame, sys
 from game_state_manager import GameStateManager
 from scoring import ScoringRules, SingleValue, ThreeOfAKind, Straight6
 from die import Die
+from dice_container import DiceContainer
 from level import Level, LevelState
 from player import Player
+from goal import Goal
+from game_event import GameEvent, GameEventType
+from event_listener import EventListener
 from actions import handle_lock as action_handle_lock, handle_roll as action_handle_roll, handle_bank as action_handle_bank, handle_next_turn as action_handle_next_turn
+from input_controller import InputController
 from renderer import GameRenderer
 from settings import WIDTH, HEIGHT, DICE_SIZE, MARGIN, ROLL_BTN, LOCK_BTN, BANK_BTN, NEXT_BTN
 
@@ -24,21 +29,35 @@ class Game:
         self.active_goal_index: int = 0
         self.rules = ScoringRules()
         self._init_rules()
-        self.state_manager = GameStateManager()
-        self.dice: list[Die] = []
+        self.state_manager = GameStateManager(on_change=self._on_state_change)
+        # Dice container encapsulates all dice logic
+        self.dice_container = DiceContainer(self)
         self.turn_score = 0
         self.current_roll_score = 0
         self.message = "Click ROLL to start!"
         self.level_index = 1
-        # Pending scores per goal index (raw points before multiplier applied at bank time)
-        self.pending_goal_scores: dict[int, int] = {}
         # Track whether at least one scoring combo has been locked since the most recent roll
         self.locked_after_last_roll = False
         # Player meta progression container
         self.player = Player()
+        self.player.game = self
         # Renderer handles all drawing/UI composition
         self.renderer = GameRenderer(self)
-        self.reset_dice()
+        # Event listener hub
+        self.event_listener = EventListener()
+        # Subscribe player & goals
+        self._subscribe_core_objects()
+        # Input controller (handles REQUEST_* events)
+        self.input_controller = InputController(self)
+        self.event_listener.subscribe(self.input_controller.on_event)
+        # Emit initial TURN_START for the very first turn
+        try:
+            self.event_listener.publish(GameEvent(GameEventType.TURN_START, payload={"level": self.level.name, "turn_index": 1}))
+        except Exception:
+            pass
+        # Subscribe game itself for auto progression
+        self.event_listener.subscribe(self.on_event)
+    # dice already initialized by container
 
     def _init_rules(self):
         self.rules.add_rule(ThreeOfAKind(1, 1000))
@@ -52,7 +71,7 @@ class Game:
         self.rules.add_rule(Straight6(1500))
 
     def reset_dice(self):
-        self.dice = [Die(random.randint(1, 6), 100 + i * (DICE_SIZE + MARGIN), HEIGHT // 2 - DICE_SIZE // 2) for i in range(6)]
+        self.dice_container.reset_all()
 
     def reset_game(self):
         # When called after win/lose we keep current level (already advanced on win)
@@ -60,15 +79,48 @@ class Game:
         self.turn_score = 0
         self.current_roll_score = 0
         self.message = "Click ROLL to start!"
-        self.state_manager = GameStateManager()
+        self.state_manager = GameStateManager(on_change=self._on_state_change)
         self.level_state.reset()
         self.active_goal_index = 0
-        self.pending_goal_scores.clear()
+        # pending scores moved into Goal.pending_raw; ensure cleared
+        for g in self.level_state.goals:
+            g.pending_raw = 0
+        advancing = getattr(self, "_advancing_level", False)
+        # Capture existing non-goal subscribers so we can preserve them across listener reset
+        preserved_callbacks: list = []
+        try:
+            from goal import Goal as _Goal
+            for cb in getattr(self.event_listener, "_subs_all", []):
+                bound_self = getattr(cb, "__self__", None)
+                if bound_self is None or not isinstance(bound_self, _Goal):
+                    preserved_callbacks.append(cb)
+        except Exception:
+            pass
+        self._subscribe_core_objects(reset=True)
+        # Re-subscribe preserved callbacks (e.g., external test collectors)
+        for cb in preserved_callbacks:
+            try:
+                self.event_listener.subscribe(cb)
+            except Exception:
+                pass
+        # Emit a TURN_START for new level (done in __init__ for first level)
+        try:
+            self.event_listener.publish(GameEvent(GameEventType.TURN_START, payload={"level": self.level.name, "turn_index": 1}))
+        except Exception:
+            pass
+        # If we are in the middle of advancement, now emit LEVEL_ADVANCE_FINISHED (after new TURN_START)
+        if advancing:
+            try:
+                self.event_listener.publish(GameEvent(GameEventType.LEVEL_ADVANCE_FINISHED, payload={
+                    "level_name": self.level.name,
+                    "level_index": self.level_index
+                }))
+            except Exception:
+                pass
+            self._advancing_level = False
 
     def reset_turn(self):
-        for d in self.dice:
-            d.reset()
-            d.value = random.randint(1, 6)
+        self.dice_container.reset_all()
         self.turn_score = 0
         self.current_roll_score = 0
         self.message = "Click ROLL to start!"
@@ -76,82 +128,54 @@ class Game:
         self.level_state.consume_turn()
         self.state_manager.transition_to_start()
         self.active_goal_index = 0
-        self.pending_goal_scores.clear()
+        # Clear per-goal pending
+        for g in self.level_state.goals:
+            g.pending_raw = 0
         self.locked_after_last_roll = False
+        try:
+            remaining_turns = self.level_state.turns_left
+            self.event_listener.publish(GameEvent(GameEventType.TURN_START, payload={"level": self.level.name, "turns_left": remaining_turns}))
+        except Exception:
+            pass
 
     def roll_dice(self):
-        for d in self.dice:
-            if not d.held:
-                d.value = random.randint(1, 6)
-                d.selected = False
-        # After a roll, require a new lock before rolling again
-        self.locked_after_last_roll = False
+        # Wrapper maintained for compatibility; delegate to container
+        self.dice_container.roll()
 
     def calculate_score_from_dice(self):
-        selected: list[int] = [int(d.value) for d in self.dice if d.selected]
-        if not selected:
-            return 0, []
-        return self.rules.evaluate(selected)
+        return self.dice_container.calculate_selected_score()
 
     def check_farkle(self):
-        unheld = [d for d in self.dice if not d.held]
-        if not unheld:
-            return False
-        values: list[int] = [int(d.value) for d in unheld]
-        score, _ = self.rules.evaluate(values)
-        return score == 0
+        return self.dice_container.check_farkle()
 
     def all_dice_held(self):
-        return all(d.held for d in self.dice)
+        return self.dice_container.all_held()
 
     def hot_dice_reset(self):
-        for d in self.dice:
-            d.reset()
-            d.value = random.randint(1, 6)
+        self.dice_container.reset_all()
         self.set_message("HOT DICE! You can roll all 6 dice again!")
         self.mark_scoring_dice()
         # Reset lock requirement after hot dice
         self.locked_after_last_roll = False
 
     def mark_scoring_dice(self):
-        for d in self.dice:
-            d.scoring_eligible = False
-        unheld = [d for d in self.dice if not d.held]
-        if not unheld:
-            return
-        values: list[int] = [int(d.value) for d in unheld]
-        score, contributing = self.rules.evaluate(values)
-        for i in contributing:
-            unheld[i].scoring_eligible = True
+        self.dice_container.mark_scoring()
+
+    def _on_state_change(self, old_state, new_state):
+        try:
+            self.event_listener.publish(GameEvent(GameEventType.STATE_CHANGED, payload={"old": old_state.name, "new": new_state.name}))
+        except Exception:
+            pass
+
+    @property
+    def dice(self) -> list[Die]:  # backward compatibility accessor
+        return self.dice_container.dice
 
     def any_scoring_selection(self) -> bool:
-        return any(d.selected and d.scoring_eligible for d in self.dice)
+        return self.dice_container.any_scoring_selection()
 
     def selection_is_single_combo(self) -> bool:
-        """Generic: a selection is a single combo if exactly one rule fully covers it and
-        its contributing indices count equals that rule's combo_size AND equals the number of selected dice.
-
-        If multiple rules match the selection, choose the rule with the largest combo_size; if there is a tie
-        (two different rule types same size) or more than one rule of that max size matches, treat as not single.
-        This prevents combining smaller atomic units (e.g., two single-value dice) from counting as one combo.
-        """
-        selected_values = [int(d.value) for d in self.dice if d.selected]
-        if not selected_values:
-            return False
-        matches = self.rules.evaluate_matches(selected_values)
-        if not matches:
-            return False
-        # Filter only rules whose contributing indices span the entire selection
-        full_cover = [m for m in matches if len(m[2]) == len(selected_values)]
-        if not full_cover:
-            return False
-        # Determine max combo size among full-cover matches
-        max_size = max(m[0].combo_size for m in full_cover if hasattr(m[0], 'combo_size'))
-        best = [m for m in full_cover if getattr(m[0], 'combo_size', 0) == max_size]
-        # Accept only if exactly one best match and its combo_size equals number of selected dice.
-        if len(best) == 1 and best[0][0].combo_size == len(selected_values):
-            return True
-        return False
+        return self.dice_container.selection_is_single_combo()
 
     def update_current_selection_score(self):
         if self.selection_is_single_combo():
@@ -171,16 +195,23 @@ class Game:
         add_score, _ = self.calculate_score_from_dice()
         if add_score <= 0:
             return False
-        self.pending_goal_scores[self.active_goal_index] = self.pending_goal_scores.get(self.active_goal_index, 0) + add_score
+        # Accumulate turn score locally (used for UI enabling) but per-goal pending kept inside Goal
         self.turn_score += add_score
         self.current_roll_score = 0
-        for d in self.dice:
-            if d.selected:
-                d.hold()
+        # Delegate holding & event emission to container
+        self.dice_container.hold_selected_publish()
         gname = self.level.goals[self.active_goal_index][0]
         self.message = f"{verb} {add_score} to {gname}."
         self.mark_scoring_dice()
         self.locked_after_last_roll = True
+        # Emit LOCK event so the target goal can accumulate pending
+        try:
+            self.event_listener.publish(GameEvent(GameEventType.LOCK, payload={
+                "goal_index": self.active_goal_index,
+                "points": add_score
+            }))
+        except Exception:
+            pass
         return True
 
     def handle_lock(self):
@@ -196,31 +227,41 @@ class Game:
         action_handle_next_turn(self)
 
     def create_next_level(self):
+        # Emit start of level advancement
+        try:
+            self.event_listener.publish(GameEvent(GameEventType.LEVEL_ADVANCE_STARTED, payload={
+                "from_level": self.level.name,
+                "from_index": self.level_index
+            }))
+        except Exception:
+            pass
         self.level_index += 1
-        # Delegate progression logic to Level.advance for consistency
+        prev_level = self.level
+        # Generate new level
         self.level = Level.advance(self.level, self.level_index)
         self.level_state = LevelState(self.level)
         self.active_goal_index = 0
-        self.pending_goal_scores.clear()
+        for g in self.level_state.goals:
+            g.pending_raw = 0
+        # Event after level data structures generated but before subscriptions/reset
+        try:
+            self.event_listener.publish(GameEvent(GameEventType.LEVEL_GENERATED, payload={
+                "prev_level": prev_level.name,
+                "new_level": self.level.name,
+                "level_index": self.level_index,
+                "goals": [gl.name for gl in self.level_state.goals],
+                "max_turns": self.level.max_turns
+            }))
+        except Exception:
+            pass
         # Gold persists; player_gold not reset here.
+        # Finish advancement by resetting game state for new level (without losing meta state)
+        self._advancing_level = True
+        self.reset_game()
 
     def draw(self):
         self.renderer.draw()
 
-    # Rendering helpers moved to GameRenderer.
-
-    def check_end_conditions(self):
-        if self.level_state.completed:
-            self.set_message(f"Omen averted! ({self.level.name})")
-            self.draw(); pygame.time.wait(1200)
-            self.create_next_level()
-            self.reset_game()
-        elif self.level_state.failed:
-            unfinished = [self.level.goals[i][0] for i in self.level_state.mandatory_indices if not self.level_state.goals[i].is_fulfilled()]
-            unf_txt = ", ".join(unfinished) if unfinished else "(none)"
-            self.set_message(f"Ritual failed. Unfinished: {unf_txt}")
-            self.draw(); pygame.time.wait(1200)
-            self.reset_game()
 
     def run(self):
         running = True
@@ -230,31 +271,15 @@ class Game:
                     running = False
                 elif event.type == pygame.MOUSEBUTTONDOWN:
                     mx, my = event.pos
-                    for d in self.dice:
-                        if self.state_manager.get_state() == self.state_manager.state.ROLLING and d.rect().collidepoint(mx, my):
-                            if not d.held and d.scoring_eligible:
-                                d.toggle_select()
-                                self.update_current_selection_score()
-                    if hasattr(self.renderer, 'goal_boxes'):
-                        for idx, rect in enumerate(self.renderer.goal_boxes):
-                            if rect.collidepoint(mx, my):
-                                self.active_goal_index = idx
-                                break
+                    self.renderer.handle_click((mx, my))
                     if ROLL_BTN.collidepoint(mx, my):
-                        current_state = self.state_manager.get_state()
-                        valid_combo_selected = self.selection_is_single_combo() and self.any_scoring_selection()
-                        can_roll = (current_state == self.state_manager.state.START) or (current_state == self.state_manager.state.ROLLING and (self.locked_after_last_roll or valid_combo_selected))
-                        if can_roll:
-                            self.handle_roll()
-                        else:
-                            self.set_message("Lock a scoring combo before rolling again.")
+                        self.event_listener.publish(GameEvent(GameEventType.REQUEST_ROLL))
                     if LOCK_BTN.collidepoint(mx, my):
-                        self.handle_lock()
+                        self.event_listener.publish(GameEvent(GameEventType.REQUEST_LOCK))
                     if BANK_BTN.collidepoint(mx, my):
-                        self.handle_bank()
+                        self.event_listener.publish(GameEvent(GameEventType.REQUEST_BANK))
                     if NEXT_BTN.collidepoint(mx, my):
-                        self.handle_next_turn()
-            self.check_end_conditions()
+                        self.event_listener.publish(GameEvent(GameEventType.REQUEST_NEXT_TURN))
             self.renderer.draw()
             self.clock.tick(30)
         pygame.quit()
@@ -266,3 +291,69 @@ class Game:
         Future extension: maintain a history or timestamp for debugging/logs.
         """
         self.message = text
+
+    # Internal: subscribe core objects
+    def _subscribe_core_objects(self, reset: bool = False):
+        if reset:
+            self.event_listener = EventListener()
+        # Subscribe each object's on_event method
+        # (Re)subscribe input controller first so it can mediate requests before goals react if needed.
+        if hasattr(self, 'input_controller') and self.input_controller:
+            self.event_listener.subscribe(self.input_controller.on_event)
+        self.event_listener.subscribe(self.player.on_event)
+        for g in self.level_state.goals:
+            g.game = self  # type: ignore[attr-defined]
+            self.event_listener.subscribe(g.on_event)
+        # Ensure game progression listener is present after resets
+        self.event_listener.subscribe(self.on_event)
+
+    # Auto progression logic
+    def on_event(self, event: GameEvent):  # type: ignore[override]
+        et = event.type
+        # Detect all mandatory fulfilled immediately on GOAL_FULFILLED
+        if et == GameEventType.GOAL_FULFILLED:
+            if self.level_state._all_mandatory_fulfilled() and not self.level_state.completed:
+                self.level_state.completed = True
+                # After completion we wait for TURN_END if not already ended; if turn already ended (banked) we advance immediately.
+                if any(e.type == GameEventType.TURN_END for e in getattr(self, '_recent_events', [])):
+                    self._advance_level_post_turn()
+        elif et == GameEventType.TURN_END:
+            reason = event.get("reason")
+            # If the level just completed this turn, advance now
+            if self.level_state.completed and reason in ("banked", "farkle", "level_complete"):
+                self._advance_level_post_turn()
+            # Failure detection: out of turns and not complete
+            if not self.level_state.completed and self.level_state.turns_left == 0 and not self.level_state._all_mandatory_fulfilled():
+                if not self.level_state.failed:
+                    self.level_state.failed = True
+                    unfinished = [self.level.goals[i][0] for i in self.level_state.mandatory_indices if not self.level_state.goals[i].is_fulfilled()]
+                    try:
+                        self.event_listener.publish(GameEvent(GameEventType.LEVEL_FAILED, payload={
+                            "level_name": self.level.name,
+                            "level_index": self.level_index,
+                            "unfinished": unfinished
+                        }))
+                    except Exception:
+                        pass
+                    # Restart same level
+                    self.reset_game()
+        # Track a small rolling window of recent events for ordering decisions
+        if not hasattr(self, '_recent_events'):
+            self._recent_events: list[GameEvent] = []
+        self._recent_events.append(event)
+        if len(self._recent_events) > 50:
+            self._recent_events.pop(0)
+
+    def _advance_level_post_turn(self):
+        # Emit LEVEL_COMPLETE if not already
+        already = any(e.type == GameEventType.LEVEL_COMPLETE for e in getattr(self, '_recent_events', []))
+        if not already:
+            try:
+                self.event_listener.publish(GameEvent(GameEventType.LEVEL_COMPLETE, payload={
+                    "level_name": self.level.name,
+                    "level_index": self.level_index
+                }))
+            except Exception:
+                pass
+        # Begin advancement
+        self.create_next_level()

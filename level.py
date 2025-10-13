@@ -80,13 +80,5 @@ class LevelState:
     def _all_mandatory_fulfilled(self) -> bool:
         return all(self.goals[i].is_fulfilled() for i in self.mandatory_indices)
 
-    def apply_score(self, goal_index: int, points: int):
-        if points <= 0 or goal_index < 0 or goal_index >= len(self.goals):
-            return
-        adjusted = int(points * self.level.score_multiplier)
-        self.goals[goal_index].subtract(adjusted)
-        if self._all_mandatory_fulfilled():
-            self.completed = True
-
     def is_active(self) -> bool:
         return not (self.completed or self.failed)

@@ -1,7 +1,10 @@
 import pygame
+from game_object import GameObject
+from game_event import GameEvent, GameEventType
 
-class Goal:
+class Goal(GameObject):
     def __init__(self, target_score: int, name: str = "", mandatory: bool = True, reward_gold: int = 0):
+        super().__init__(name or "Goal")
         self.target_score = target_score
         self.remaining = target_score
         self.name = name or "Goal"
@@ -9,6 +12,9 @@ class Goal:
         # Reward system (future-proof for other reward types). For now only gold coins.
         self.reward_gold = reward_gold
         self.reward_claimed = False
+        self.game = None  # back reference assigned when subscribed
+        # Pending raw points accumulated this turn (before multiplier & banking)
+        self.pending_raw: int = 0
 
     # Core logic
     def subtract(self, points: int):
@@ -65,3 +71,57 @@ class Goal:
         for ln in lines:
             surface.blit(font.render(ln, True, text_color), (rect.x + padding, y_line))
             y_line += font.get_height() + line_spacing
+
+    def on_event(self, event: GameEvent) -> None:  # type: ignore[override]
+        """React to scoring lifecycle events.
+
+    Flow:
+    - LOCK accumulates raw pending.
+    - BANK applies (multiplied) pending and emits progress/fulfillment.
+    - FARKLE discards pending.
+        """
+        if not self.game:
+            return
+        et = event.type
+        if et == GameEventType.LOCK:
+            idx = event.get("goal_index")
+            if idx is not None:
+                try:
+                    if self.game.level_state.goals[idx] is self:
+                        raw = int(event.get("points", 0))
+                        if raw > 0 and not self.is_fulfilled():
+                            self.pending_raw += raw
+                except Exception:
+                    pass
+        elif et == GameEventType.BANK:
+            # Apply accumulated pending (if any) on bank
+            if self.pending_raw > 0 and not self.is_fulfilled():
+                before = self.remaining
+                adjusted = int(self.pending_raw * self.game.level.score_multiplier)
+                if adjusted > 0:
+                    self.subtract(adjusted)
+                    delta = before - self.remaining
+                    from game_event import GameEvent as GE, GameEventType as GET
+                    self.game.event_listener.publish(GE(GET.GOAL_PROGRESS, payload={
+                        "goal_name": self.name,
+                        "delta": delta,
+                        "remaining": self.remaining
+                    }))
+                    if self.is_fulfilled():
+                        self.game.event_listener.publish(GE(GET.GOAL_FULFILLED, payload={
+                            "goal_name": self.name,
+                            "goal": self,
+                            "reward_gold": self.reward_gold
+                        }))
+                        if self.game.level_state._all_mandatory_fulfilled():
+                            self.game.level_state.completed = True
+            # Clear pending whether applied or not
+            self.pending_raw = 0
+        elif et == GameEventType.FARKLE:
+            # Lose pending points for the turn
+            self.pending_raw = 0
+        # Other events (progress, fulfilled) currently ignored for animation hooks.
+
+    def draw(self, surface):  # type: ignore[override]
+        # Drawing still handled by renderer; no direct sprite.
+        return
