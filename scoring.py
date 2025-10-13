@@ -59,6 +59,57 @@ class ThreeOfAKind(ScoringRule):
         return 0, []
 
 
+class FourOfAKind(ScoringRule):
+    """Four of a kind: double the value of the corresponding three of a kind."""
+    def __init__(self, value: int, three_kind_points: int):
+        self.value = value
+        self.three_kind_points = three_kind_points
+        self.combo_size = 4
+
+    def _build_rule_key(self) -> str:
+        return f"FourOfAKind:{self.value}"
+
+    def match(self, dice: List[int]) -> Tuple[int, List[int]]:
+        indices = [i for i, d in enumerate(dice) if d == self.value]
+        if len(indices) >= 4:
+            return self.three_kind_points * 2, indices[:4]
+        return 0, []
+
+
+class FiveOfAKind(ScoringRule):
+    """Five of a kind: triple the value of the corresponding three of a kind."""
+    def __init__(self, value: int, three_kind_points: int):
+        self.value = value
+        self.three_kind_points = three_kind_points
+        self.combo_size = 5
+
+    def _build_rule_key(self) -> str:
+        return f"FiveOfAKind:{self.value}"
+
+    def match(self, dice: List[int]) -> Tuple[int, List[int]]:
+        indices = [i for i, d in enumerate(dice) if d == self.value]
+        if len(indices) >= 5:
+            return self.three_kind_points * 3, indices[:5]
+        return 0, []
+
+
+class SixOfAKind(ScoringRule):
+    """Six of a kind: quadruple the value of the corresponding three of a kind."""
+    def __init__(self, value: int, three_kind_points: int):
+        self.value = value
+        self.three_kind_points = three_kind_points
+        self.combo_size = 6
+
+    def _build_rule_key(self) -> str:
+        return f"SixOfAKind:{self.value}"
+
+    def match(self, dice: List[int]) -> Tuple[int, List[int]]:
+        indices = [i for i, d in enumerate(dice) if d == self.value]
+        if len(indices) >= 6:
+            return self.three_kind_points * 4, indices[:6]
+        return 0, []
+
+
 class Straight6(ScoringRule):
     def __init__(self, points: int):
         self.points = points
@@ -70,6 +121,34 @@ class Straight6(ScoringRule):
     def match(self, dice: List[int]) -> Tuple[int, List[int]]:
         if sorted(dice) == [1, 2, 3, 4, 5, 6]:
             return self.points, list(range(6))
+        return 0, []
+
+
+class Straight1to5(ScoringRule):
+    def __init__(self, points: int):
+        self.points = points
+        self.combo_size = 5
+
+    def _build_rule_key(self) -> str:
+        return "Straight1to5"
+
+    def match(self, dice: List[int]) -> Tuple[int, List[int]]:
+        if sorted(dice) == [1,2,3,4,5]:
+            return self.points, list(range(5))
+        return 0, []
+
+
+class Straight2to6(ScoringRule):
+    def __init__(self, points: int):
+        self.points = points
+        self.combo_size = 5
+
+    def _build_rule_key(self) -> str:
+        return "Straight2to6"
+
+    def match(self, dice: List[int]) -> Tuple[int, List[int]]:
+        if sorted(dice) == [2,3,4,5,6]:
+            return self.points, list(range(5))
         return 0, []
 
 
@@ -93,13 +172,24 @@ class ScoringRules:
         total_score = 0
         used_indices = set()
         breakdown: List[Tuple[str, int]] = []
-        for rule in self.rules:
+        # Process rules ordered by descending combo size so larger combos claim dice first
+        ordered = sorted(self.rules, key=lambda r: getattr(r, 'combo_size', 0), reverse=True)
+        for rule in ordered:
             score, indices = rule.match(dice)
-            indices = [i for i in indices if i not in used_indices]
-            if score > 0 and indices:
-                total_score += score
-                used_indices.update(indices)
-                breakdown.append((rule.rule_key, score))
+            if score <= 0 or not indices:
+                continue
+            # Filter out already used dice
+            filtered = [i for i in indices if i not in used_indices]
+            # Must have full combo coverage (prevents partial overlaps from stacking).
+            # For single-value rules (combo_size==1) allow any remaining single indices.
+            if rule.combo_size > 1 and len(filtered) != rule.combo_size:
+                continue
+            # If after filtering no indices remain, skip (prevents single scoring same die twice)
+            if not filtered:
+                continue
+            total_score += score
+            used_indices.update(filtered)
+            breakdown.append((rule.rule_key, score))
         return total_score, list(used_indices), breakdown
 
     def evaluate_matches(self, dice: List[int]) -> List[Tuple[ScoringRule, int, List[int]]]:

@@ -18,6 +18,9 @@ class GameRenderer:
         # Shop panel dimensions (enlarged)
         self.SHOP_PANEL_WIDTH = 600
         self.SHOP_PANEL_HEIGHT = 340
+        # Help overlay state
+        self.help_icon_rect = pygame.Rect(10, self.game.screen.get_height() - 50, 40, 40)
+        self.show_help = False
 
     # Internal helper so click handling can ensure rects exist even before first post-open draw flip
     def _compute_shop_rects(self):
@@ -35,6 +38,10 @@ class GameRenderer:
         g = self.game
         mx, my = pos
         consumed = False
+        # Help icon toggle (lowest priority so gameplay UI still works when overlay open)
+        if self.help_icon_rect.collidepoint(mx, my):
+            self.show_help = not self.show_help
+            return True
         # Shop click handling has priority
         if getattr(g, 'relic_manager', None) and g.relic_manager.shop_open:
             # Ensure rects are available even if user clicked before first draw cycle after shop opened
@@ -229,6 +236,10 @@ class GameRenderer:
         # Draw shop overlay (before single flip) so no flicker from double buffering
         if shop_open:
             self._draw_shop_overlay(screen)
+        # Draw help icon always (above dim/shopped content, below overlay panel if open)
+        self._draw_help_icon(screen)
+        if self.show_help and not shop_open:
+            self._draw_rules_overlay(screen)
         pygame.display.flip()
 
     def _draw_shop_overlay(self, screen):
@@ -272,5 +283,82 @@ class GameRenderer:
         # Persist rects for click handling
         self.shop_purchase_rect = purchase_rect
         self.shop_skip_rect = skip_rect
+
+    def _draw_help_icon(self, screen):
+        # Simple circle with '?' inside bottom-left
+        rect = self.help_icon_rect
+        pygame.draw.circle(screen, (60,90,120), rect.center, rect.width//2)
+        pygame.draw.circle(screen, (140,190,230), rect.center, rect.width//2, width=2)
+        qsurf = self.game.font.render('?', True, (255,255,255))
+        screen.blit(qsurf, (rect.centerx - qsurf.get_width()//2, rect.centery - qsurf.get_height()//2))
+
+    def _draw_rules_overlay(self, screen):
+        # Semi-transparent background
+        overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+        overlay.fill((0,0,0,200))
+        screen.blit(overlay, (0,0))
+        # Panel
+        panel_w, panel_h = 660, 440
+        panel_rect = pygame.Rect(20, HEIGHT - panel_h - 40, panel_w, panel_h)
+        pygame.draw.rect(screen, (40,55,70), panel_rect, border_radius=10)
+        pygame.draw.rect(screen, (90,140,180), panel_rect, width=2, border_radius=10)
+        title = self.game.font.render("Scoring Rules", True, (240,240,240))
+        screen.blit(title, (panel_rect.x + 16, panel_rect.y + 16))
+        # Build structured listing so straights are guaranteed visible and multi-of-a-kind grouped
+        by_key = {r.rule_key: r for r in self.game.rules.rules}
+        lines: List[str] = []
+        # Straights first
+        for key, label in [( 'Straight6', 'Straight 1-6'), ('Straight1to5','Straight 1-5'), ('Straight2to6','Straight 2-6')]:
+            r = by_key.get(key)
+            if r:
+                pts = getattr(r, 'points', None)
+                if pts:
+                    lines.append(f"{label}: {pts}")
+        # Singles
+        for sv in ('1','5'):
+            r = by_key.get(f'SingleValue:{sv}')
+            if r:
+                pts = getattr(r, 'points', None)
+                if pts:
+                    lines.append(f"Single {sv}s: {pts} each")
+        # Of-a-kind (value ascending)
+        for v in range(1,7):
+            three = by_key.get(f'ThreeOfAKind:{v}')
+            if not three:
+                continue
+            base = getattr(three, 'points', None)
+            if not base:
+                continue
+            four = by_key.get(f'FourOfAKind:{v}')
+            five = by_key.get(f'FiveOfAKind:{v}')
+            six = by_key.get(f'SixOfAKind:{v}')
+            # Derive scaled values from base three-kind config
+            line_parts = [f"{v}: 3-kind {base}"]
+            if four:
+                line_parts.append(f"4-kind {base*2}")
+            if five:
+                line_parts.append(f"5-kind {base*3}")
+            if six:
+                line_parts.append(f"6-kind {base*4}")
+            lines.append("Of-a-Kind " + ", ".join(line_parts))
+        # Render in two columns if overflow
+        small_font = self.game.small_font if hasattr(self.game, 'small_font') else self.game.font
+        line_height = small_font.get_height() + 4
+        max_rows = 14
+        columns = 1 if len(lines) <= max_rows else 2
+        col_width = (panel_w - 40) // columns
+        start_y = panel_rect.y + 60
+        for idx, ln in enumerate(lines):
+            col = idx // max_rows if columns > 1 else 0
+            row = idx % max_rows if columns > 1 else idx
+            if start_y + (row+1)*line_height > panel_rect.bottom - 40:
+                # Stop if no space (edge case if too many lines even for two columns)
+                break
+            x = panel_rect.x + 20 + col * col_width
+            y = start_y + row * line_height
+            surf = small_font.render(ln, True, (230,230,235))
+            screen.blit(surf, (x, y))
+        hint = small_font.render("Click ? to close", True, (190,200,210))
+        screen.blit(hint, (panel_rect.x + 20, panel_rect.bottom - 28))
 
 # Note: Avoid importing Game for type checking to prevent circular dependency.

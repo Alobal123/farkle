@@ -1,6 +1,16 @@
 import pygame, sys
 from game_state_manager import GameStateManager
-from scoring import ScoringRules, SingleValue, ThreeOfAKind, Straight6
+from scoring import (
+    ScoringRules,
+    SingleValue,
+    ThreeOfAKind,
+    FourOfAKind,
+    FiveOfAKind,
+    SixOfAKind,
+    Straight6,
+    Straight1to5,
+    Straight2to6,
+)
 from die import Die
 from dice_container import DiceContainer
 from level import Level, LevelState
@@ -64,15 +74,26 @@ class Game:
     # dice already initialized by container
 
     def _init_rules(self):
-        self.rules.add_rule(ThreeOfAKind(1, 1000))
-        self.rules.add_rule(ThreeOfAKind(2, 200))
-        self.rules.add_rule(ThreeOfAKind(3, 300))
-        self.rules.add_rule(ThreeOfAKind(4, 400))
-        self.rules.add_rule(ThreeOfAKind(5, 500))
-        self.rules.add_rule(ThreeOfAKind(6, 600))
+        # Base three-of-a-kind values
+        three_kind_values = {
+            1: 1000,
+            2: 200,
+            3: 300,
+            4: 400,
+            5: 500,
+            6: 600,
+        }
+        for v, pts in three_kind_values.items():
+            self.rules.add_rule(ThreeOfAKind(v, pts))
+            self.rules.add_rule(FourOfAKind(v, pts))   # double three-kind value
+            self.rules.add_rule(FiveOfAKind(v, pts))   # triple three-kind value
+            self.rules.add_rule(SixOfAKind(v, pts))    # quadruple three-kind value
         self.rules.add_rule(SingleValue(1, 100))
         self.rules.add_rule(SingleValue(5, 50))
         self.rules.add_rule(Straight6(1500))
+        # New 5-length partial straights
+        self.rules.add_rule(Straight1to5(1000))
+        self.rules.add_rule(Straight2to6(1000))
 
     def reset_dice(self):
         self.dice_container.reset_all()
