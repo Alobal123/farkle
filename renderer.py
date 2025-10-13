@@ -1,12 +1,6 @@
-"""GameRenderer handles all drawing and UI state computations.
-
-Separating rendering concerns from game logic (Game class) keeps game.py smaller and
-focuses Game on state transitions, scoring, and input handling.
-"""
 import pygame
 from game_event import GameEvent, GameEventType
 from typing import List, Tuple
-from die import Die
 from settings import (
     WIDTH, HEIGHT, DICE_SIZE, MARGIN,
     BG_COLOR, BTN_ROLL_COLOR, BTN_LOCK_COLOR_DISABLED, BTN_LOCK_COLOR_ENABLED,
@@ -22,19 +16,14 @@ class GameRenderer:
         self.goal_boxes: List[pygame.Rect] = []
 
     def handle_click(self, pos):
-        """Handle a mouse click position for dice and goal selection.
-
-        Returns True if the click was consumed (on a die or goal), else False.
-        Responsible for publishing DIE_SELECTED / DIE_DESELECTED events.
-        """
+        """Handle a mouse click for dice/goal selection, publishing selection events."""
         g = self.game
         mx, my = pos
         consumed = False
-        # Dice selection logic
+        # Dice selection
         if g.state_manager.get_state() == g.state_manager.state.ROLLING:
             for d in g.dice:
                 if d.rect().collidepoint(mx, my) and (not d.held) and d.scoring_eligible:
-                    before = d.selected
                     d.toggle_select()
                     g.update_current_selection_score()
                     g.event_listener.publish(
@@ -45,7 +34,7 @@ class GameRenderer:
                     )
                     consumed = True
                     break
-        # Goal selection boxes
+        # Goal selection
         if hasattr(self, 'goal_boxes'):
             for idx, rect in enumerate(self.goal_boxes):
                 if rect.collidepoint(mx, my):
