@@ -42,6 +42,14 @@ class GameEventType(Enum):
     DIE_SELECTED = auto()
     DIE_DESELECTED = auto()
     DIE_HELD = auto()
+    # Shop / relic acquisition lifecycle
+    SHOP_OPENED = auto()
+    SHOP_CLOSED = auto()
+    RELIC_OFFERED = auto()
+    RELIC_PURCHASED = auto()
+    RELIC_SKIPPED = auto()
+    REQUEST_BUY_RELIC = auto()
+    REQUEST_SKIP_SHOP = auto()
 
 @dataclass(slots=True)
 class GameEvent:

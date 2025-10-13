@@ -14,12 +14,39 @@ class GameRenderer:
     def __init__(self, game):
         self.game = game
         self.goal_boxes: List[pygame.Rect] = []
+        self.shop_purchase_rect = None
+        self.shop_skip_rect = None
+        # Shop panel dimensions (enlarged)
+        self.SHOP_PANEL_WIDTH = 600
+        self.SHOP_PANEL_HEIGHT = 340
+
+    # Internal helper so click handling can ensure rects exist even before first post-open draw flip
+    def _compute_shop_rects(self):
+        from settings import WIDTH, HEIGHT  # local import to avoid circulars
+        panel_w, panel_h = self.SHOP_PANEL_WIDTH, self.SHOP_PANEL_HEIGHT
+        panel_rect = pygame.Rect((WIDTH - panel_w)//2, (HEIGHT - panel_h)//2, panel_w, panel_h)
+        purchase_rect = pygame.Rect(panel_rect.x + 40, panel_rect.bottom - 60, 160, 40)
+        skip_rect = pygame.Rect(panel_rect.right - 160 - 40, panel_rect.bottom - 60, 160, 40)
+        self.shop_purchase_rect = purchase_rect
+        self.shop_skip_rect = skip_rect
+        return purchase_rect, skip_rect
 
     def handle_click(self, pos):
         """Handle a mouse click for dice/goal selection, publishing selection events."""
         g = self.game
         mx, my = pos
         consumed = False
+        # Shop click handling has priority
+        if getattr(g, 'relic_manager', None) and g.relic_manager.shop_open:
+            # Ensure rects are available even if user clicked before first draw cycle after shop opened
+            if self.shop_purchase_rect is None or self.shop_skip_rect is None:
+                self._compute_shop_rects()
+            if self.shop_purchase_rect and self.shop_purchase_rect.collidepoint(mx, my):
+                g.event_listener.publish(GameEvent(GameEventType.REQUEST_BUY_RELIC))
+                return True
+            if self.shop_skip_rect and self.shop_skip_rect.collidepoint(mx, my):
+                g.event_listener.publish(GameEvent(GameEventType.REQUEST_SKIP_SHOP))
+                return True
         # Dice selection
         if g.state_manager.get_state() == g.state_manager.state.ROLLING:
             for d in g.dice:
@@ -78,6 +105,8 @@ class GameRenderer:
         g = self.game
         screen = g.screen
         screen.fill(BG_COLOR)
+        shop_open = getattr(g, 'relic_manager', None) and g.relic_manager.shop_open
+        # When shop open, dim gameplay background
         if g.state_manager.get_state() in (g.state_manager.state.ROLLING, g.state_manager.state.FARKLE, g.state_manager.state.BANKED):
             for d in g.dice:
                 d.draw(screen)
@@ -85,6 +114,9 @@ class GameRenderer:
         def dim(color):
             return tuple(max(0, int(c * 0.45)) for c in color)
         roll_enabled, lock_enabled, bank_enabled = self.compute_button_states()
+        # Hard-disable button visuals while shop open
+        if shop_open:
+            roll_enabled = lock_enabled = bank_enabled = False
         roll_color = BTN_ROLL_COLOR if roll_enabled else dim(BTN_ROLL_COLOR)
         lock_color = BTN_LOCK_COLOR_ENABLED if lock_enabled else dim(BTN_LOCK_COLOR_DISABLED)
         bank_color = BTN_BANK_COLOR if bank_enabled else dim(BTN_BANK_COLOR)
@@ -138,7 +170,7 @@ class GameRenderer:
             else:
                 if pending_adjusted > 0:
                     show_remaining = max(0, base_remaining - pending_adjusted)
-                    remaining_text = f"Rem: {base_remaining} (-{pending_raw} * {player_mult:.2f} = {pending_adjusted}) -> {show_remaining}"
+                    remaining_text = f"Rem: {base_remaining} (-{pending_adjusted}) -> {show_remaining}"
                 else:
                     remaining_text = f"Rem: {base_remaining}"
             reward_text = f"Reward: {goal.reward_gold}g" if goal.reward_gold > 0 else ""
@@ -163,10 +195,83 @@ class GameRenderer:
             goal.draw_into(screen, box_rect, g.small_font, lines_out, GOAL_PADDING, GOAL_LINE_SPACING, GOAL_TEXT)
             x += per_box_width + spacing
         screen.blit(g.font.render(f"Level {g.level_index}", True, (180, 220, 255)), (80, 30))
-        turns_text = g.small_font.render(f"Turns Left: {g.level_state.turns_left}", True, (240,240,240))
-        screen.blit(turns_text, (WIDTH - turns_text.get_width() - 20, 28))
-        gold_text = g.small_font.render(f"Gold: {g.player.gold}", True, (255, 215, 0))
-        screen.blit(gold_text, (WIDTH - gold_text.get_width() - 20, 50))
+        # Player HUD box (top-right)
+        hud_padding = 10
+        # Combined multiplier (player * relics)
+        base_mult = 1.0
+        try:
+            base_mult = float(g.player.get_score_multiplier())
+        except Exception:
+            base_mult = 1.0
+        relic_mult_product = 1.0
+        if getattr(g, 'relic_manager', None):
+            for r in g.relic_manager.active_relics:
+                try:
+                    relic_mult_product *= r.get_effective_multiplier()
+                except Exception:
+                    pass
+        mult = base_mult * relic_mult_product
+        hud_lines = [f"Turns: {g.level_state.turns_left}", f"Gold: {g.player.gold}"]
+        if relic_mult_product != 1.0:
+            hud_lines.append(f"Mult: x{base_mult:.2f} * x{relic_mult_product:.2f} = x{mult:.2f}")
+        else:
+            hud_lines.append(f"Mult: x{mult:.2f}")
+        # Determine widest line
+        line_surfs = [g.small_font.render(t, True, (250,250,250)) for t in hud_lines]
+        width_needed = max(s.get_width() for s in line_surfs) + hud_padding * 2
+        height_needed = sum(s.get_height() for s in line_surfs) + hud_padding * 2 + 6
+        hud_rect = pygame.Rect(WIDTH - width_needed - 20, 20, width_needed, height_needed)
+        pygame.draw.rect(screen, (40, 55, 70), hud_rect, border_radius=8)
+        pygame.draw.rect(screen, (90, 140, 180), hud_rect, width=2, border_radius=8)
+        y = hud_rect.y + hud_padding
+        for s in line_surfs:
+            screen.blit(s, (hud_rect.x + hud_padding, y))
+            y += s.get_height() + 2
+        # Draw shop overlay (before single flip) so no flicker from double buffering
+        if shop_open:
+            self._draw_shop_overlay(screen)
         pygame.display.flip()
+
+    def _draw_shop_overlay(self, screen):
+        g = self.game
+        overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+        overlay.fill((0,0,0,180))
+        screen.blit(overlay, (0,0))
+        # Offer panel
+        panel_w, panel_h = self.SHOP_PANEL_WIDTH, self.SHOP_PANEL_HEIGHT
+        panel_rect = pygame.Rect((WIDTH - panel_w)//2, (HEIGHT - panel_h)//2, panel_w, panel_h)
+        pygame.draw.rect(screen, (50,70,95), panel_rect, border_radius=12)
+        pygame.draw.rect(screen, (120,170,210), panel_rect, width=2, border_radius=12)
+        offer = getattr(g.relic_manager, 'current_offer', None)
+        lines = ["Shop", "", "Relic Offer:"]
+        if offer:
+            lines.append(f"{offer.relic.name}")
+            mult = offer.relic.get_effective_multiplier()
+            lines.append(f"Multiplier: x{mult:.2f}")
+            lines.append(f"Cost: {offer.cost}g (You: {g.player.gold}g)")
+        else:
+            lines.append("(No offer)")
+        font = g.font
+        y = panel_rect.y + 20
+        for ln in lines:
+            surf = font.render(ln, True, (250,250,250))
+            screen.blit(surf, (panel_rect.x + 20, y))
+            y += surf.get_height() + 4
+        # Buttons
+        btn_h = 40
+        btn_w = 160
+        gap = 30
+        purchase_rect = pygame.Rect(panel_rect.x + 40, panel_rect.bottom - 60, btn_w, btn_h)
+        skip_rect = pygame.Rect(panel_rect.right - btn_w - 40, panel_rect.bottom - 60, btn_w, btn_h)
+        can_afford = offer and g.player.gold >= offer.cost
+        pygame.draw.rect(screen, (80,200,110) if can_afford else (60,90,70), purchase_rect, border_radius=8)
+        pygame.draw.rect(screen, (180,80,60), skip_rect, border_radius=8)
+        ptxt = font.render("Purchase", True, (0,0,0) if can_afford else (120,120,120))
+        stxt = font.render("Skip", True, (0,0,0))
+        screen.blit(ptxt, (purchase_rect.centerx - ptxt.get_width()//2, purchase_rect.centery - ptxt.get_height()//2))
+        screen.blit(stxt, (skip_rect.centerx - stxt.get_width()//2, skip_rect.centery - stxt.get_height()//2))
+        # Persist rects for click handling
+        self.shop_purchase_rect = purchase_rect
+        self.shop_skip_rect = skip_rect
 
 # Note: Avoid importing Game for type checking to prevent circular dependency.

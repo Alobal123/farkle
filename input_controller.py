@@ -11,13 +11,27 @@ class InputController:
         t = event.type
         g = self.game
         if t == GameEventType.REQUEST_ROLL:
-            self._handle_roll_request()
+            if g.state_manager.get_state().name == 'SHOP':
+                self._deny("Shop open: purchase or skip.")
+            else:
+                self._handle_roll_request()
         elif t == GameEventType.REQUEST_LOCK:
-            self._handle_lock_request()
+            if g.state_manager.get_state().name == 'SHOP':
+                self._deny("Shop open: purchase or skip.")
+            else:
+                self._handle_lock_request()
         elif t == GameEventType.REQUEST_BANK:
-            self._handle_bank_request()
+            if g.state_manager.get_state().name == 'SHOP':
+                self._deny("Shop open: purchase or skip.")
+            else:
+                self._handle_bank_request()
         elif t == GameEventType.REQUEST_NEXT_TURN:
             self._handle_next_turn_request()
+        elif t == GameEventType.REQUEST_BUY_RELIC:
+            # Handled by relic manager; nothing extra here
+            pass
+        elif t == GameEventType.REQUEST_SKIP_SHOP:
+            pass
 
     # Internal handlers
     def _emit(self, etype: GameEventType, payload=None):

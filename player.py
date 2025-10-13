@@ -68,7 +68,19 @@ class Player(GameObject):
             if goal is not None and pending_raw > 0 and self.game:
                 # Apply modifier chain
                 context = _ScoreApplyContext(pending_raw=pending_raw)
-                adjusted = self.modifier_chain.apply(pending_raw, context)
+                # Aggregate player + relic modifiers if relic manager present
+                aggregated_mods = []
+                relic_manager = getattr(self.game, 'relic_manager', None)
+                if relic_manager is not None:
+                    try:
+                        aggregated_mods = relic_manager.aggregate_modifier_chain()  # type: ignore[attr-defined]
+                    except Exception:
+                        aggregated_mods = list(self.modifier_chain.snapshot())
+                if not aggregated_mods:
+                    aggregated_mods = list(self.modifier_chain.snapshot())
+                adjusted = pending_raw
+                for m in aggregated_mods:
+                    adjusted = m.apply(adjusted, context)  # type: ignore[arg-type]
                 from game_event import GameEvent as GE, GameEventType as GET
                 self.game.event_listener.publish(GE(GET.SCORE_APPLIED, payload={  # type: ignore[attr-defined]
                     "goal": goal,

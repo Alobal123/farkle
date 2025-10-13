@@ -39,3 +39,11 @@ class GameStateManager:
     def transition_to_start(self):
         if self.state in (GameState.FARKLE, GameState.BANKED):
             self._set(GameState.START)
+
+    def transition_to_shop(self):
+        if self.state in (GameState.START, GameState.BANKED, GameState.FARKLE):
+            self._set(GameState.SHOP)
+
+    def exit_shop_to_start(self):
+        if self.state == GameState.SHOP:
+            self._set(GameState.START)

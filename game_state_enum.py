@@ -5,3 +5,4 @@ class GameState(Enum):
     ROLLING = auto()   # Player can roll/unhold dice
     FARKLE = auto()    # Farkle occurred, show dice, stop rolling
     BANKED = auto()    # Player banked points, show dice, wait for next turn
+    SHOP = auto()      # Between-level relic shop open; gameplay inputs gated

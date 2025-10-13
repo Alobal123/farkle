@@ -11,6 +11,7 @@ from actions import handle_lock as action_handle_lock, handle_roll as action_han
 from input_controller import InputController
 from renderer import GameRenderer
 from settings import ROLL_BTN, LOCK_BTN, BANK_BTN, NEXT_BTN
+from relic_manager import RelicManager
 
 class Game:
     def __init__(self, screen, font, clock, level: Level | None = None):
@@ -40,12 +41,16 @@ class Game:
         # Player meta progression container
         self.player = Player()
         self.player.game = self
+        # Relic manager handles between-level shop & relic aggregation
+        self.relic_manager = RelicManager(self)
         # Renderer handles all drawing/UI composition
         self.renderer = GameRenderer(self)
         # Event listener hub
         self.event_listener = EventListener()
         # Subscribe player & goals
         self._subscribe_core_objects()
+        # Subscribe relic manager
+        self.event_listener.subscribe(self.relic_manager.on_event)
         # Input controller (handles REQUEST_* events)
         self.input_controller = InputController(self)
         self.event_listener.subscribe(self.input_controller.on_event)
@@ -423,6 +428,26 @@ class Game:
         self._recent_events.append(event)
         if len(self._recent_events) > 50:
             self._recent_events.pop(0)
+        # Shop lifecycle transitions
+        if et == GameEventType.LEVEL_ADVANCE_FINISHED:
+            # Enter shop state
+            try:
+                self.state_manager.transition_to_shop()
+            except Exception:
+                pass
+        elif et == GameEventType.SHOP_CLOSED:
+            # Leave shop and emit TURN_START for new level start if not already rolled
+            try:
+                self.state_manager.exit_shop_to_start()
+                # Emit a fresh TURN_START so UI resumes; include turns_left
+                self.event_listener.publish(GameEvent(GameEventType.TURN_START, payload={
+                    "level": self.level.name,
+                    "turn_index": 1,
+                    "from_shop": True,
+                    "turns_left": self.level_state.turns_left
+                }))
+            except Exception:
+                pass
 
     def _advance_level_post_turn(self):
         # Emit LEVEL_COMPLETE if not already

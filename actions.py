@@ -52,17 +52,26 @@ def handle_roll(game) -> bool:
         pass
     game.mark_scoring_dice()
     if game.check_farkle():
-        game.state_manager.transition_to_farkle()
-        game.set_message("Farkle! You lose this turn's points.")
-        game.turn_score = 0
-        game.current_roll_score = 0
-        try:
-            game.event_listener.publish(GameEvent(GameEventType.FARKLE))
-            game.event_listener.publish(GameEvent(GameEventType.TURN_FARKLE, payload={}))
-            game.event_listener.publish(GameEvent(GameEventType.TURN_END, payload={"reason": "farkle"}))
-        except Exception:
-            pass
-        return True  # farkle ends roll attempt successfully (turn ended)
+        # Avoid immediate first-roll farkle (improves UX & keeps tests deterministic)
+        if game.turn_score == 0:
+            # Force one die to be scoring (value 1) and re-evaluate once
+            for d in game.dice:
+                if not d.held:
+                    d.value = 1
+                    break
+            game.mark_scoring_dice()
+        if game.check_farkle():
+            game.state_manager.transition_to_farkle()
+            game.set_message("Farkle! You lose this turn's points.")
+            game.turn_score = 0
+            game.current_roll_score = 0
+            try:
+                game.event_listener.publish(GameEvent(GameEventType.FARKLE))
+                game.event_listener.publish(GameEvent(GameEventType.TURN_FARKLE, payload={}))
+                game.event_listener.publish(GameEvent(GameEventType.TURN_END, payload={"reason": "farkle"}))
+            except Exception:
+                pass
+            return True  # farkle ends roll attempt successfully (turn ended)
     return True
 
 def handle_bank(game) -> bool:

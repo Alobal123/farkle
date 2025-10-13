@@ -152,3 +152,89 @@ Guarantees:
 * `LEVEL_COMPLETE` never precedes that turn's `TURN_END`.
 * New level's `TURN_START` precedes `LEVEL_ADVANCE_FINISHED`.
 * No polling; all transitions derive from events (`GOAL_FULFILLED`, `TURN_END`). Each pending goal on bank produces at most one `SCORE_APPLY_REQUEST` / `SCORE_APPLIED` pair.
+
+## Shop & Relics System
+
+Beginning with each completed level (after the new level's initial `TURN_START` has already fired), a between-level Shop pause inserts a `SHOP` game state that gates normal gameplay input until resolved.
+
+High-level flow (successful or skipped purchase):
+
+1. Previous level ends (`LEVEL_COMPLETE` path) and advancement sequence runs.
+2. Ordering remains: `LEVEL_ADVANCE_STARTED` -> `LEVEL_GENERATED` -> `TURN_START` (new level) -> `LEVEL_ADVANCE_FINISHED`.
+3. The `RelicManager` listens to `LEVEL_ADVANCE_FINISHED` and immediately emits:
+	* `SHOP_OPENED` (shop state becomes active)
+	* `RELIC_OFFERED` (currently a single offer each level)
+4. While in shop state, `REQUEST_ROLL` / `REQUEST_LOCK` / `REQUEST_BANK` produce `REQUEST_DENIED` (input gating).
+5. Player chooses one of:
+	* Buy: UI / input layer emits `REQUEST_BUY_RELIC` -> if affordable gold -> `RELIC_PURCHASED` then `SHOP_CLOSED`.
+	* Skip: emits `REQUEST_SKIP_SHOP` -> `RELIC_SKIPPED` (internal) -> `SHOP_CLOSED`.
+6. On `SHOP_CLOSED`, shop state ends and normal turn actions (roll/lock/bank) are re-enabled. A new `TURN_START` is NOT emitted here (it already happened before the shop opened), preserving deterministic ordering for tests.
+
+### Current Relic Offer Logic
+For now, each level offers a single +10% score multiplier relic with a scaling cost:
+
+```
+cost = 50 + 10 * (level_index - 1)
+multiplier = 1.10  # +10%
+```
+
+If purchased, the relic's modifier chain is merged with the player's when applying scores. Additional relic varieties (flat adders, conditional bonuses, diminishing returns) can be layered in by adding new `ScoreModifier` implementations and instantiating different relics.
+
+### Combined Multiplier Math
+During `SCORE_APPLY_REQUEST`, the Player aggregates its own modifier chain plus all active relic chains:
+
+```
+effective_score = pending_raw
+for modifier in aggregated_modifiers:
+	 effective_score = modifier.apply(effective_score, context)
+```
+
+The HUD displays a combined effective multiplier equal to the product of all `ScoreMultiplier` instances across player + relics. Example progression (ignoring other modifier types):
+
+* Base multiplier starts at 1.00.
+* Each completed level after the first adds +0.05 to the player's base multiplier (mutating the existing multiplier in place).
+* Buying a +10% relic multiplies the chain by 1.10 (stacking multiplicatively).
+
+Example: Entering level 6 you have completed 5 prior levels -> base = 1.00 + 4 * 0.05 = 1.20. Two relics purchased earlier (each 1.10) yield combined = 1.20 * 1.10 * 1.10 = 1.452. A raw score of 100 adjusts to 145 (integer truncation of 145.2).
+
+### Shop / Relic Events Reference
+
+| Event | When Emitted | Payload Highlights |
+|-------|--------------|--------------------|
+| `SHOP_OPENED` | Immediately after `LEVEL_ADVANCE_FINISHED` | `{ level_index }` |
+| `RELIC_OFFERED` | After shop opens (one per level currently) | `{ name, multiplier, cost }` |
+| `REQUEST_BUY_RELIC` | User intent to purchase current offer | (none) |
+| `RELIC_PURCHASED` | Purchase succeeds (enough gold) | `{ name, cost, multiplier }` |
+| `REQUEST_SKIP_SHOP` | User intent to skip shop | (none) |
+| `RELIC_SKIPPED` | (Reserved: if explicitly emitted on skip) | (tbd) |
+| `SHOP_CLOSED` | After purchase or skip | `{ skipped: bool }` |
+
+Denied gameplay intents during shop still emit `REQUEST_DENIED` (payload contains original request type), enabling UI feedback.
+
+### Event Ordering (Augmented Around Shop)
+
+Successful bank causing level completion & immediate skip example:
+
+```
+... TURN_BANKED -> TURN_END(reason=banked) -> LEVEL_COMPLETE -> LEVEL_ADVANCE_STARTED -> LEVEL_GENERATED -> TURN_START(new level) -> LEVEL_ADVANCE_FINISHED -> SHOP_OPENED -> RELIC_OFFERED -> REQUEST_SKIP_SHOP -> SHOP_CLOSED -> (player may now ROLL)
+```
+
+Successful bank with relic purchase:
+
+```
+... LEVEL_ADVANCE_FINISHED -> SHOP_OPENED -> RELIC_OFFERED -> REQUEST_BUY_RELIC -> RELIC_PURCHASED -> SHOP_CLOSED -> (player may now ROLL)
+```
+
+Note the absence of an additional `TURN_START` after `SHOP_CLOSED`; gameplay resumes in the already-started first turn of the new level.
+
+### Design Rationale
+* Gating via a distinct shop phase removes race conditions where players could roll before deciding on upgrades.
+* Opening the shop after the new level's `TURN_START` preserves existing test expectations about advancement ordering while still allowing a modal pause.
+* Aggregated modifier chain keeps goals agnostic of meta progression sources (player vs relics).
+
+### Future Extensions
+* Multiple simultaneous relic offers (array of `RELIC_OFFERED` events with indices).
+* Reroll / refresh mechanic costing gold.
+* Relic rarity tiers with UI differentiation.
+* Non-multiplicative modifiers (flat adders, conditional chains) for richer strategy.
+* Persistence layer to save acquired relics across sessions.
