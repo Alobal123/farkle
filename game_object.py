@@ -1,6 +1,5 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
-from typing import Optional, Any
 import pygame
 from game_event import GameEvent
 

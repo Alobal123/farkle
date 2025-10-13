@@ -70,10 +70,32 @@ class ScoreModifierChain:
         return tuple(self._mods)
 
     def apply(self, base: int, context: ScoreContext) -> int:
-        adjusted = base
+        """Apply modifiers.
+
+        For selective part modifiers (CompositePartModifier descendants), we mutate parts but
+        defer recalculating the aggregate until after all such modifiers have run. Global
+        ScoreMultiplier still folds multiplicatively.
+        """
+        score_obj = getattr(context, 'score_obj', None)
+        running = base
+        # First pass: apply all non-global composite modifiers (priority order preserved)
         for m in self._mods:
-            adjusted = m.apply(adjusted, context)
-        return adjusted
+            if isinstance(m, ScoreMultiplier):
+                continue
+            running = m.apply(running, context)
+        # Recompute base from parts if available (sum of effective values)
+        if score_obj is not None:
+            try:
+                # Each part holds raw and optional adjusted value; adjusted is authoritative once set.
+                # Distinct parts model => total is just sum of effective values, no need for inference heuristics.
+                running = sum((p.adjusted if p.adjusted is not None else p.raw) for p in score_obj.parts)
+            except Exception:
+                pass
+        # Second pass: apply global multipliers
+        for m in self._mods:
+            if isinstance(m, ScoreMultiplier):
+                running = m.apply(running, context)
+        return running
 
     def effective_multiplier(self) -> float:
         mult = 1.0
@@ -92,9 +114,114 @@ class ScoreModifierChain:
         base = 1.0 + delta if delta >= 0 else max(0.0, 1.0 + delta)
         self.add(ScoreMultiplier(mult=base))
 
-# Future examples (placeholders)
-# class FlatBonus(ScoreModifier):
-#     priority = 60
-#     def __init__(self, amount: int): self.amount = amount
-#     def apply(self, base: int, context: ScoreContext) -> int:
-#         return base + self.amount if base > 0 else 0
+#############################################
+# Matcher / Effect abstraction layer        #
+#############################################
+
+class PartMatcher(Protocol):  # pragma: no cover - interface type
+    def select(self, score_obj) -> List: ...
+
+@dataclass
+class RuleKeyMatcher:
+    rule_key: str
+    def select(self, score_obj) -> List:
+        if not score_obj:
+            return []
+        return [p for p in getattr(score_obj, 'parts', []) if p.rule_key == self.rule_key]
+
+
+class PartEffect(Protocol):  # pragma: no cover - interface type
+    def apply(self, parts: List, context: ScoreContext) -> int: ...  # returns total delta to base
+
+@dataclass
+class MultiplyEffect:
+    mult: float
+    def apply(self, parts, context: ScoreContext) -> int:
+        if self.mult == 1.0:
+            return 0
+        delta_total = 0
+        for part in parts:
+            current = part.adjusted if part.adjusted is not None else part.raw
+            new_val = int(current * self.mult)
+            delta = new_val - current
+            if delta != 0:
+                part.adjusted = new_val
+                delta_total += delta
+        return delta_total
+
+@dataclass
+class FlatAddEffect:
+    amount: int
+    def apply(self, parts, context: ScoreContext) -> int:
+        if self.amount == 0:
+            return 0
+        delta_total = 0
+        for part in parts:
+            # With distinct parts per lock, per-occurrence just means once per part.
+            add_amount = self.amount
+            current = part.adjusted if part.adjusted is not None else part.raw
+            new_val = current + add_amount
+            part.adjusted = new_val
+            delta_total += add_amount
+        return delta_total
+
+@dataclass
+class CompositePartModifier(ScoreModifier):
+    matcher: PartMatcher
+    effect: PartEffect
+    priority: int = 55
+
+    def apply(self, base: int, context: ScoreContext) -> int:
+        score_obj = getattr(context, 'score_obj', None)
+        if score_obj is None:
+            return base
+        try:
+            parts = self.matcher.select(score_obj)
+            if not parts:
+                return base
+            delta = self.effect.apply(parts, context)
+            if delta:
+                return base + delta
+            return base
+        except Exception:
+            return base
+
+#############################################
+# Backwards-compatible concrete modifiers   #
+#############################################
+
+@dataclass
+class RuleSpecificMultiplier(CompositePartModifier):
+    rule_key: str = ""
+    mult: float = 1.0
+    priority: int = 55
+    def __post_init__(self):
+        # Rebind matcher/effect for parent logic
+        object.__setattr__(self, 'matcher', RuleKeyMatcher(self.rule_key))
+        object.__setattr__(self, 'effect', MultiplyEffect(self.mult))
+    # Keep constructor signature (rule_key, mult)
+    def __init__(self, rule_key: str, mult: float = 1.0):  # type: ignore[override]
+        object.__setattr__(self, 'rule_key', rule_key)
+        object.__setattr__(self, 'mult', mult)
+        object.__setattr__(self, 'priority', 55)
+        object.__setattr__(self, 'matcher', RuleKeyMatcher(rule_key))
+        object.__setattr__(self, 'effect', MultiplyEffect(mult))
+
+
+# Flat bonus applied only to a specific rule_key's parts (adds 'amount' to each matching part)
+@dataclass
+class FlatRuleBonus(CompositePartModifier):
+    rule_key: str = ""
+    amount: int = 0
+    priority: int = 56
+    def __post_init__(self):
+        object.__setattr__(self, 'matcher', RuleKeyMatcher(self.rule_key))
+        object.__setattr__(self, 'effect', FlatAddEffect(self.amount))
+    def __init__(self, rule_key: str, amount: int = 0):  # type: ignore[override]
+        object.__setattr__(self, 'rule_key', rule_key)
+        object.__setattr__(self, 'amount', amount)
+        object.__setattr__(self, 'priority', 56)
+        object.__setattr__(self, 'matcher', RuleKeyMatcher(rule_key))
+        object.__setattr__(self, 'effect', FlatAddEffect(amount))
+        # Semantics: adds 'amount' to every matching part independently (stackable per lock instance).
+        

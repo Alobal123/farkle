@@ -2,7 +2,6 @@
 
 Each handler receives the game instance and performs logic previously in Game methods.
 """
-from typing import Any
 from game_event import GameEvent, GameEventType
 
 def handle_lock(game) -> bool:

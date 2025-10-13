@@ -229,6 +229,12 @@ class Game:
         add_score, _ = self.calculate_score_from_dice()
         if add_score <= 0:
             return False
+        # Identify rule_key for this selection (if available)
+        rule_key = None
+        try:
+            rule_key = self.dice_container.selection_rule_key()
+        except Exception:
+            rule_key = None
         # Accumulate turn score locally (used for UI enabling) but per-goal pending kept inside Goal
         self.turn_score += add_score
         self.current_roll_score = 0
@@ -240,10 +246,13 @@ class Game:
         self.locked_after_last_roll = True
         # Emit LOCK event so the target goal can accumulate pending
         try:
-            self.event_listener.publish(GameEvent(GameEventType.LOCK, payload={
+            payload = {
                 "goal_index": self.active_goal_index,
                 "points": add_score
-            }))
+            }
+            if rule_key:
+                payload["rule_key"] = rule_key
+            self.event_listener.publish(GameEvent(GameEventType.LOCK, payload=payload))
         except Exception:
             pass
         return True

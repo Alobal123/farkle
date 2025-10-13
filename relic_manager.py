@@ -1,8 +1,8 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import List, Optional
 from game_event import GameEvent, GameEventType
 from relic import Relic
-from score_modifiers import ScoreMultiplier
+from score_modifiers import FlatRuleBonus
 
 @dataclass
 class RelicOffer:
@@ -37,24 +37,32 @@ class RelicManager:
             self._close_shop(skipped=True)
 
     def _open_shop(self):
-        # Generate a simple multiplier relic offer each level for now
         self.shop_open = True
-        base_mult = 1.10  # +10% relic
-        # Cheaper early-game: allow first relic purchase right after level 1.
-        # Previous formula: 50 + 10*(level_index-1)
-        # New formula: 20 + 5*(level_index-1) (Level 1 -> 20, Level 2 -> 25, etc.)
-        cost = 20 + 5 * (self.game.level_index - 1)
-        relic = Relic(name=f"Relic of Growth L{self.game.level_index}", base_multiplier=base_mult)
-        self.current_offer = RelicOffer(relic=relic, cost=cost)
         el = self.game.event_listener
-        el.publish(GameEvent(GameEventType.SHOP_OPENED, payload={
-            "level_index": self.game.level_index
-        }))
-        el.publish(GameEvent(GameEventType.RELIC_OFFERED, payload={
-            "name": relic.name,
-            "multiplier": base_mult,
-            "cost": cost
-        }))
+        el.publish(GameEvent(GameEventType.SHOP_OPENED, payload={"level_index": self.game.level_index}))
+
+        if self.game.level_index == 1:
+            # Offer special flat bonus relic for single fives
+            relic = Relic(name="Charm of Fives", base_multiplier=None)
+            relic.add_modifier(FlatRuleBonus(rule_key="SingleValue:5", amount=50))
+            cost = 30
+            self.current_offer = RelicOffer(relic=relic, cost=cost)
+            el.publish(GameEvent(GameEventType.RELIC_OFFERED, payload={
+                "name": relic.name,
+                "flat_rule_bonus": {"rule_key": "SingleValue:5", "amount": 50},
+                "cost": cost
+            }))
+        else:
+            # Default growth relic offer for subsequent levels
+            base_mult = 1.10  # +10% relic
+            cost = 20 + 5 * (self.game.level_index - 1)
+            relic = Relic(name=f"Relic of Growth L{self.game.level_index}", base_multiplier=base_mult)
+            self.current_offer = RelicOffer(relic=relic, cost=cost)
+            el.publish(GameEvent(GameEventType.RELIC_OFFERED, payload={
+                "name": relic.name,
+                "multiplier": base_mult,
+                "cost": cost
+            }))
 
     def _attempt_purchase(self):
         if not self.current_offer:

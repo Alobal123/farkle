@@ -65,8 +65,9 @@ class Player(GameObject):
         elif event.type == GameEventType.SCORE_APPLY_REQUEST:
             goal = event.get("goal")
             pending_raw = int(event.get("pending_raw", 0) or 0)
+            score_dict = event.get("score")
             if goal is not None and pending_raw > 0 and self.game:
-                # Apply modifier chain
+                # Prepare context with pending raw only; modifiers inspect context.score_obj if present
                 context = _ScoreApplyContext(pending_raw=pending_raw)
                 # Aggregate player + relic modifiers if relic manager present
                 aggregated_mods = []
@@ -78,16 +79,33 @@ class Player(GameObject):
                         aggregated_mods = list(self.modifier_chain.snapshot())
                 if not aggregated_mods:
                     aggregated_mods = list(self.modifier_chain.snapshot())
+                # Reconstruct score object early so modifiers can use it
+                score_obj = None
+                if score_dict:
+                    try:
+                        from score_types import Score, ScorePart
+                        detailed = score_dict.get('detailed_parts') or score_dict.get('parts', [])
+                        parts = [ScorePart(rule_key=pd['rule_key'], raw=pd['raw'], adjusted=pd.get('adjusted')) for pd in detailed]
+                        score_obj = Score(parts=parts)
+                        setattr(context, 'score_obj', score_obj)
+                    except Exception:
+                        score_obj = None
                 adjusted = pending_raw
                 for m in aggregated_mods:
                     adjusted = m.apply(adjusted, context)  # type: ignore[arg-type]
+                # After modifiers, finalize score serialization
+                score_out_dict = None
+                if score_obj is not None:
+                    try:
+                        score_obj.final_global_adjusted = adjusted
+                        score_out_dict = score_obj.to_dict()
+                    except Exception:
+                        score_out_dict = None
                 from game_event import GameEvent as GE, GameEventType as GET
-                self.game.event_listener.publish(GE(GET.SCORE_APPLIED, payload={  # type: ignore[attr-defined]
-                    "goal": goal,
-                    "pending_raw": pending_raw,
-                    "multiplier": self.get_score_multiplier(),
-                    "adjusted": adjusted
-                }))  # type: ignore[attr-defined]
+                payload = {"goal": goal, "pending_raw": pending_raw, "multiplier": self.get_score_multiplier(), "adjusted": adjusted}
+                if score_out_dict is not None:
+                    payload["score"] = score_out_dict
+                self.game.event_listener.publish(GE(GET.SCORE_APPLIED, payload=payload))  # type: ignore[attr-defined]
 
     def draw(self, surface):  # type: ignore[override]
         # Player itself has no direct sprite; rendering handled elsewhere.

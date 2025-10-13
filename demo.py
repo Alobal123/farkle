@@ -1,5 +1,5 @@
 """Demo entry point for the Farkle game."""
-import pygame, sys
+import pygame
 from game import Game
 from settings import WIDTH, HEIGHT
 

@@ -15,6 +15,8 @@ class Goal(GameObject):
         self.game = None  # back reference assigned when subscribed
         # Pending raw points accumulated this turn (before multiplier & banking)
         self.pending_raw: int = 0
+    # Unified Score object (lazy created when first needed)
+        self._pending_score = None  # type: ignore
 
     # Core logic
     def subtract(self, points: int):
@@ -89,21 +91,43 @@ class Goal(GameObject):
                 try:
                     if self.game.level_state.goals[idx] is self:
                         raw = int(event.get("points", 0))
+                        rk = event.get("rule_key")
                         if raw > 0 and not self.is_fulfilled():
                             self.pending_raw += raw
+                            if rk:
+                                try:
+                                    from score_types import Score
+                                    if self._pending_score is None:
+                                        self._pending_score = Score()
+                                    self._pending_score.ensure_part(rk, raw)
+                                except Exception:
+                                    pass
                 except Exception:
                     pass
         elif et == GameEventType.BANK:
             # On BANK: request scoring application instead of applying directly.
             if self.pending_raw > 0 and not self.is_fulfilled():
                 from game_event import GameEvent as GE, GameEventType as GET
-                self.game.event_listener.publish(GE(GET.SCORE_APPLY_REQUEST, payload={
-                    "goal": self,
-                    "pending_raw": self.pending_raw
-                }))
+                # Build Score object if not already built
+                score_obj = self._pending_score
+                if score_obj is None:
+                    try:
+                        from score_types import Score
+                        score_obj = Score()
+                        self._pending_score = score_obj
+                    except Exception:
+                        score_obj = None
+                payload = {"goal": self, "pending_raw": self.pending_raw}
+                if score_obj is not None:
+                    try:
+                        payload["score"] = score_obj.to_dict()
+                    except Exception:
+                        pass
+                self.game.event_listener.publish(GE(GET.SCORE_APPLY_REQUEST, payload=payload))
             else:
                 # Nothing pending; just ensure cleared
                 self.pending_raw = 0
+                self._pending_score = None
         elif et == GameEventType.SCORE_APPLIED:
             # Player has computed adjusted score; payload includes goal reference
             target = event.get("goal")
@@ -129,9 +153,11 @@ class Goal(GameObject):
                             self.game.level_state.completed = True
                 # Clear pending after application
                 self.pending_raw = 0
+                self._pending_score = None
         elif et == GameEventType.FARKLE:
             # Lose pending points for the turn
             self.pending_raw = 0
+            self._pending_score = None
         # Other events (progress, fulfilled) currently ignored for animation hooks.
 
     def draw(self, surface):  # type: ignore[override]
