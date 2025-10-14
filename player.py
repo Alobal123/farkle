@@ -115,5 +115,5 @@ class Player(GameObject):
             self.game.event_listener.publish(GE(GET.SCORE_APPLIED, payload=payload))  # type: ignore[attr-defined]
 
     def draw(self, surface):  # type: ignore[override]
-        # Player itself has no direct sprite; rendering handled elsewhere.
+        # Deprecated placeholder retained for interface compatibility; no rendering performed.
         return

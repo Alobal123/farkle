@@ -51,4 +51,5 @@ class Relic(GameObject):
         return
 
     def draw(self, surface):  # type: ignore[override]
+        # Deprecated placeholder; relics have no standalone sprite.
         return

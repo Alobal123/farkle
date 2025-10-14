@@ -150,10 +150,3 @@ class RelicManager:
         self.current_offer = None
         self.offers = []
         self.shop_open = False
-
-    def aggregate_modifier_chain(self):
-        # Combine player base chain + all active relic chains into a temporary list
-        mods = list(self.game.player.modifier_chain.snapshot())
-        for r in self.active_relics:
-            mods.extend(r.modifier_chain.snapshot())
-        return mods

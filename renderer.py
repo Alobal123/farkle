@@ -1,6 +1,6 @@
 import pygame
 from game_event import GameEvent, GameEventType
-from typing import List, Tuple
+from typing import List, Tuple  # Tuple kept for type hints elsewhere
 from settings import (
     WIDTH, HEIGHT, DICE_SIZE, BG_COLOR, BTN_ROLL_COLOR, BTN_LOCK_COLOR_DISABLED, BTN_LOCK_COLOR_ENABLED,
     BTN_BANK_COLOR, TEXT_PRIMARY, TEXT_ACCENT,
@@ -117,15 +117,6 @@ class GameRenderer:
             return pending_raw
 
     # Internal helper so click handling can ensure rects exist even before first post-open draw flip
-    def _compute_shop_rects(self):
-        from settings import WIDTH, HEIGHT  # local import to avoid circulars
-        panel_w, panel_h = self.SHOP_PANEL_WIDTH, self.SHOP_PANEL_HEIGHT
-        panel_rect = pygame.Rect((WIDTH - panel_w)//2, (HEIGHT - panel_h)//2, panel_w, panel_h)
-        purchase_rect = pygame.Rect(panel_rect.x + 40, panel_rect.bottom - 60, 160, 40)
-        skip_rect = pygame.Rect(panel_rect.right - 160 - 40, panel_rect.bottom - 60, 160, 40)
-        self.shop_purchase_rect = purchase_rect
-        self.shop_skip_rect = skip_rect
-        return purchase_rect, skip_rect
 
     def handle_click(self, pos):
         """Handle a mouse click for dice/goal selection, publishing selection events."""
@@ -187,19 +178,7 @@ class GameRenderer:
         )
         return roll_enabled, lock_enabled, bank_enabled
 
-    def compute_preview_scores(self) -> Tuple[int, int]:
-        g = self.game
-        player_mult = 1.0
-        if hasattr(g, 'player') and hasattr(g.player, 'get_score_multiplier'):
-            try:
-                player_mult = float(g.player.get_score_multiplier())  # type: ignore[attr-defined]
-            except Exception:
-                player_mult = 1.0
-        if g.selection_is_single_combo() and g.current_roll_score > 0:
-            adjusted = int(g.current_roll_score * player_mult)
-        else:
-            adjusted = 0
-        return g.turn_score + adjusted, adjusted
+    # Removed legacy compute_preview_scores in favor of richer selection preview pipeline.
 
     # New unified selection preview returning (raw, selective, final, total_mult)
     def get_selection_preview(self) -> Tuple[int,int,int,float]:
@@ -270,8 +249,8 @@ class GameRenderer:
         dice_bottom_y = HEIGHT // 2 - DICE_SIZE // 2 + DICE_SIZE
         score_y = dice_bottom_y + 15
         # New richer selection preview
-        preview_score, _ = self.compute_preview_scores()  # legacy total including only global mult for current selection
-        screen.blit(g.font.render(f"Turn Score: {preview_score}", True, TEXT_PRIMARY), (100, score_y))
+        # Turn Score now directly displays accumulated turn_score without speculative pending selection addition.
+        screen.blit(g.font.render(f"Turn Score: {g.turn_score}", True, TEXT_PRIMARY), (100, score_y))
         raw_sel, selective_sel, final_sel, total_mult = self.get_selection_preview()
         if raw_sel > 0:
             # Build preview string

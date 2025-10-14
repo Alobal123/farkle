@@ -161,5 +161,5 @@ class Goal(GameObject):
         # Other events (progress, fulfilled) currently ignored for animation hooks.
 
     def draw(self, surface):  # type: ignore[override]
-        # Drawing still handled by renderer; no direct sprite.
+        # Deprecated: Goal has no standalone sprite. Method retained temporarily for interface compatibility.
         return
