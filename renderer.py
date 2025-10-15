@@ -75,7 +75,7 @@ class GameRenderer:
                 if reroll and reroll.can_activate(abm):
                     abm.toggle_or_execute('reroll')
                     # Mirror legacy flag for compatibility
-                    g.reroll_selecting = bool(reroll.selecting)
+                    # Selection state internally tracked by ability manager; legacy flag removed.
                 else:
                     g.set_message("No rerolls available.")
             else:
@@ -107,7 +107,7 @@ class GameRenderer:
                         sel = abm.selecting_ability()
                         if sel and sel.target_type == 'die':
                             if abm.attempt_target('die', g.dice.index(d)):
-                                g.reroll_selecting = False
+                                # Ability selection completion handled; legacy flag removed.
                                 consumed = True
                                 break
                     # Normal selection path requires scoring eligibility
@@ -187,16 +187,6 @@ class GameRenderer:
         for goal in g.level_state.goals:
             goal.draw(screen)
         screen.blit(g.font.render(f"Level {g.level_index}", True, (180, 220, 255)), (80, 30))
-        # Debug: warn if shop should be open but is not (recent LEVEL_ADVANCE_FINISHED without SHOP_OPENED)
-        try:
-            recent = getattr(g, '_recent_events', [])[-10:]
-            saw_finished = any(e.type == GameEventType.LEVEL_ADVANCE_FINISHED for e in recent)
-            saw_shop_open = any(e.type == GameEventType.SHOP_OPENED for e in recent)
-            if saw_finished and not saw_shop_open and g.state_manager.get_state().name != 'SHOP':
-                warn = g.font.render('DEBUG: Shop expected but not open', True, (255,80,80))
-                screen.blit(warn, (80, 5))
-        except Exception:
-            pass
     # Note: display flip moved to Game.draw after overlay objects render.
 
 # Note: Avoid importing Game for type checking to prevent circular dependency.

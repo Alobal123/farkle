@@ -62,14 +62,17 @@ def handle_roll(game) -> bool:
             game.mark_scoring_dice()
         if game.check_farkle():
             game.state_manager.transition_to_farkle()
-            game.set_message("Farkle! You lose this turn's points." if game.rerolls_remaining() == 0 else "Farkle! You may use a REROLL.")
+            # Query ability manager for remaining rerolls
+            abm = getattr(game, 'ability_manager', None)
+            reroll = abm.get('reroll') if abm else None
+            game.set_message("Farkle! You lose this turn's points." if (not reroll or reroll.available() == 0) else "Farkle! You may use a REROLL.")
             game.turn_score = 0
             game.current_roll_score = 0
             try:
                 game.event_listener.publish(GameEvent(GameEventType.FARKLE))
                 game.event_listener.publish(GameEvent(GameEventType.TURN_FARKLE, payload={}))
                 # Defer TURN_END if rerolls remain
-                if game.rerolls_remaining() == 0:
+                if not reroll or reroll.available() == 0:
                     game.event_listener.publish(GameEvent(GameEventType.TURN_END, payload={"reason": "farkle"}))
             except Exception:
                 pass

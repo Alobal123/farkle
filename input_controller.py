@@ -106,11 +106,7 @@ class InputController:
             self._deny(f"{ability.name} not available."); return
         started = mgr.toggle_or_execute(ability_id)
         # Mirror legacy reroll_selecting flag for tests if reroll ability
-        if ability_id == 'reroll':
-            try:
-                self.game.reroll_selecting = bool(ability.selecting)
-            except Exception:
-                pass
+        # Legacy reroll_selecting flag removed; rely on ability.selecting directly in tests.
         if ability.selectable:
             if ability.selecting:
                 g.set_message(f"Select target(s) for {ability.name}.")

@@ -28,16 +28,18 @@ class RerollAbilityTests(unittest.TestCase):
         return [e.type for e in self.collector.events]
 
     def test_reroll_single_use_decrements(self):
-        remaining_before = self.game.rerolls_remaining()
+        abm = self.game.ability_manager
+        reroll = abm.get('reroll')
+        remaining_before = reroll.available() if reroll else 0
         # Perform initial roll (required before reroll now)
         self.game.event_listener.publish(GameEvent(GameEventType.REQUEST_ROLL))
         # Enter selection mode after first roll
         self.game.event_listener.publish(GameEvent(GameEventType.REQUEST_REROLL))
-        self.assertTrue(self.game.reroll_selecting)
+        self.assertTrue(reroll and reroll.selecting)
         # Target first non-held die
         self.game.use_reroll_on_die(0)
         self.assertIn(GameEventType.REROLL, self._types())
-        self.assertEqual(self.game.rerolls_remaining(), remaining_before - 1)
+        self.assertEqual(reroll.available(), remaining_before - 1)
         # Try to enter selection again (should deny and not consume more)
         before_events = self._types().count(GameEventType.REROLL)
         self.game.event_listener.publish(GameEvent(GameEventType.REQUEST_REROLL))
@@ -73,9 +75,11 @@ class RerollAbilityTests(unittest.TestCase):
         # TURN_END not yet emitted (deferred)
         self.assertNotIn(GameEventType.TURN_END, [e.type for e in self.collector.events if e.type == GameEventType.TURN_END])
         # Use reroll
-        if self.game.rerolls_remaining() > 0:
+        abm = self.game.ability_manager
+        reroll = abm.get('reroll') if abm else None
+        if reroll and reroll.available() > 0:
             self.game.event_listener.publish(GameEvent(GameEventType.REQUEST_REROLL))
-            self.assertTrue(self.game.reroll_selecting)
+            self.assertTrue(reroll.selecting)
             # Reroll an unheld die
             target_index = next(i for i,d in enumerate(self.game.dice) if not d.held)
             self.game.use_reroll_on_die(target_index)

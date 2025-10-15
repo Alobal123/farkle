@@ -70,10 +70,7 @@ class Game:
         self.ui_misc: list[GameObject] = [HelpIcon(10, self.screen.get_height() - 50, 40), RelicPanel(), ShopOverlay(), RulesOverlay(), self.player]
         for obj in self.ui_misc:
             obj.game = self  # type: ignore[attr-defined]
-        # Per-level ability charges (initial simple architecture). Future: AbilityManager.
-        self.rerolls_per_level = 1  # kept for backward compatibility (legacy API)
-        self.rerolls_used = 0       # legacy field (now proxied through ability)
-        self.reroll_selecting = False  # legacy flag (mapped to ability.selecting)
+    # Legacy reroll tracking fields removed; ability manager owns reroll state.
         self.ability_manager = AbilityManager(self)
         # Event listener hub
         self.event_listener = EventListener()
@@ -179,12 +176,8 @@ class Game:
         # Refresh dynamic dice list to reflect new Die instances
         self.ui_dynamic = list(self.dice_container.dice)
 
-    def _recreate_dice(self, preserve_values: bool = False):
-        """Internal helper to recreate or refresh dice and related state consistently.
-
-        Args:
-            preserve_values: reserved for future use (currently unused, always recreates values randomly).
-        """
+    def _recreate_dice(self):
+        """Recreate dice objects and clear selection/held state for a fresh turn or reset."""
         self.dice_container.reset_all()
         self.ui_dynamic = list(self.dice_container.dice)
         # Clear selection & eligibility flags explicitly
@@ -209,7 +202,7 @@ class Game:
         self.level_state.reset()
         self.active_goal_index = 0
         # Reset per-level ability uses
-        self.rerolls_used = 0
+    # Ability manager reset handles reroll availability now.
         if hasattr(self, 'ability_manager'):
             self.ability_manager.reset_level()
         # pending scores moved into Goal.pending_raw; ensure cleared
@@ -481,7 +474,7 @@ class Game:
         for g in self.level_state.goals:
             g.pending_raw = 0
         # Reset per-level abilities usage
-        self.rerolls_used = 0
+    # Ability manager reset handles reroll availability now.
         if hasattr(self, 'ability_manager'):
             self.ability_manager.reset_level()
         # Event after level data structures generated but before subscriptions/reset
@@ -525,6 +518,13 @@ class Game:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     running = False
+                elif event.type == pygame.KEYDOWN:
+                    # Allow immediate shop skip via ESC or 'S'
+                    if self.relic_manager.shop_open and event.key in (pygame.K_ESCAPE, pygame.K_s):
+                        try:
+                            self.event_listener.publish(GameEvent(GameEventType.REQUEST_SKIP_SHOP))
+                        except Exception:
+                            pass
                 elif event.type == pygame.MOUSEBUTTONDOWN:
                     mx, my = event.pos
                     # Delegate to UI buttons first
@@ -557,13 +557,10 @@ class Game:
 
     # --- ability logic -------------------------------------------------
     def rerolls_remaining(self) -> int:
-        # Prefer ability manager state
+        # Backward-compatible shim retained for existing callers; now purely ability-based.
         ab = getattr(self, 'ability_manager', None)
-        if ab:
-            a = ab.get('reroll')
-            if a:
-                return a.available()
-        return max(0, self.rerolls_per_level - self.rerolls_used)
+        a = ab.get('reroll') if ab else None
+        return a.available() if a else 0
 
     def can_use_reroll(self) -> bool:
         a = getattr(self, 'ability_manager', None)

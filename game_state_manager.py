@@ -46,9 +46,6 @@ class GameStateManager:
         if self.state in (GameState.FARKLE, GameState.BANKED):
             self._set(GameState.PRE_ROLL)
 
-    # Deprecated legacy alias; retain for backward compatibility (remove after cleanup window)
-    def transition_to_start(self):  # pragma: no cover - deprecated
-        self.transition_to_pre_roll()
 
     def transition_to_shop(self):
         if self.state in (GameState.PRE_ROLL, GameState.BANKED, GameState.FARKLE):
@@ -58,6 +55,3 @@ class GameStateManager:
         if self.state == GameState.SHOP:
             self._set(GameState.PRE_ROLL)
 
-    # Deprecated alias
-    def exit_shop_to_start(self):  # pragma: no cover - deprecated
-        self.exit_shop_to_pre_roll()

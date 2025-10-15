@@ -44,11 +44,6 @@ class RelicManager:
         self.shop_open = True
         el = self.game.event_listener
         self.offers = self._generate_offers()
-        try:
-            print('[DEBUG] Opening shop with offers:', [o.relic.name for o in self.offers])
-            self.game.set_message('Shop opened!')
-        except Exception:
-            pass
         el.publish(GameEvent(GameEventType.SHOP_OPENED, payload={
             "level_index": self.game.level_index,
             "offers": [self._offer_payload(o) for o in self.offers]

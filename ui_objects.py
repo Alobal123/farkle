@@ -96,7 +96,8 @@ def build_core_buttons(game):
     def reroll_label(g):
         abm = getattr(g,'ability_manager',None)
         sel = abm.selecting_ability() if abm else None
-        remaining = g.rerolls_remaining()
+        reroll = abm.get('reroll') if abm else None
+        remaining = reroll.available() if reroll else 0
         star = '*' if (sel and sel.id=='reroll') else ''
         return f"REROLL{star} ({remaining})"
     def next_enabled(g):
@@ -257,6 +258,21 @@ class ShopOverlay(GameObject):
         if not getattr(game.relic_manager, 'shop_open', False):
             return False
         mx,my = pos
+        # If layout not yet drawn this frame, synthesize rects so early clicks still work
+        if self.skip_rect is None or not self.purchase_rects:
+            try:
+                from settings import WIDTH, HEIGHT
+                import pygame
+                pw, ph = self.panel_size
+                panel_rect = pygame.Rect((WIDTH - pw)//2, (HEIGHT - ph)//2, pw, ph)
+                self.panel_rect = panel_rect
+                # Construct skip_rect
+                self.skip_rect = pygame.Rect(panel_rect.centerx - 80, panel_rect.bottom - 50, 160, 40)
+                # Minimal purchase button rects (non-interactive until draw populates offers)
+                if not self.purchase_rects:
+                    self.purchase_rects = []
+            except Exception:
+                pass
         for idx, rect in enumerate(self.purchase_rects):
             if rect.collidepoint(mx,my):
                 game.event_listener.publish(GameEvent(GameEventType.REQUEST_BUY_RELIC, payload={"offer_index": idx}))
