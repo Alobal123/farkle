@@ -55,7 +55,9 @@ class InputController:
         g = self.game
         current_state = g.state_manager.get_state()
         valid_combo_selected = g.selection_is_single_combo() and g.any_scoring_selection()
-        can_roll = (current_state == g.state_manager.state.START) or (current_state == g.state_manager.state.ROLLING and (g.locked_after_last_roll or valid_combo_selected))
+        can_roll = (current_state == g.state_manager.state.PRE_ROLL) or (
+            current_state == g.state_manager.state.ROLLING and (g.locked_after_last_roll or valid_combo_selected)
+        )
         if not can_roll:
             self._deny("Lock a scoring combo before rolling again."); return
         g.handle_roll()

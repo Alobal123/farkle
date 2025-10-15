@@ -3,6 +3,9 @@ from game_object import GameObject
 from game_event import GameEvent, GameEventType
 from score_modifiers import ScoreModifier, ScoreMultiplier, ScoreModifierChain
 from dataclasses import dataclass as _dc
+import pygame
+from typing import Any
+from settings import WIDTH
 
 @_dc
 class _ScoreApplyContext:
@@ -11,7 +14,7 @@ class _ScoreApplyContext:
 @dataclass
 class Player(GameObject):
     gold: int = 0
-    game: object | None = None
+    game: Any | None = None  # runtime-injected game; typed loosely for flexibility
     modifier_chain: ScoreModifierChain = field(default_factory=ScoreModifierChain)
 
     def __init__(self):
@@ -115,5 +118,28 @@ class Player(GameObject):
             self.game.event_listener.publish(GE(GET.SCORE_APPLIED, payload=payload))  # type: ignore[attr-defined]
 
     def draw(self, surface):  # type: ignore[override]
-        # Deprecated placeholder retained for interface compatibility; no rendering performed.
-        return
+        if not self.game:
+            return
+        g = self.game
+        hud_padding = 10
+        # Player-only multiplier HUD (no relic contribution)
+        base_mult = 1.0
+        try:
+            base_mult = float(self.get_score_multiplier())
+        except Exception:
+            base_mult = 1.0
+        hud_lines = [
+            f"Turns: {g.level_state.turns_left}",
+            f"Gold: {self.gold}",
+            f"Mult: x{base_mult:.2f}",
+        ]
+        line_surfs = [g.small_font.render(t, True, (250,250,250)) for t in hud_lines]
+        width_needed = max(s.get_width() for s in line_surfs) + hud_padding * 2
+        height_needed = sum(s.get_height() for s in line_surfs) + hud_padding * 2 + 6
+        hud_rect = pygame.Rect(WIDTH - width_needed - 20, 20, width_needed, height_needed)
+        pygame.draw.rect(surface, (40, 55, 70), hud_rect, border_radius=8)
+        pygame.draw.rect(surface, (90, 140, 180), hud_rect, width=2, border_radius=8)
+        y = hud_rect.y + hud_padding
+        for s in line_surfs:
+            surface.blit(s, (hud_rect.x + hud_padding, y))
+            y += s.get_height() + 2

@@ -59,32 +59,32 @@ class GameLogicTests(unittest.TestCase):
         self.assertFalse(self.game.selection_is_single_combo())
         self.assertEqual(self.game.current_roll_score, 0)
 
-    def test_renderer_button_states_start(self):
-        # New game defaults to START state before we transitioned earlier
+    def test_button_states_pre_roll(self):
         fresh_game = Game(self.screen, self.font, self.clock)
-        roll, lock, bank = fresh_game.renderer.compute_button_states()
-        self.assertTrue(roll)
-        self.assertFalse(lock)
-        self.assertFalse(bank)
+        # Fresh game should be in PRE_ROLL
+        states = {b.name: b.is_enabled_fn(fresh_game) for b in fresh_game.ui_buttons}
+        self.assertTrue(states['roll'])
+        self.assertFalse(states['lock'])
+        self.assertFalse(states['bank'])
 
-    def test_renderer_button_states_valid_selection(self):
+    def test_button_states_valid_selection(self):
         self._select_values([1])
-        roll, lock, bank = self.game.renderer.compute_button_states()
-        self.assertTrue(lock)
-        self.assertTrue(bank)  # valid combo allows banking
+        states = {b.name: b.is_enabled_fn(self.game) for b in self.game.ui_buttons}
+        self.assertTrue(states['lock'])
+        self.assertTrue(states['bank'])  # valid combo allows banking
         # roll allowed because valid combo present even if not yet locked
-        self.assertTrue(roll)
+        self.assertTrue(states['roll'])
 
-    def test_renderer_button_states_after_lock(self):
+    def test_button_states_after_lock(self):
         # Simulate locked combo (turn_score > 0, no selection)
         self.game.turn_score = 100
         self.game.locked_after_last_roll = True
         for d in self.game.dice:
             d.selected = False
-        roll, lock, bank = self.game.renderer.compute_button_states()
-        self.assertTrue(roll)  # can roll after locking
-        self.assertFalse(lock)
-        self.assertTrue(bank)  # can bank accumulated turn score
+        states = {b.name: b.is_enabled_fn(self.game) for b in self.game.ui_buttons}
+        self.assertTrue(states['roll'])  # can roll after locking
+        self.assertFalse(states['lock'])
+        self.assertTrue(states['bank'])  # can bank accumulated turn score
 
 if __name__ == '__main__':
     unittest.main()

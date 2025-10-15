@@ -21,6 +21,8 @@ from actions import handle_lock as action_handle_lock, handle_roll as action_han
 from input_controller import InputController
 from renderer import GameRenderer
 from settings import ROLL_BTN, LOCK_BTN, BANK_BTN, NEXT_BTN
+from ui_objects import build_core_buttons, HelpIcon, RelicPanel, ShopOverlay, RulesOverlay
+from game_object import GameObject
 from relic_manager import RelicManager
 from ability_manager import AbilityManager
 
@@ -43,6 +45,11 @@ class Game:
         self.state_manager = GameStateManager(on_change=self._on_state_change)
         # Dice container encapsulates all dice logic
         self.dice_container = DiceContainer(self)
+        # Dynamic GameObjects (dice etc.) for unified rendering pipeline
+        try:
+            self.ui_dynamic = list(self.dice_container.dice)
+        except Exception:
+            self.ui_dynamic = []
         self.turn_score = 0
         self.current_roll_score = 0
         self.message = "Click ROLL to start!"
@@ -56,14 +63,22 @@ class Game:
         self.relic_manager = RelicManager(self)
         # Renderer handles all drawing/UI composition
         self.renderer = GameRenderer(self)
+        # UI game objects (buttons) built after renderer/font ready
+        self.ui_buttons = build_core_buttons(self)
+        # Misc UI objects (help icon, overlays later)
+        self.show_help = False
+        self.ui_misc: list[GameObject] = [HelpIcon(10, self.screen.get_height() - 50, 40), RelicPanel(), ShopOverlay(), RulesOverlay(), self.player]
+        for obj in self.ui_misc:
+            obj.game = self  # type: ignore[attr-defined]
         # Per-level ability charges (initial simple architecture). Future: AbilityManager.
         self.rerolls_per_level = 1  # kept for backward compatibility (legacy API)
         self.rerolls_used = 0       # legacy field (now proxied through ability)
         self.reroll_selecting = False  # legacy flag (mapped to ability.selecting)
-        self.initial_roll_done = False  # becomes True after first dice roll each turn
         self.ability_manager = AbilityManager(self)
         # Event listener hub
         self.event_listener = EventListener()
+        # Internal flag: when True we defer TURN_START emission (e.g., awaiting shop interaction after advancement)
+        self._defer_turn_start = False
         # Subscribe player & goals
         self._subscribe_core_objects()
         # Subscribe relic manager
@@ -73,7 +88,7 @@ class Game:
         self.event_listener.subscribe(self.input_controller.on_event)
         # Emit initial TURN_START for the very first turn
         try:
-            self.event_listener.publish(GameEvent(GameEventType.TURN_START, payload={"level": self.level.name, "turn_index": 1}))
+            self.begin_turn(initial=True)
         except Exception:
             pass
         # Subscribe game itself for auto progression
@@ -102,12 +117,91 @@ class Game:
         self.rules.add_rule(Straight1to5(1000))
         self.rules.add_rule(Straight2to6(1000))
 
+    # --- scoring preview helpers -------------------------------------------------
+    def compute_goal_pending_final(self, goal) -> int:
+        """Return projected final adjusted score for a goal's current pending_raw.
+
+        Rebuild a Score from goal._pending_score (clone) and reapply selective (non-global) modifiers
+        to each part, then apply global multipliers. Falls back to pending_raw on error.
+        """
+        pending_raw = getattr(goal, 'pending_raw', 0)
+        if pending_raw <= 0:
+            return 0
+        orig_score_obj = None
+        try:
+            orig_score_obj = getattr(goal, '_pending_score', None)
+        except Exception:
+            orig_score_obj = None
+        if orig_score_obj is None:
+            return pending_raw
+        try:
+            score_obj = orig_score_obj.clone()
+            from score_modifiers import ScoreMultiplier as _SM
+            ctx = type('TmpCtx',(object,),{'score_obj':score_obj, 'pending_raw':pending_raw})()
+            # Selective modifiers (player)
+            try:
+                for m in self.player.modifier_chain.snapshot():
+                    if isinstance(m, _SM):
+                        continue
+                    try:
+                        _ = m.apply(score_obj.total_effective, ctx)  # type: ignore[arg-type]
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+            # Selective modifiers (relics)
+            relic_manager = getattr(self, 'relic_manager', None)
+            if relic_manager is not None:
+                for r in relic_manager.active_relics:
+                    for m in r.modifier_chain.snapshot():
+                        if isinstance(m, _SM):
+                            continue
+                        try:
+                            _ = m.apply(score_obj.total_effective, ctx)  # type: ignore[arg-type]
+                        except Exception:
+                            pass
+            selective_total = score_obj.total_effective
+            total_mult = 1.0
+            for m in self.player.modifier_chain.snapshot():
+                if isinstance(m, _SM):
+                    total_mult *= m.mult
+            if relic_manager is not None:
+                for r in relic_manager.active_relics:
+                    for m in r.modifier_chain.snapshot():
+                        if isinstance(m, _SM):
+                            total_mult *= m.mult
+            return int(selective_total * total_mult)
+        except Exception:
+            return pending_raw
+
     def reset_dice(self):
         self.dice_container.reset_all()
+        # Refresh dynamic dice list to reflect new Die instances
+        self.ui_dynamic = list(self.dice_container.dice)
+
+    def _recreate_dice(self, preserve_values: bool = False):
+        """Internal helper to recreate or refresh dice and related state consistently.
+
+        Args:
+            preserve_values: reserved for future use (currently unused, always recreates values randomly).
+        """
+        self.dice_container.reset_all()
+        self.ui_dynamic = list(self.dice_container.dice)
+        # Clear selection & eligibility flags explicitly
+        for d in self.dice_container.dice:
+            d.selected = False
+            d.scoring_eligible = False
+            d.held = False  # ensure not carried over
+        self.locked_after_last_roll = False
+        # Mark scoring dice for initial PRE_ROLL informational highlighting (if any)
+        try:
+            self.mark_scoring_dice()
+        except Exception:
+            pass
 
     def reset_game(self):
         # When called after win/lose we keep current level (already advanced on win)
-        self.reset_dice()
+        self._recreate_dice()
         self.turn_score = 0
         self.current_roll_score = 0
         self.message = "Click ROLL to start!"
@@ -174,7 +268,7 @@ class Game:
                 }))
             except Exception:
                 pass
-        # If we are in the middle of advancement, now emit LEVEL_ADVANCE_FINISHED (after new TURN_START)
+        # If we are in the middle of advancement, emit LEVEL_ADVANCE_FINISHED now (TURN_START will be deferred until shop close)
         if advancing:
             try:
                 self.event_listener.publish(GameEvent(GameEventType.LEVEL_ADVANCE_FINISHED, payload={
@@ -186,25 +280,13 @@ class Game:
             self._advancing_level = False
 
     def reset_turn(self):
-        self.dice_container.reset_all()
+        self._recreate_dice()
         self.turn_score = 0
         self.current_roll_score = 0
         self.message = "Click ROLL to start!"
-        self.mark_scoring_dice()
         self.level_state.consume_turn()
-        self.state_manager.transition_to_start()
-        self.active_goal_index = 0
-        # Clear per-goal pending
-        for g in self.level_state.goals:
-            g.pending_raw = 0
-        self.locked_after_last_roll = False
-        self.initial_roll_done = False
-        # Reset per-turn ability state if any (reroll persists per level; no change)
-        try:
-            remaining_turns = self.level_state.turns_left
-            self.event_listener.publish(GameEvent(GameEventType.TURN_START, payload={"level": self.level.name, "turns_left": remaining_turns}))
-        except Exception:
-            pass
+        # Begin next turn lifecycle
+        self.begin_turn()
 
     def roll_dice(self):
         # Wrapper maintained for compatibility; delegate to container
@@ -220,11 +302,8 @@ class Game:
         return self.dice_container.all_held()
 
     def hot_dice_reset(self):
-        self.dice_container.reset_all()
+        self._recreate_dice()
         self.set_message("HOT DICE! You can roll all 6 dice again!")
-        self.mark_scoring_dice()
-        # Reset lock requirement after hot dice
-        self.locked_after_last_roll = False
 
     def mark_scoring_dice(self):
         self.dice_container.mark_scoring()
@@ -250,6 +329,34 @@ class Game:
             self.current_roll_score, _ = self.calculate_score_from_dice()
         else:
             self.current_roll_score = 0
+
+    # Unified selection preview (migrated from renderer)
+    def selection_preview(self) -> tuple[int,int,int,float]:
+        if not (self.selection_is_single_combo() and self.any_scoring_selection()):
+            return (0,0,0,1.0)
+        raw, _ = self.calculate_score_from_dice()
+        if raw <= 0:
+            return (0,0,0,1.0)
+        try:
+            rk = self.dice_container.selection_rule_key()
+        except Exception:
+            rk = None
+        selective = self._preview_selective_adjust(rk, raw) if rk else raw
+        from score_modifiers import ScoreMultiplier as _SM
+        total_mult = 1.0
+        try:
+            for m in self.player.modifier_chain:
+                if isinstance(m, _SM): total_mult *= m.mult
+        except Exception:
+            pass
+        try:
+            for r in getattr(self, 'relic_manager', []).active_relics:  # type: ignore[union-attr]
+                for m in r.modifier_chain.snapshot():
+                    if isinstance(m, _SM): total_mult *= m.mult
+        except Exception:
+            pass
+        final_val = int(selective * total_mult)
+        return (raw, selective, final_val, total_mult)
 
     def _preview_selective_adjust(self, rule_key: str | None, raw: int) -> int:
         """Compute the post-selective adjusted value for a single combo prior to banking.
@@ -392,32 +499,24 @@ class Game:
         # Finish advancement by resetting game state for new level (without losing meta state)
         self._advancing_level = True
         self.reset_game()
-        # Emit TURN_START for new level now (guaranteed after LEVEL_GENERATED)
-        try:
-            self.event_listener.publish(GameEvent(GameEventType.TURN_START, payload={
-                "level": self.level.name,
-                "turn_index": 1,
-                "advancing": True
-            }))
-        except Exception:
-            pass
-        # Fallback (should be redundant now) retained for safety
-        try:
-            recent_types = [e.type for e in getattr(self, '_recent_events', [])[-20:]]
-            gen_positions = [i for i,t in enumerate(recent_types) if t == GameEventType.LEVEL_GENERATED]
-            if gen_positions:
-                last_gen = gen_positions[-1]
-                if GameEventType.TURN_START not in recent_types[last_gen+1:]:
-                    self.event_listener.publish(GameEvent(GameEventType.TURN_START, payload={
-                        "level": self.level.name,
-                        "turn_index": 1,
-                        "fallback": True
-                    }))
-        except Exception:
-            pass
+        # Defer start of first turn until shop closes; TURN_START will be emitted after SHOP_CLOSED.
+        self._defer_turn_start = True
 
     def draw(self):
+        # Base scene
         self.renderer.draw()
+        # Overlay misc UI objects (help icon etc.) after base renderer so they appear on top but below modal overlays drawn inside renderer
+        for obj in getattr(self, 'ui_misc', []):
+            if hasattr(obj, 'draw'):
+                try:
+                    obj.draw(self.screen)  # type: ignore[attr-defined]
+                except Exception:
+                    pass
+        try:
+            import pygame as _pg
+            _pg.display.flip()
+        except Exception:
+            pass
 
 
     def run(self):
@@ -428,16 +527,21 @@ class Game:
                     running = False
                 elif event.type == pygame.MOUSEBUTTONDOWN:
                     mx, my = event.pos
-                    self.renderer.handle_click((mx, my))
-                    if ROLL_BTN.collidepoint(mx, my):
-                        self.event_listener.publish(GameEvent(GameEventType.REQUEST_ROLL))
-                    if LOCK_BTN.collidepoint(mx, my):
-                        self.event_listener.publish(GameEvent(GameEventType.REQUEST_LOCK))
-                    if BANK_BTN.collidepoint(mx, my):
-                        self.event_listener.publish(GameEvent(GameEventType.REQUEST_BANK))
-                    if NEXT_BTN.collidepoint(mx, my):
-                        self.event_listener.publish(GameEvent(GameEventType.REQUEST_NEXT_TURN))
-            self.renderer.draw()
+                    # Delegate to UI buttons first
+                    for btn in self.ui_buttons:
+                        if btn.handle_click(self, (mx, my)):
+                            break
+                    else:
+                        # Misc UI objects (help icon etc.)
+                        for obj in self.ui_misc:
+                            if hasattr(obj, 'handle_click') and obj.handle_click(self, (mx,my)):  # type: ignore[attr-defined]
+                                break
+                        else:
+                            # Fallback to renderer click logic (dice, goals, shop, etc.)
+                            self.renderer.handle_click(self, (mx, my))
+            # Use unified draw so modal overlays (shop, rules, relic panel, player HUD) render.
+            # Previously this called renderer.draw() directly which skipped ShopOverlay and others.
+            self.draw()
             self.clock.tick(30)
         pygame.quit()
         sys.exit()
@@ -448,6 +552,8 @@ class Game:
         Future extension: maintain a history or timestamp for debugging/logs.
         """
         self.message = text
+
+    # (button state logic now fully encapsulated in each UIButton.is_enabled_fn)
 
     # --- ability logic -------------------------------------------------
     def rerolls_remaining(self) -> int:
@@ -465,7 +571,7 @@ class Game:
             ability = a.get('reroll')
             return bool(ability and ability.can_activate(a))
         st = self.state_manager.get_state()
-        return st.name in ("START","ROLLING","FARKLE") and self.rerolls_remaining() > 0
+        return st.name in ("ROLLING","FARKLE") and self.rerolls_remaining() > 0
 
     def use_reroll(self) -> bool:
         # Legacy random reroll: delegate to ability if exists, else fallback.
@@ -580,14 +686,10 @@ class Game:
         elif et == GameEventType.SHOP_CLOSED:
             # Leave shop and emit TURN_START for new level start if not already rolled
             try:
-                self.state_manager.exit_shop_to_start()
-                # Emit a fresh TURN_START so UI resumes; include turns_left
-                self.event_listener.publish(GameEvent(GameEventType.TURN_START, payload={
-                    "level": self.level.name,
-                    "turn_index": 1,
-                    "from_shop": True,
-                    "turns_left": self.level_state.turns_left
-                }))
+                self.state_manager.exit_shop_to_pre_roll()
+                # Clear defer flag and begin first turn now
+                self._defer_turn_start = False
+                self.begin_turn(from_shop=True)
             except Exception:
                 pass
 
@@ -604,3 +706,41 @@ class Game:
                 pass
         # Begin advancement
         self.create_next_level()
+    
+    # --- Turn initialization -------------------------------------------------
+    def begin_turn(self, initial: bool = False, advancing: bool = False, fallback: bool = False, from_shop: bool = False):
+        """Centralize start-of-turn state initialization and TURN_START emission.
+
+        Parameters:
+            initial: first ever game turn.
+            advancing: beginning of a new level after advancement.
+            fallback: defensive re-emission case.
+            from_shop: resuming after shop close.
+        """
+        try:
+            # If not in shop, ensure PRE_ROLL state
+            if self.state_manager.get_state() != self.state_manager.state.PRE_ROLL:
+                # Only set if not SHOP (shop must explicitly close first)
+                if self.state_manager.get_state() != self.state_manager.state.SHOP:
+                    self.state_manager.set_state(self.state_manager.state.PRE_ROLL)
+            # Reset per-turn selection flags
+            self.active_goal_index = 0
+            self.locked_after_last_roll = False
+            # Ensure dice selection flags cleared (values preserved until first roll unless reset_turn already did)
+            for d in self.dice:
+                d.selected = False
+                d.scoring_eligible = False
+            self.mark_scoring_dice()
+            payload = {
+                "level": self.level.name,
+                "turn_index": 1 if (initial or advancing) else None,
+                "turns_left": self.level_state.turns_left,
+                "advancing": advancing,
+                "fallback": fallback,
+                "from_shop": from_shop
+            }
+            # Remove None entries
+            payload = {k:v for k,v in payload.items() if v is not None and v is not False}
+            self.event_listener.publish(GameEvent(GameEventType.TURN_START, payload=payload))
+        except Exception:
+            pass

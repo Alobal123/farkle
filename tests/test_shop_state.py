@@ -30,7 +30,8 @@ class ShopStateTests(unittest.TestCase):
     def test_purchase_closes_shop_and_enables_roll(self):
         self.game.player.gold = 999
         self.game.event_listener.publish(GameEvent(GameEventType.REQUEST_BUY_RELIC))
-        self.assertEqual(self.game.state_manager.get_state().name, 'START')
+        # Expect PRE_ROLL after purchase
+        self.assertEqual(self.game.state_manager.get_state().name, 'PRE_ROLL')
         # Now roll should succeed
         events = []
         self.game.event_listener.subscribe(lambda e: events.append(e.type))
@@ -41,18 +42,17 @@ class ShopStateTests(unittest.TestCase):
         """Simulate clicking the purchase button to ensure rects persist and purchase works."""
         # Ensure enough gold
         self.game.player.gold = 500
-        # Force a draw to build rects
-        self.game.renderer.draw()
-        # Acquire rects
-        pr = self.game.renderer.shop_purchase_rect
-        self.assertIsNotNone(pr, "Purchase rect should be set after draw while shop open.")
-        # mypy / static guard
-        if pr is None:  # pragma: no cover - safety
-            self.fail("Purchase rect unexpectedly None")
-        center = (pr.centerx, pr.centery)
-        self.game.renderer.handle_click(center)
+        # Ensure shop is open and perform a full game draw (renderer + overlays)
+        self.assertTrue(self.game.relic_manager.shop_open)
+        self.game.draw()
+        # Acquire first purchase rect from ShopOverlay GameObject directly after a frame
+        from ui_objects import ShopOverlay
+        overlay = next(o for o in self.game.ui_misc if isinstance(o, ShopOverlay))
+        self.assertTrue(overlay.purchase_rects, "No purchase rects available")
+        pr = overlay.purchase_rects[0]
+        overlay.handle_click(self.game, (pr.centerx, pr.centery))
         # After click, shop should close
-        self.assertEqual(self.game.state_manager.get_state().name, 'START')
+        self.assertEqual(self.game.state_manager.get_state().name, 'PRE_ROLL')
         # Relic should be active
         self.assertGreater(len(self.game.relic_manager.active_relics), 0)
 

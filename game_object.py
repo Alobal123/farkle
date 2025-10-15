@@ -22,3 +22,7 @@ class GameObject(ABC):
     # Convenience for filtering
     def is_type(self, cls) -> bool:
         return isinstance(self, cls)
+
+    # Click handling (return True if consumed); standardized signature expects game + pos
+    def handle_click(self, game, pos) -> bool:  # type: ignore[override]
+        return False

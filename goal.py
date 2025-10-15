@@ -15,8 +15,11 @@ class Goal(GameObject):
         self.game = None  # back reference assigned when subscribed
         # Pending raw points accumulated this turn (before multiplier & banking)
         self.pending_raw: int = 0
-    # Unified Score object (lazy created when first needed)
+        # Unified Score object (lazy created when first needed)
         self._pending_score = None  # type: ignore
+        # Layout cache (updated by draw())
+        self._last_rect = None  # type: ignore[assignment]
+        self._last_lines = None  # type: ignore[assignment]
 
     # Core logic
     def subtract(self, points: int):
@@ -161,5 +164,59 @@ class Goal(GameObject):
         # Other events (progress, fulfilled) currently ignored for animation hooks.
 
     def draw(self, surface):  # type: ignore[override]
-        # Deprecated: Goal has no standalone sprite. Method retained temporarily for interface compatibility.
-        return
+        if not self.game:
+            return
+        # Renderer previously handled layout; we approximate with same logic values.
+        g = self.game
+        from settings import WIDTH, GOAL_PADDING, GOAL_LINE_SPACING, GOAL_WIDTH
+        # Basic horizontal layout based on index
+        goals = g.level_state.goals
+        try:
+            idx = goals.index(self)
+        except ValueError:
+            return
+        total_goals = len(goals)
+        spacing = 16
+        left_x = 80
+        right_margin = 40
+        available_width = WIDTH - left_x - right_margin - (spacing * (total_goals - 1))
+        per_box_width = min(GOAL_WIDTH, int(available_width / total_goals))
+        per_box_width = max(140, per_box_width)
+        used_width = per_box_width * total_goals + spacing * (total_goals - 1)
+        start_x = left_x + (available_width - used_width) // 2 if used_width < available_width else left_x
+        x = start_x + idx * (per_box_width + spacing)
+        # Compute dynamic text lines similarly to renderer logic
+        base_remaining = self.get_remaining()
+        pending_raw = getattr(self, 'pending_raw', 0)
+        if self.is_fulfilled():
+            remaining_text = "Done"
+        else:
+            if pending_raw > 0:
+                # Use game's preview helper for projected adjusted pending value
+                try:
+                    projected = g.compute_goal_pending_final(self)
+                except Exception:
+                    projected = pending_raw
+                show_after = max(0, base_remaining - projected)
+                remaining_text = f"Rem: {base_remaining} (pending {projected})"
+            else:
+                remaining_text = f"Rem: {base_remaining}"
+        desc = g.level.description if idx == 0 else ""
+        lines_out = self.build_lines(g.small_font, per_box_width, remaining_text, desc, GOAL_PADDING, GOAL_LINE_SPACING)
+        box_height = self.compute_box_height(g.small_font, lines_out, GOAL_PADDING, GOAL_LINE_SPACING)
+        panel_y = 90
+        box_rect = pygame.Rect(x, panel_y, per_box_width, box_height)
+        self._last_rect = box_rect
+        self._last_lines = lines_out
+        from settings import (
+            GOAL_BG_MANDATORY, GOAL_BG_MANDATORY_DONE, GOAL_BG_OPTIONAL, GOAL_BG_OPTIONAL_DONE,
+            GOAL_BORDER_ACTIVE, GOAL_TEXT
+        )
+        if self.mandatory:
+            bg = GOAL_BG_MANDATORY_DONE if self.is_fulfilled() else GOAL_BG_MANDATORY
+        else:
+            bg = GOAL_BG_OPTIONAL_DONE if self.is_fulfilled() else GOAL_BG_OPTIONAL
+        pygame.draw.rect(surface, bg, box_rect, border_radius=10)
+        if g.active_goal_index == idx:
+            pygame.draw.rect(surface, GOAL_BORDER_ACTIVE, box_rect, width=3, border_radius=10)
+        self.draw_into(surface, box_rect, g.small_font, lines_out, GOAL_PADDING, GOAL_LINE_SPACING, GOAL_TEXT)

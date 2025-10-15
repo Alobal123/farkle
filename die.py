@@ -1,4 +1,5 @@
 import pygame
+from game_object import GameObject
 
 DICE_SIZE = 80
 
@@ -15,8 +16,9 @@ PIP_POSITIONS = {
 # Simple cache for rendered die surfaces keyed by (value, held, selected, scoring_eligible)
 _die_surface_cache: dict[tuple[int,bool,bool,bool], pygame.Surface] = {}
 
-class Die:
+class Die(GameObject):
     def __init__(self, value, x, y):
+        super().__init__(name="Die")
         self.value = value
         self.x = x
         self.y = y
@@ -39,7 +41,7 @@ class Die:
     def toggle_select(self):
         self.selected = not self.selected
 
-    def draw(self, surface):
+    def draw(self, surface):  # type: ignore[override]
         """Blit this die to surface using cached rendered surface keyed by its state."""
         key = (self.value, self.held, self.selected, self.scoring_eligible)
         cached = _die_surface_cache.get(key)

@@ -52,10 +52,16 @@ class LevelEventTests(unittest.TestCase):
         self.assertIn(GameEventType.TURN_END, types)
         self.assertIn(GameEventType.LEVEL_ADVANCE_STARTED, types)
         self.assertIn(GameEventType.LEVEL_GENERATED, types)
-        # New TURN_START for next level should appear after LEVEL_GENERATED
+        # New TURN_START for next level may be deferred until after shop closes.
         gen_idx = types.index(GameEventType.LEVEL_GENERATED)
         later_turn_starts = [i for i,t in enumerate(types) if t == GameEventType.TURN_START and i > gen_idx]
-        self.assertTrue(later_turn_starts, "Expected TURN_START after LEVEL_GENERATED for new level")
+        if not later_turn_starts:
+            # Expect shop to be open; simulate skip and re-evaluate
+            self.assertTrue(self.game.relic_manager.shop_open, "Expected shop open with deferred TURN_START")
+            self.game.event_listener.publish(GameEvent(GameEventType.REQUEST_SKIP_SHOP))
+            types = self._types()
+            later_turn_starts = [i for i,t in enumerate(types) if t == GameEventType.TURN_START and i > gen_idx]
+        self.assertTrue(later_turn_starts, "Expected TURN_START after shop close for new level")
 
 if __name__ == '__main__':
     unittest.main()

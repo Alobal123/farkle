@@ -5,7 +5,8 @@ StateChangeCallback = Callable[[GameState, GameState], None]
 
 class GameStateManager:
     def __init__(self, on_change: Optional[StateChangeCallback] = None):
-        self.state = GameState.START
+        # Initialize to PRE_ROLL (replaces legacy START prior to first roll)
+        self.state = GameState.PRE_ROLL
         self._on_change = on_change
 
     def _set(self, new_state: GameState):
@@ -24,26 +25,39 @@ class GameStateManager:
     def get_state(self):
         return self.state
 
+
     def transition_to_rolling(self):
-        if self.state == GameState.START:
+        if self.state == GameState.PRE_ROLL:
             self._set(GameState.ROLLING)
 
     def transition_to_farkle(self):
-        if self.state in (GameState.ROLLING, GameState.START):
+        if self.state in (GameState.ROLLING, GameState.PRE_ROLL):
             self._set(GameState.FARKLE)
 
     def transition_to_banked(self):
         if self.state == GameState.ROLLING:
             self._set(GameState.BANKED)
 
-    def transition_to_start(self):
+    def transition_to_pre_roll(self):
+        """Transition from end-of-turn states to PRE_ROLL.
+
+        Replaces legacy transition_to_start.
+        """
         if self.state in (GameState.FARKLE, GameState.BANKED):
-            self._set(GameState.START)
+            self._set(GameState.PRE_ROLL)
+
+    # Deprecated legacy alias; retain for backward compatibility (remove after cleanup window)
+    def transition_to_start(self):  # pragma: no cover - deprecated
+        self.transition_to_pre_roll()
 
     def transition_to_shop(self):
-        if self.state in (GameState.START, GameState.BANKED, GameState.FARKLE):
+        if self.state in (GameState.PRE_ROLL, GameState.BANKED, GameState.FARKLE):
             self._set(GameState.SHOP)
 
-    def exit_shop_to_start(self):
+    def exit_shop_to_pre_roll(self):
         if self.state == GameState.SHOP:
-            self._set(GameState.START)
+            self._set(GameState.PRE_ROLL)
+
+    # Deprecated alias
+    def exit_shop_to_start(self):  # pragma: no cover - deprecated
+        self.exit_shop_to_pre_roll()

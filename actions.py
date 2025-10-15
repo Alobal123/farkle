@@ -5,13 +5,13 @@ Each handler receives the game instance and performs logic previously in Game me
 from game_event import GameEvent, GameEventType
 
 def handle_lock(game) -> bool:
-    if game.state_manager.get_state() not in (game.state_manager.state.START, game.state_manager.state.ROLLING):
+    if game.state_manager.get_state() not in (game.state_manager.state.PRE_ROLL, game.state_manager.state.ROLLING):
         return False
     if not game.any_scoring_selection():
         game.set_message("Select scoring dice first."); return False
     if not game.selection_is_single_combo():
         game.set_message("Lock only one combo at a time."); return False
-    if game.state_manager.get_state() == game.state_manager.state.START:
+    if game.state_manager.get_state() == game.state_manager.state.PRE_ROLL:
         game.state_manager.transition_to_rolling()
     if not game._auto_lock_selection("Locked"):
         game.set_message("No score in selection."); return False
@@ -37,18 +37,14 @@ def handle_roll(game) -> bool:
         and not game.all_dice_held()):
         game.set_message("Lock a scoring combo before rolling again."); return False
     # Transition out of START
-    if game.state_manager.get_state() == game.state_manager.state.START:
+    if game.state_manager.get_state() == game.state_manager.state.PRE_ROLL:
         game.state_manager.transition_to_rolling()
     # Hot dice resets override normal roll logic even if lock not recorded
     if game.all_dice_held():
         game.hot_dice_reset(); game.set_message("HOT DICE! Roll all 6 again!")
     else:
         game.roll_dice()
-    # Mark that at least one roll occurred this turn
-    try:
-        game.initial_roll_done = True
-    except Exception:
-        pass
+    # First roll implicitly exits PRE_ROLL; no flag needed
     # Emit a TURN_ROLL event after a successful roll operation
     try:
         game.event_listener.publish(GameEvent(GameEventType.TURN_ROLL, payload={"turn_score": game.turn_score}))

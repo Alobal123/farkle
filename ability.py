@@ -63,10 +63,11 @@ class RerollAbility(TargetedAbility):
         super().__init__(id="reroll", name="Reroll", charges_per_level=charges_per_level, selectable=True, target_type='die', description="Reroll one unheld die.")
 
     def can_activate(self, ctx: AbilityContext) -> bool:
-        # Logic-based restriction: require that at least one roll happened this turn.
-        if not getattr(ctx.game, 'initial_roll_done', False):
+        # Restrict usage before the first roll of a turn (PRE_ROLL state)
+        state_name = ctx.game.state_manager.get_state().name
+        if state_name == "PRE_ROLL":
             return False
-        return super().can_activate(ctx) and ctx.game.state_manager.get_state().name in ("ROLLING","FARKLE")
+        return super().can_activate(ctx) and state_name in ("ROLLING","FARKLE")
 
     def execute(self, ctx: AbilityContext, target: Any | Sequence[int] | None = None) -> bool:
         if target is None:

@@ -30,7 +30,7 @@ class SelectionPreviewCharmFivesTests(unittest.TestCase):
     def test_level1_selection_preview(self):
         g = self._prepare_game_with_charm()
         self._force_single_five_selection(g)
-        raw_sel, selective_sel, final_sel, total_mult = g.renderer.get_selection_preview()
+        raw_sel, selective_sel, final_sel, total_mult = g.selection_preview()
         self.assertEqual(raw_sel, 50)
         self.assertEqual(selective_sel, 100, f"Expected selective 100, got {selective_sel}")
         self.assertEqual(final_sel, 100)
@@ -44,7 +44,7 @@ class SelectionPreviewCharmFivesTests(unittest.TestCase):
         g.event_listener.publish(GameEvent(GameEventType.TURN_END, payload={"reason":"level_complete"}))
         # Now on level 2 with relic intact
         self._force_single_five_selection(g)
-        raw_sel, selective_sel, final_sel, total_mult = g.renderer.get_selection_preview()
+        raw_sel, selective_sel, final_sel, total_mult = g.selection_preview()
         self.assertEqual(raw_sel, 50)
         self.assertEqual(selective_sel, 100)
         # Level 2 adds a slight global multiplier (e.g., +5%) so final may exceed selective.

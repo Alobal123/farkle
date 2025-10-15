@@ -28,11 +28,8 @@ class GoalPendingPreviewTests(unittest.TestCase):
             d.selected = False
         self.game.mark_scoring_dice(); self.game.dice[0].selected = True
         self.game.handle_lock()
-        # Force a draw to compute goal_boxes text lines
-        self.game.renderer.draw()
-        # Extract text from first goal lines (Goal object builds lines hashed inside renderer)
-        # We can't easily scrape surfaces; instead compute projected directly with helper.
-        projected = self.game.renderer._compute_goal_pending_final(self.game.level_state.goals[0])
+        # Directly use game's authoritative computation (renderer shim removed)
+        projected = self.game.compute_goal_pending_final(self.game.level_state.goals[0])
         self.assertEqual(projected, 100)
 
 if __name__ == '__main__':
