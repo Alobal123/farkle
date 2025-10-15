@@ -25,11 +25,6 @@ class Relic(GameObject):
     def add_modifier(self, modifier: ScoreModifier):
         self.modifier_chain.add(modifier)
 
-    def get_effective_multiplier(self) -> float:
-        # Global multiplier concept removed; preserve method for UI compatibility
-        return 1.0
-
-    # Placeholder for event reaction if relics will respond to events
     def on_event(self, event):  # type: ignore[override]
         # Apply selective (non-global) modifiers during SCORE_PRE_MODIFIERS
         if event.type == GameEventType.SCORE_PRE_MODIFIERS:

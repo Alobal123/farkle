@@ -21,7 +21,6 @@ class ScoreModifier(ABC):
         """Return adjusted score (does not modify base)."""
         raise NotImplementedError
 
-# ScoreMultiplier removed (global multipliers purged)
 
 class ScoreModifierChain:
     """Encapsulates an ordered collection of ScoreModifiers.

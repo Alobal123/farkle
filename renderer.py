@@ -94,8 +94,8 @@ class GameRenderer:
             except Exception:
                 pass
 
-        # Dice selection
-        if g.state_manager.get_state() == g.state_manager.state.ROLLING:
+        # Dice selection (allow ability targeting in FARKLE, too)
+        if g.state_manager.get_state() in (g.state_manager.state.ROLLING, g.state_manager.state.FARKLE):
             for d in g.dice:
                 if d.rect().collidepoint(mx, my) and (not d.held):
                     # Ability selection check
@@ -183,6 +183,7 @@ class GameRenderer:
         # Goals now render themselves
         for goal in g.level_state.goals:
             goal.draw(screen)
+        # Gods panel is drawn via a GameObject added to ui_misc
         screen.blit(g.font.render(f"Level {g.level_index}", True, (180, 220, 255)), (80, 30))
     # Note: display flip moved to Game.draw after overlay objects render.
 

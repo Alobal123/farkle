@@ -20,11 +20,11 @@ from event_listener import EventListener
 from actions import handle_lock as action_handle_lock, handle_roll as action_handle_roll, handle_bank as action_handle_bank, handle_next_turn as action_handle_next_turn
 from input_controller import InputController
 from renderer import GameRenderer
-from settings import ROLL_BTN, LOCK_BTN, BANK_BTN, NEXT_BTN
 from ui_objects import build_core_buttons, HelpIcon, RelicPanel, ShopOverlay, RulesOverlay
 from game_object import GameObject
 from relic_manager import RelicManager
 from ability_manager import AbilityManager
+from gods_manager import GodsManager, God
 
 class Game:
     def __init__(self, screen, font, clock, level: Level | None = None):
@@ -61,13 +61,23 @@ class Game:
         self.player.game = self
         # Relic manager handles between-level shop & relic aggregation
         self.relic_manager = RelicManager(self)
+        # Gods manager: manages worshipped gods and applies selective effects
+        self.gods = GodsManager(self)
         # Renderer handles all drawing/UI composition
         self.renderer = GameRenderer(self)
         # UI game objects (buttons) built after renderer/font ready
         self.ui_buttons = build_core_buttons(self)
         # Misc UI objects (help icon, overlays later)
         self.show_help = False
-        self.ui_misc: list[GameObject] = [HelpIcon(10, self.screen.get_height() - 50, 40), RelicPanel(), ShopOverlay(), RulesOverlay(), self.player]
+        # Order matters: draw gods and other panels before ShopOverlay so the shop visually covers them
+        self.ui_misc: list[GameObject] = [
+            HelpIcon(10, self.screen.get_height() - 50, 40),
+            RelicPanel(),
+            RulesOverlay(),
+            self.player,
+            self.gods,
+            ShopOverlay(),  # shop drawn last, on top
+        ]
         for obj in self.ui_misc:
             obj.game = self  # type: ignore[attr-defined]
     # Legacy reroll tracking fields removed; ability manager owns reroll state.
@@ -83,6 +93,11 @@ class Game:
         # Input controller (handles REQUEST_* events)
         self.input_controller = InputController(self)
         self.event_listener.subscribe(self.input_controller.on_event)
+        # Seed a default set of worshipped gods (up to three)
+        try:
+            self.gods.set_worshipped([God("Zeus"), God("Athena"), God("Hermes")])
+        except Exception:
+            pass
         # Emit initial TURN_START for the very first turn
         try:
             self.begin_turn(initial=True)
@@ -510,6 +525,14 @@ class Game:
                             self.event_listener.publish(GameEvent(GameEventType.REQUEST_SKIP_SHOP))
                         except Exception:
                             pass
+                    # Hotkeys to switch active god (1-3)
+                    if event.key in (pygame.K_1, pygame.K_2, pygame.K_3):
+                        try:
+                            idx = {pygame.K_1: 0, pygame.K_2: 1, pygame.K_3: 2}[event.key]
+                            if hasattr(self, 'gods') and self.gods and 0 <= idx < len(self.gods.worshipped):
+                                self.gods.select_active(idx)
+                        except Exception:
+                            pass
                 elif event.type == pygame.MOUSEBUTTONDOWN:
                     mx, my = event.pos
                     # Delegate to UI buttons first
@@ -554,6 +577,9 @@ class Game:
         for g in self.level_state.goals:
             g.game = self  # type: ignore[attr-defined]
             self.event_listener.subscribe(g.on_event)
+        # Subscribe gods manager if present
+        if hasattr(self, 'gods') and self.gods:
+            self.event_listener.subscribe(self.gods.on_event)
         # Ensure game progression listener is present after resets
         self.event_listener.subscribe(self.on_event)
 
