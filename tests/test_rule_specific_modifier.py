@@ -2,7 +2,7 @@ import unittest, pygame
 from game import Game
 from settings import WIDTH, HEIGHT
 from game_event import GameEvent, GameEventType
-from score_modifiers import RuleSpecificMultiplier, ScoreMultiplier
+from score_modifiers import RuleSpecificMultiplier
 
 class RuleSpecificModifierTests(unittest.TestCase):
     @classmethod

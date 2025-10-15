@@ -21,13 +21,7 @@ class ScoreModifier(ABC):
         """Return adjusted score (does not modify base)."""
         raise NotImplementedError
 
-@dataclass
-class ScoreMultiplier(ScoreModifier):
-    mult: float = 1.0
-    priority: int = 50
-
-    def apply(self, base: int, context: ScoreContext) -> int:
-        return int(base * self.mult)
+# ScoreMultiplier removed (global multipliers purged)
 
 class ScoreModifierChain:
     """Encapsulates an ordered collection of ScoreModifiers.
@@ -72,16 +66,13 @@ class ScoreModifierChain:
     def apply(self, base: int, context: ScoreContext) -> int:
         """Apply modifiers.
 
-        For selective part modifiers (CompositePartModifier descendants), we mutate parts but
-        defer recalculating the aggregate until after all such modifiers have run. Global
-        ScoreMultiplier still folds multiplicatively.
+    For selective part modifiers (CompositePartModifier descendants), we mutate parts and
+    then recompute aggregate from part effective values. Global multipliers are no-ops now.
         """
         score_obj = getattr(context, 'score_obj', None)
         running = base
-        # First pass: apply all non-global composite modifiers (priority order preserved)
+        # Apply all modifiers (selective CompositePartModifier effects)
         for m in self._mods:
-            if isinstance(m, ScoreMultiplier):
-                continue
             running = m.apply(running, context)
         # Recompute base from parts if available (sum of effective values)
         if score_obj is not None:
@@ -91,28 +82,17 @@ class ScoreModifierChain:
                 running = sum((p.adjusted if p.adjusted is not None else p.raw) for p in score_obj.parts)
             except Exception:
                 pass
-        # Second pass: apply global multipliers
-        for m in self._mods:
-            if isinstance(m, ScoreMultiplier):
-                running = m.apply(running, context)
+        # No second pass for global multipliers (removed)
         return running
 
     def effective_multiplier(self) -> float:
-        mult = 1.0
-        for m in self._mods:
-            if isinstance(m, ScoreMultiplier):
-                mult *= m.mult
-        return mult
+        # Always 1.0 since global multipliers are removed
+        return 1.0
 
     # Convenience for legacy style updates
     def add_multiplier_delta(self, delta: float):
-        for m in self._mods:
-            if isinstance(m, ScoreMultiplier):
-                m.mult = max(0.0, m.mult + delta)
-                return
-        # If no multiplier yet, append a fresh one whose base is 1.0 + delta (or delta if chain empty)
-        base = 1.0 + delta if delta >= 0 else max(0.0, 1.0 + delta)
-        self.add(ScoreMultiplier(mult=base))
+        # Backward-compatible no-op: keep API but do not change gameplay
+        return
 
 #############################################
 # Matcher / Effect abstraction layer        #

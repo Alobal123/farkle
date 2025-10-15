@@ -23,6 +23,9 @@ class GameEventType(Enum):
     SCORE_APPLY_REQUEST = auto()
     SCORE_APPLIED = auto()
     SCORE_PRE_MODIFIERS = auto()
+    # Non-mutating preview lifecycle
+    SCORE_PREVIEW_REQUEST = auto()
+    SCORE_PREVIEW_COMPUTED = auto()
     # Level lifecycle
     LEVEL_COMPLETE = auto()
     LEVEL_FAILED = auto()

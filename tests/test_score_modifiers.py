@@ -1,8 +1,8 @@
 import unittest, pygame
 from game import Game
 from settings import WIDTH, HEIGHT
-from score_modifiers import ScoreMultiplier
-from game_event import GameEvent, GameEventType
+from score_modifiers import RuleSpecificMultiplier, FlatRuleBonus
+from game_event import GameEventType
 
 class ScoreModifierTests(unittest.TestCase):
     @classmethod
@@ -18,30 +18,31 @@ class ScoreModifierTests(unittest.TestCase):
         self.game = Game(self.screen, self.font, self.clock)
         self.game.state_manager.transition_to_rolling()
 
-    def test_multiplier_chain_applies(self):
-        # Add an extra multiplier (total expected factor 1.0 * 1.5 = 1.5)
-        self.game.player.add_modifier(ScoreMultiplier(mult=1.5))
-        # Prepare a simple single scoring die (1 => 100 raw)
+    def _lock_single(self, value: int):
         d = self.game.dice[0]
-        d.value = 1; d.selected = True; d.scoring_eligible = True
+        d.value = value; d.selected = True; d.scoring_eligible = True
         self.assertTrue(self.game._auto_lock_selection("Locked"))
+
+    def test_rule_specific_multiplier_applies(self):
+        # Double only SingleValue:1 using a rule-specific multiplier on a temporary relic
+        from relic import Relic
+        relic = Relic(name="Test Mult")
+        relic.add_modifier(RuleSpecificMultiplier(rule_key="SingleValue:1", mult=2.0))
+        self.game.relic_manager.active_relics.append(relic)
+        self.game.event_listener.subscribe(relic.on_event)
+        self._lock_single(1)
         goal = self.game.level_state.goals[0]
         pre_remaining = goal.remaining
         self.game.handle_bank()
-        # adjusted should be 100 * 1.5 = 150 (int cast should keep 150)
-        self.assertEqual(pre_remaining - goal.remaining, 150)
+        self.assertEqual(pre_remaining - goal.remaining, 200)
 
     def test_event_sequence_unchanged(self):
-        # Add a second multiplier for combined effect & capture events
-        self.game.player.add_modifier(ScoreMultiplier(mult=2.0))
         captured = []
         def cap(ev):
             if ev.type in (GameEventType.SCORE_APPLY_REQUEST, GameEventType.SCORE_APPLIED, GameEventType.GOAL_PROGRESS):
                 captured.append(ev.type)
         self.game.event_listener.subscribe(cap)
-        d = self.game.dice[0]
-        d.value = 1; d.selected = True; d.scoring_eligible = True
-        self.assertTrue(self.game._auto_lock_selection("Locked"))
+        self._lock_single(1)
         self.game.handle_bank()
         self.assertGreaterEqual(len(captured), 3)
         self.assertEqual(captured[0], GameEventType.SCORE_APPLY_REQUEST)

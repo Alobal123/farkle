@@ -1,29 +1,28 @@
 import unittest
-from dataclasses import dataclass
-from player import Player
 from relic import Relic
-from score_modifiers import ScoreModifierChain
+from score_modifiers import RuleSpecificMultiplier, FlatRuleBonus
+from score_types import Score, ScorePart
 
 class TestModifierChainRelic(unittest.TestCase):
-    def test_player_and_relic_multipliers_stack(self):
-        p = Player()
-        # Player starts with 1.0 multiplier
-        relic = Relic(name="Relic of Fortune", base_multiplier=1.5)
-        # Simulate progression adding +0.2 to player (results in 1.2)
-        p.add_score_multiplier(0.2)
-        base = 100
-        # Player adjusted using own chain
-        @dataclass
+    def test_relic_modifiers_compose_selectively(self):
+        # Create a relic with both a rule-specific multiplier and a flat bonus
+        relic = Relic(name="Hybrid Relic", base_multiplier=None)
+        relic.add_modifier(RuleSpecificMultiplier(rule_key="SingleValue:1", mult=2.0))
+        relic.add_modifier(FlatRuleBonus(rule_key="SingleValue:5", amount=50))
+        # Build a Score with one SingleValue:1 (100) and one SingleValue:5 (50)
+        score = Score(parts=[
+            ScorePart(rule_key="SingleValue:1", raw=100),
+            ScorePart(rule_key="SingleValue:5", raw=50),
+        ])
         class Ctx:
-            pending_raw: int
-        context = Ctx(pending_raw=base)
-        player_only = p.modifier_chain.apply(base, context)
-        self.assertEqual(player_only, 120)  # 100 * 1.2
-        # Combined (manual aggregation of chains for now)
-        combined_chain = ScoreModifierChain(list(p.modifier_chain.snapshot()) + list(relic.modifier_chain.snapshot()))
-        combined = combined_chain.apply(base, context)
-        # Expect 100 * 1.2 * 1.5 = 180
-        self.assertEqual(combined, 180)
+            def __init__(self, s):
+                self.pending_raw = s.total_raw
+                self.score_obj = s
+        ctx = Ctx(score)
+        # Apply just the relic's modifier chain selectively
+        adjusted = relic.modifier_chain.apply(score.total_raw, ctx)
+        # Expect: 1s doubled -> 200; 5s +50 -> 100; total 300
+        self.assertEqual(adjusted, 300)
 
 if __name__ == '__main__':
     unittest.main()

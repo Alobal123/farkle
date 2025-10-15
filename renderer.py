@@ -35,7 +35,7 @@ class GameRenderer:
             return ["Relics: (manager missing)"]
         if not rm.active_relics:
             return ["Relics: (none)"]
-        from score_modifiers import FlatRuleBonus, RuleSpecificMultiplier, ScoreMultiplier
+        from score_modifiers import FlatRuleBonus, RuleSpecificMultiplier
         for relic in rm.active_relics:
             parts: List[str] = []
             try:
@@ -46,9 +46,6 @@ class GameRenderer:
                         # Collapse rule_key tail for readability
                         rk = getattr(m, 'rule_key', '')
                         parts.append(f"x{getattr(m,'mult',1.0):.2f} {rk}")
-                    elif isinstance(m, ScoreMultiplier):
-                        if getattr(m, 'mult', 1.0) != 1.0:
-                            parts.append(f"x{m.mult:.2f} GLOBAL")
             except Exception:
                 pass
             suffix = (" [" + ", ".join(parts) + "]") if parts else ""

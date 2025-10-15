@@ -231,10 +231,7 @@ class ShopOverlay(GameObject):
             y = box_rect.y + 12
             name_surf = font.render(offer.relic.name, True, (255,255,255))
             surface.blit(name_surf, (box_rect.x + 10, y)); y += name_surf.get_height() + 6
-            mult = offer.relic.get_effective_multiplier()
-            if mult != 1.0:
-                msurf = g.small_font.render(f"Multiplier: x{mult:.2f}", True, (230,230,230))
-                surface.blit(msurf, (box_rect.x + 10, y)); y += msurf.get_height() + 4
+            # Global multipliers removed; do not display multiplier lines
             for m in offer.relic.modifier_chain.snapshot():
                 if isinstance(m, FlatRuleBonus):
                     fsurf = g.small_font.render(f"+{m.amount} {m.rule_key}", True, (255,200,140))

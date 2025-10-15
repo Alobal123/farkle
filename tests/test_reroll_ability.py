@@ -36,8 +36,13 @@ class RerollAbilityTests(unittest.TestCase):
         # Enter selection mode after first roll
         self.game.event_listener.publish(GameEvent(GameEventType.REQUEST_REROLL))
         self.assertTrue(reroll and reroll.selecting)
-        # Target first non-held die
-        self.game.use_reroll_on_die(0)
+        # Target first non-held die via ability
+        abm = self.game.ability_manager
+        reroll = abm.get('reroll')
+        if not reroll:
+            self.fail("Reroll ability not found")
+        else:
+            reroll.execute(abm, 0)
         self.assertIn(GameEventType.REROLL, self._types())
         self.assertEqual(reroll.available(), remaining_before - 1)
         # Try to enter selection again (should deny and not consume more)
@@ -82,7 +87,12 @@ class RerollAbilityTests(unittest.TestCase):
             self.assertTrue(reroll.selecting)
             # Reroll an unheld die
             target_index = next(i for i,d in enumerate(self.game.dice) if not d.held)
-            self.game.use_reroll_on_die(target_index)
+            abm = self.game.ability_manager
+            reroll = abm.get('reroll')
+            if not reroll:
+                self.fail("Reroll ability not found")
+            else:
+                reroll.execute(abm, target_index)
             self.assertIn(GameEventType.REROLL, self._types())
 
 if __name__ == '__main__':

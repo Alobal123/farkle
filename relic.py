@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from game_object import GameObject
-from score_modifiers import ScoreModifierChain, ScoreModifier, ScoreMultiplier
+from score_modifiers import ScoreModifierChain, ScoreModifier
 from game_event import GameEventType
 
 @dataclass
@@ -20,14 +20,14 @@ class Relic(GameObject):
         GameObject.__init__(self, name=name)
         self.active = True
         self.modifier_chain = ScoreModifierChain()
-        if base_multiplier is not None:
-            self.modifier_chain.add(ScoreMultiplier(mult=base_multiplier))
+        # Global multipliers removed; base_multiplier ignored for gameplay (kept for compat)
 
     def add_modifier(self, modifier: ScoreModifier):
         self.modifier_chain.add(modifier)
 
     def get_effective_multiplier(self) -> float:
-        return self.modifier_chain.effective_multiplier()
+        # Global multiplier concept removed; preserve method for UI compatibility
+        return 1.0
 
     # Placeholder for event reaction if relics will respond to events
     def on_event(self, event):  # type: ignore[override]
@@ -36,13 +36,10 @@ class Relic(GameObject):
             score_obj = event.get('score_obj')
             if not score_obj:
                 return
-            from score_modifiers import ScoreMultiplier as _SM
             context = type('TmpCtx',(object,),{})()
             setattr(context, 'score_obj', score_obj)
             # Fold non-global modifiers modifying parts (adjusted values written in parts)
             for m in self.modifier_chain.snapshot():
-                if isinstance(m, _SM):
-                    continue
                 try:
                     # base passed is ignored by CompositePartModifier except for arithmetic
                     _ = m.apply(score_obj.total_effective, context)  # type: ignore[arg-type]

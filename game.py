@@ -116,60 +116,87 @@ class Game:
 
     # --- scoring preview helpers -------------------------------------------------
     def compute_goal_pending_final(self, goal) -> int:
-        """Return projected final adjusted score for a goal's current pending_raw.
-
-        Rebuild a Score from goal._pending_score (clone) and reapply selective (non-global) modifiers
-        to each part, then apply global multipliers. Falls back to pending_raw on error.
-        """
-        pending_raw = getattr(goal, 'pending_raw', 0)
+        """Return projected final adjusted score for a goal's current pending_raw using unified preview pipeline."""
+        pending_raw = int(getattr(goal, 'pending_raw', 0) or 0)
         if pending_raw <= 0:
             return 0
-        orig_score_obj = None
         try:
-            orig_score_obj = getattr(goal, '_pending_score', None)
+            score_obj = getattr(goal, '_pending_score', None)
+            if score_obj is None:
+                return pending_raw
+            # Build parts list from cloned score for isolation
+            clone = score_obj.clone()
+            parts = [(p.rule_key, p.raw) for p in clone.parts]
+            preview = self.compute_preview(parts, source="goal_pending")
+            return int(preview.get('final_preview', pending_raw))
         except Exception:
-            orig_score_obj = None
-        if orig_score_obj is None:
             return pending_raw
+
+    def compute_preview(self, parts: list[tuple[str,int]], source: str = "selection") -> dict:
+        """Compute a preview Score object applying selective modifiers (via SCORE_PRE_MODIFIERS) and global multipliers.
+
+        parts: list of (rule_key, raw)
+        Returns dict with keys: parts (list of {rule_key, raw, adjusted}), total_raw, selective_effective,
+        multiplier, final_preview, score (serialized full score dict) for potential future use.
+        Emits SCORE_PREVIEW_REQUEST then SCORE_PREVIEW_COMPUTED for observers (non-mutating).
+        """
+        """Compute a preview Score object applying selective modifiers (via SCORE_PRE_MODIFIERS).
+
+        Global multipliers have been removed from gameplay; preview's final equals selective.
+        Returns a dict with: parts (list[rule_key, raw]), total_raw, selective_effective,
+        multiplier (always 1.0), final_preview, score (serialized full score dict).
+        """
+        from game_event import GameEvent as GE, GameEventType as GET
+        result: dict = {}
         try:
-            score_obj = orig_score_obj.clone()
-            from score_modifiers import ScoreMultiplier as _SM
-            ctx = type('TmpCtx',(object,),{'score_obj':score_obj, 'pending_raw':pending_raw})()
-            # Selective modifiers (player)
+            from score_types import Score, ScorePart
+            score_obj = Score()
+            for rk, raw in parts:
+                try:
+                    score_obj.add_part(ScorePart(rule_key=rk, raw=int(raw)))
+                except Exception:
+                    pass
+            # Fire preview request event (informational)
             try:
-                for m in self.player.modifier_chain.snapshot():
-                    if isinstance(m, _SM):
-                        continue
-                    try:
-                        _ = m.apply(score_obj.total_effective, ctx)  # type: ignore[arg-type]
-                    except Exception:
-                        pass
+                self.event_listener.publish(GE(GET.SCORE_PREVIEW_REQUEST, payload={
+                    "parts": [{"rule_key": rk, "raw": raw} for rk, raw in parts],
+                    "source": source
+                }))
             except Exception:
                 pass
-            # Selective modifiers (relics)
-            relic_manager = getattr(self, 'relic_manager', None)
-            if relic_manager is not None:
-                for r in relic_manager.active_relics:
-                    for m in r.modifier_chain.snapshot():
-                        if isinstance(m, _SM):
-                            continue
-                        try:
-                            _ = m.apply(score_obj.total_effective, ctx)  # type: ignore[arg-type]
-                        except Exception:
-                            pass
-            selective_total = score_obj.total_effective
+            # Apply selective modifiers by leveraging SCORE_PRE_MODIFIERS immediate hook
+            try:
+                self.event_listener.publish_immediate(GE(GET.SCORE_PRE_MODIFIERS, payload={
+                    "score_obj": score_obj,
+                    "preview": True,
+                    "source": source
+                }))
+            except Exception:
+                pass
+            selective_effective = score_obj.total_effective
+            # Global multipliers are not applied; final equals selective
             total_mult = 1.0
-            for m in self.player.modifier_chain.snapshot():
-                if isinstance(m, _SM):
-                    total_mult *= m.mult
-            if relic_manager is not None:
-                for r in relic_manager.active_relics:
-                    for m in r.modifier_chain.snapshot():
-                        if isinstance(m, _SM):
-                            total_mult *= m.mult
-            return int(selective_total * total_mult)
+            final_preview = selective_effective
+            score_dict = None
+            try:
+                score_dict = score_obj.to_dict()
+            except Exception:
+                score_dict = None
+            result = {
+                "parts": score_dict.get('parts') if score_dict else [{"rule_key": rk, "raw": raw} for rk, raw in parts],
+                "total_raw": sum(raw for _,raw in parts),
+                "selective_effective": selective_effective,
+                "multiplier": total_mult,
+                "final_preview": final_preview,
+                "score": score_dict,
+            }
+            try:
+                self.event_listener.publish(GE(GET.SCORE_PREVIEW_COMPUTED, payload=result | {"source": source}))
+            except Exception:
+                pass
+            return result
         except Exception:
-            return pending_raw
+            return {"parts": [{"rule_key": rk, "raw": raw} for rk, raw in parts], "total_raw": sum(raw for _,raw in parts), "selective_effective": sum(raw for _,raw in parts), "multiplier": 1.0, "final_preview": sum(raw for _,raw in parts)}
 
     def reset_dice(self):
         self.dice_container.reset_all()
@@ -330,60 +357,16 @@ class Game:
         raw, _ = self.calculate_score_from_dice()
         if raw <= 0:
             return (0,0,0,1.0)
+        rk = None
         try:
             rk = self.dice_container.selection_rule_key()
         except Exception:
             rk = None
-        selective = self._preview_selective_adjust(rk, raw) if rk else raw
-        from score_modifiers import ScoreMultiplier as _SM
-        total_mult = 1.0
-        try:
-            for m in self.player.modifier_chain:
-                if isinstance(m, _SM): total_mult *= m.mult
-        except Exception:
-            pass
-        try:
-            for r in getattr(self, 'relic_manager', []).active_relics:  # type: ignore[union-attr]
-                for m in r.modifier_chain.snapshot():
-                    if isinstance(m, _SM): total_mult *= m.mult
-        except Exception:
-            pass
-        final_val = int(selective * total_mult)
-        return (raw, selective, final_val, total_mult)
+        if not rk:
+            return (raw, raw, raw, 1.0)
+        prev = self.compute_preview([(rk, raw)], source="selection")
+        return (raw, int(prev.get('selective_effective', raw)), int(prev.get('final_preview', raw)), float(prev.get('multiplier', 1.0)))
 
-    def _preview_selective_adjust(self, rule_key: str | None, raw: int) -> int:
-        """Compute the post-selective adjusted value for a single combo prior to banking.
-
-        Applies all non-global (non-ScoreMultiplier) modifiers from player + active relics to a synthetic
-        ScorePart matching rule_key (if provided). If rule_key is None, returns raw.
-        """
-        if raw <= 0 or not rule_key:
-            return raw
-        try:
-            from score_types import Score, ScorePart
-            from score_modifiers import ScoreMultiplier as _SM
-            score_obj = Score(parts=[ScorePart(rule_key=rule_key, raw=raw)])
-            # Apply non-global modifiers (mirrors relic/player SCORE_PRE_MODIFIERS handling)
-            # Player chain
-            for m in self.player.modifier_chain.snapshot():
-                if isinstance(m, _SM):
-                    continue
-                try:
-                    _ = m.apply(score_obj.total_effective, type('Ctx',(object,),{'score_obj':score_obj})())  # type: ignore[arg-type]
-                except Exception:
-                    pass
-            # Relic chains
-            for r in self.relic_manager.active_relics:
-                for m in r.modifier_chain.snapshot():
-                    if isinstance(m, _SM):
-                        continue
-                    try:
-                        _ = m.apply(score_obj.total_effective, type('Ctx',(object,),{'score_obj':score_obj})())  # type: ignore[arg-type]
-                    except Exception:
-                        pass
-            return score_obj.total_effective
-        except Exception:
-            return raw
 
     def _auto_lock_selection(self, verb: str = "Auto-locked") -> bool:
         """Lock selected dice if they form exactly one valid scoring combo.
@@ -409,24 +392,26 @@ class Game:
         # Delegate holding & event emission to container
         self.dice_container.hold_selected_publish()
         gname = self.level.goals[self.active_goal_index][0]
-        # Preview selective adjusted value (pre global multipliers) for transparency
-        preview = self._preview_selective_adjust(rule_key, add_score)
-        if preview != add_score:
-            # Compute global multiplier preview (player + relic ScoreMultipliers)
-            from score_modifiers import ScoreMultiplier as _SM
-            total_mult = 1.0
-            for m in self.player.modifier_chain:
-                if isinstance(m, _SM):
-                    total_mult *= m.mult
-            for r in self.relic_manager.active_relics:
-                for m in r.modifier_chain.snapshot():
-                    if isinstance(m, _SM):
-                        total_mult *= m.mult
-            final_preview = int(preview * total_mult)
-            if total_mult != 1.0 and final_preview != preview:
-                self.message = f"{verb} {add_score} -> {preview} -> {final_preview} to {gname}."
+        # Unified preview via compute_preview for lock messaging transparency
+        if rule_key:
+            try:
+                prev = self.compute_preview([(rule_key, add_score)], source="lock_message")
+            except Exception:
+                prev = None
+        else:
+            prev = None
+        if prev:
+            selective = int(prev.get('selective_effective', add_score))
+            final_preview = int(prev.get('final_preview', selective))
+            mult = float(prev.get('multiplier', 1.0))
+            if selective != add_score and final_preview != selective and mult != 1.0:
+                self.message = f"{verb} {add_score} -> {selective} -> {final_preview} to {gname}."
+            elif selective != add_score:
+                self.message = f"{verb} {add_score} -> {selective} to {gname}."
+            elif final_preview != add_score and mult != 1.0:
+                self.message = f"{verb} {add_score} -> {final_preview} to {gname}."
             else:
-                self.message = f"{verb} {add_score} -> {preview} to {gname}."
+                self.message = f"{verb} {add_score} to {gname}."
         else:
             self.message = f"{verb} {add_score} to {gname}."
         self.mark_scoring_dice()
@@ -553,46 +538,9 @@ class Game:
         """
         self.message = text
 
-    # (button state logic now fully encapsulated in each UIButton.is_enabled_fn)
 
     # --- ability logic -------------------------------------------------
-    def rerolls_remaining(self) -> int:
-        # Backward-compatible shim retained for existing callers; now purely ability-based.
-        ab = getattr(self, 'ability_manager', None)
-        a = ab.get('reroll') if ab else None
-        return a.available() if a else 0
-
-    def can_use_reroll(self) -> bool:
-        a = getattr(self, 'ability_manager', None)
-        if a:
-            ability = a.get('reroll')
-            return bool(ability and ability.can_activate(a))
-        st = self.state_manager.get_state()
-        return st.name in ("ROLLING","FARKLE") and self.rerolls_remaining() > 0
-
-    def use_reroll(self) -> bool:
-        # Legacy random reroll: delegate to ability if exists, else fallback.
-        ab = getattr(self, 'ability_manager', None)
-        if ab:
-            ability = ab.get('reroll')
-            if ability and ability.available() > 0:
-                # pick first eligible die randomly
-                import random
-                candidates = [i for i,d in enumerate(self.dice) if not d.held]
-                if not candidates:
-                    self.set_message("No dice eligible to reroll."); return False
-                idx = random.choice(candidates)
-                return ability.execute(ab, idx)
-        return False
-
-    def use_reroll_on_die(self, die_index: int) -> bool:
-        ab = getattr(self, 'ability_manager', None)
-        if not ab:
-            return False
-        ability = ab.get('reroll')
-        if not ability:
-            return False
-        return ability.execute(ab, die_index)
+    # Reroll functionality has been moved entirely into the ability system.
 
     # Internal: subscribe core objects
     def _subscribe_core_objects(self, reset: bool = False):

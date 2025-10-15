@@ -109,9 +109,6 @@ class RelicManager:
 
     def _offer_payload(self, offer: RelicOffer) -> dict:
         payload = {"name": offer.relic.name, "cost": offer.cost}
-        mult = offer.relic.get_effective_multiplier()
-        if mult != 1.0:
-            payload["multiplier"] = mult
         # Detect flat bonuses
         from score_modifiers import FlatRuleBonus, CompositePartModifier
         for m in offer.relic.modifier_chain.snapshot():
@@ -135,7 +132,6 @@ class RelicManager:
                 "name": offer.relic.name,
                 "offer_index": index,
                 "cost": offer.cost,
-                "multiplier": offer.relic.get_effective_multiplier()
             }))
             self._close_shop(skipped=False)
         else:

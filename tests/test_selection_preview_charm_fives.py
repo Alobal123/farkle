@@ -47,11 +47,9 @@ class SelectionPreviewCharmFivesTests(unittest.TestCase):
         raw_sel, selective_sel, final_sel, total_mult = g.selection_preview()
         self.assertEqual(raw_sel, 50)
         self.assertEqual(selective_sel, 100)
-        # Level 2 adds a slight global multiplier (e.g., +5%) so final may exceed selective.
-        self.assertGreaterEqual(final_sel, selective_sel)
-        # Ensure multiplier applied approximately; allow small variance for int rounding
-        expected = int(selective_sel * total_mult)
-        self.assertEqual(final_sel, expected)
+        # No global multipliers anymore: final equals selective and multiplier is 1.0
+        self.assertEqual(final_sel, selective_sel)
+        self.assertEqual(total_mult, 1.0)
 
 if __name__ == '__main__':
     unittest.main()

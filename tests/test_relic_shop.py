@@ -22,45 +22,28 @@ class RelicShopTests(unittest.TestCase):
         self.game.event_listener.publish(GameEvent(GameEventType.LEVEL_ADVANCE_FINISHED, payload={"level_index": 1}))
         self.assertTrue(self.game.relic_manager.shop_open, "Shop should be open after level advance finished")
 
-    def test_purchase_increases_multiplier(self):
-        base_mult = self.game.player.get_score_multiplier()
+    def test_purchase_applies_selective_effects(self):
         # Request buy relic
         self.game.event_listener.publish(GameEvent(GameEventType.REQUEST_BUY_RELIC))
         self.assertFalse(self.game.relic_manager.shop_open, "Shop should close after purchase")
-        new_mult = self.game.player.get_score_multiplier()
-        if new_mult > base_mult:
-            # Simple multiplier relic path (future levels)
-            pending_raw = 100
-            events = []
-            def cap(ev):
-                if ev.type in (GameEventType.SCORE_APPLY_REQUEST, GameEventType.SCORE_APPLIED):
-                    events.append(ev)
-            self.game.event_listener.subscribe(cap)
-            g0 = self.game.level_state.goals[0]
-            self.game.event_listener.publish(GameEvent(GameEventType.SCORE_APPLY_REQUEST, payload={"goal": g0, "pending_raw": pending_raw}))
-            applied = [e for e in events if e.type == GameEventType.SCORE_APPLIED]
-            self.assertTrue(applied, "Expected SCORE_APPLIED emitted")
-            adjusted = applied[0].get("adjusted")
-            self.assertGreater(adjusted, int(pending_raw * base_mult), "Adjusted should be greater after relic purchase")
-        else:
-            # Flat five bonus relic path (level 1 Charm of Fives)
-            # Simulate scoring one single five -> expect +50 flat added (50 raw -> 100 adjusted)
-            for i,d in enumerate(self.game.dice):
-                d.value = 5 if i == 0 else 2
-                d.held = False
-                d.selected = False
-            self.game.mark_scoring_dice()
-            self.game.dice[0].selected = True
-            self.game.handle_lock()
-            captured = {}
-            def cap2(ev):
-                if ev.type == GameEventType.SCORE_APPLIED:
-                    captured.update(ev.payload)
-            self.game.event_listener.subscribe(cap2)
-            self.game.handle_bank()
-            # Pending raw now includes flat mutation (+50) -> 100 total
-            self.assertEqual(captured.get("pending_raw"), 100)
-            self.assertEqual(captured.get("adjusted"), 100)
+        # Flat five bonus relic path (level 1 Charm of Fives)
+        # Simulate scoring one single five -> expect +50 flat added (50 raw -> 100 adjusted)
+        for i,d in enumerate(self.game.dice):
+            d.value = 5 if i == 0 else 2
+            d.held = False
+            d.selected = False
+        self.game.mark_scoring_dice()
+        self.game.dice[0].selected = True
+        self.game.handle_lock()
+        captured = {}
+        def cap2(ev):
+            if ev.type == GameEventType.SCORE_APPLIED:
+                captured.update(ev.payload)
+        self.game.event_listener.subscribe(cap2)
+        self.game.handle_bank()
+        # Pending raw now includes flat mutation (+50) -> 100 total
+        self.assertEqual(captured.get("pending_raw"), 100)
+        self.assertEqual(captured.get("adjusted"), 100)
 
 if __name__ == '__main__':
     unittest.main()

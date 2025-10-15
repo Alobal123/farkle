@@ -34,11 +34,10 @@ class PendingScoringTests(unittest.TestCase):
         d.value = 1; d.selected = True; d.scoring_eligible = True
         self.assertTrue(self.game._auto_lock_selection("Locked"))
         self.assertEqual(goal.pending_raw, 200)
-        # Bank applies 200 * multiplier
+        # Bank applies 200 (no global multipliers)
         pre_remaining = goal.remaining
         self.game.handle_bank()
-        expected = int(200 * self.game.player.get_score_multiplier())
-        self.assertEqual(pre_remaining - goal.remaining, expected)
+        self.assertEqual(pre_remaining - goal.remaining, 200)
 
     def test_locks_across_two_goals(self):
         # Ensure at least two goals; if only one, add a temporary second by adjusting level state.
@@ -82,9 +81,8 @@ class PendingScoringTests(unittest.TestCase):
         # Bank: both apply
         pre0, pre1 = g0.remaining, g1.remaining
         self.game.handle_bank()
-        mult = self.game.player.get_score_multiplier()
-        self.assertEqual(pre0 - g0.remaining, int(100*mult))
-        self.assertEqual(pre1 - g1.remaining, int(100*mult))
+        self.assertEqual(pre0 - g0.remaining, 100)
+        self.assertEqual(pre1 - g1.remaining, 100)
 
     def test_farkle_clears_pending(self):
         goal = self.game.level_state.goals[0]
