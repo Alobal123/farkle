@@ -22,6 +22,7 @@ from input_controller import InputController
 from renderer import GameRenderer
 from settings import ROLL_BTN, LOCK_BTN, BANK_BTN, NEXT_BTN
 from relic_manager import RelicManager
+from ability_manager import AbilityManager
 
 class Game:
     def __init__(self, screen, font, clock, level: Level | None = None):
@@ -55,6 +56,12 @@ class Game:
         self.relic_manager = RelicManager(self)
         # Renderer handles all drawing/UI composition
         self.renderer = GameRenderer(self)
+        # Per-level ability charges (initial simple architecture). Future: AbilityManager.
+        self.rerolls_per_level = 1  # kept for backward compatibility (legacy API)
+        self.rerolls_used = 0       # legacy field (now proxied through ability)
+        self.reroll_selecting = False  # legacy flag (mapped to ability.selecting)
+        self.initial_roll_done = False  # becomes True after first dice roll each turn
+        self.ability_manager = AbilityManager(self)
         # Event listener hub
         self.event_listener = EventListener()
         # Subscribe player & goals
@@ -107,6 +114,10 @@ class Game:
         self.state_manager = GameStateManager(on_change=self._on_state_change)
         self.level_state.reset()
         self.active_goal_index = 0
+        # Reset per-level ability uses
+        self.rerolls_used = 0
+        if hasattr(self, 'ability_manager'):
+            self.ability_manager.reset_level()
         # pending scores moved into Goal.pending_raw; ensure cleared
         for g in self.level_state.goals:
             g.pending_raw = 0
@@ -187,6 +198,8 @@ class Game:
         for g in self.level_state.goals:
             g.pending_raw = 0
         self.locked_after_last_roll = False
+        self.initial_roll_done = False
+        # Reset per-turn ability state if any (reroll persists per level; no change)
         try:
             remaining_turns = self.level_state.turns_left
             self.event_listener.publish(GameEvent(GameEventType.TURN_START, payload={"level": self.level.name, "turns_left": remaining_turns}))
@@ -360,6 +373,10 @@ class Game:
         self.active_goal_index = 0
         for g in self.level_state.goals:
             g.pending_raw = 0
+        # Reset per-level abilities usage
+        self.rerolls_used = 0
+        if hasattr(self, 'ability_manager'):
+            self.ability_manager.reset_level()
         # Event after level data structures generated but before subscriptions/reset
         try:
             self.event_listener.publish(GameEvent(GameEventType.LEVEL_GENERATED, payload={
@@ -431,6 +448,48 @@ class Game:
         Future extension: maintain a history or timestamp for debugging/logs.
         """
         self.message = text
+
+    # --- ability logic -------------------------------------------------
+    def rerolls_remaining(self) -> int:
+        # Prefer ability manager state
+        ab = getattr(self, 'ability_manager', None)
+        if ab:
+            a = ab.get('reroll')
+            if a:
+                return a.available()
+        return max(0, self.rerolls_per_level - self.rerolls_used)
+
+    def can_use_reroll(self) -> bool:
+        a = getattr(self, 'ability_manager', None)
+        if a:
+            ability = a.get('reroll')
+            return bool(ability and ability.can_activate(a))
+        st = self.state_manager.get_state()
+        return st.name in ("START","ROLLING","FARKLE") and self.rerolls_remaining() > 0
+
+    def use_reroll(self) -> bool:
+        # Legacy random reroll: delegate to ability if exists, else fallback.
+        ab = getattr(self, 'ability_manager', None)
+        if ab:
+            ability = ab.get('reroll')
+            if ability and ability.available() > 0:
+                # pick first eligible die randomly
+                import random
+                candidates = [i for i,d in enumerate(self.dice) if not d.held]
+                if not candidates:
+                    self.set_message("No dice eligible to reroll."); return False
+                idx = random.choice(candidates)
+                return ability.execute(ab, idx)
+        return False
+
+    def use_reroll_on_die(self, die_index: int) -> bool:
+        ab = getattr(self, 'ability_manager', None)
+        if not ab:
+            return False
+        ability = ab.get('reroll')
+        if not ability:
+            return False
+        return ability.execute(ab, die_index)
 
     # Internal: subscribe core objects
     def _subscribe_core_objects(self, reset: bool = False):

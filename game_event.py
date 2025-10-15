@@ -51,6 +51,11 @@ class GameEventType(Enum):
     RELIC_SKIPPED = auto()
     REQUEST_BUY_RELIC = auto()
     REQUEST_SKIP_SHOP = auto()
+    # Abilities
+    REQUEST_REROLL = auto()
+    REROLL = auto()
+    REQUEST_ABILITY = auto()
+    ABILITY_EXECUTED = auto()
 
 @dataclass(slots=True)
 class GameEvent:

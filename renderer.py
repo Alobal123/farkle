@@ -6,7 +6,7 @@ from settings import (
     BTN_BANK_COLOR, TEXT_PRIMARY, TEXT_ACCENT,
     GOAL_BG_MANDATORY, GOAL_BG_MANDATORY_DONE, GOAL_BG_OPTIONAL, GOAL_BG_OPTIONAL_DONE,
     GOAL_BORDER_ACTIVE, GOAL_TEXT, GOAL_PADDING, GOAL_WIDTH, GOAL_LINE_SPACING,
-    ROLL_BTN, LOCK_BTN, BANK_BTN, NEXT_BTN
+    ROLL_BTN, LOCK_BTN, BANK_BTN, NEXT_BTN, REROLL_BTN
 )
 
 class GameRenderer:
@@ -123,6 +123,21 @@ class GameRenderer:
         g = self.game
         mx, my = pos
         consumed = False
+        # Ability buttons
+        if REROLL_BTN.collidepoint(mx, my):
+            # Map to ability manager reroll ability
+            abm = getattr(g, 'ability_manager', None)
+            if abm:
+                reroll = abm.get('reroll')
+                if reroll and reroll.can_activate(abm):
+                    abm.toggle_or_execute('reroll')
+                    # Mirror legacy flag for compatibility
+                    g.reroll_selecting = bool(reroll.selecting)
+                else:
+                    g.set_message("No rerolls available.")
+            else:
+                g.event_listener.publish(GameEvent(GameEventType.REQUEST_REROLL))
+            return True
         # Help icon toggle (lowest priority so gameplay UI still works when overlay open)
         if self.help_icon_rect.collidepoint(mx, my):
             self.show_help = not self.show_help
@@ -141,17 +156,28 @@ class GameRenderer:
         # Dice selection
         if g.state_manager.get_state() == g.state_manager.state.ROLLING:
             for d in g.dice:
-                if d.rect().collidepoint(mx, my) and (not d.held) and d.scoring_eligible:
-                    d.toggle_select()
-                    g.update_current_selection_score()
-                    g.event_listener.publish(
-                        GameEvent(
-                            GameEventType.DIE_SELECTED if d.selected else GameEventType.DIE_DESELECTED,
-                            payload={"index": g.dice.index(d)}
+                if d.rect().collidepoint(mx, my) and (not d.held):
+                    # Ability selection check
+                    abm = getattr(g, 'ability_manager', None)
+                    if abm and abm.is_selecting():
+                        sel = abm.selecting_ability()
+                        if sel and sel.target_type == 'die':
+                            if abm.attempt_target('die', g.dice.index(d)):
+                                g.reroll_selecting = False
+                                consumed = True
+                                break
+                    # Normal selection path requires scoring eligibility
+                    if d.scoring_eligible:
+                        d.toggle_select()
+                        g.update_current_selection_score()
+                        g.event_listener.publish(
+                            GameEvent(
+                                GameEventType.DIE_SELECTED if d.selected else GameEventType.DIE_DESELECTED,
+                                payload={"index": g.dice.index(d)}
+                            )
                         )
-                    )
-                    consumed = True
-                    break
+                        consumed = True
+                        break
         # Goal selection
         if hasattr(self, 'goal_boxes'):
             for idx, rect in enumerate(self.goal_boxes):
@@ -220,8 +246,18 @@ class GameRenderer:
         shop_open = getattr(g, 'relic_manager', None) and g.relic_manager.shop_open
         # When shop open, dim gameplay background
         if g.state_manager.get_state() in (g.state_manager.state.ROLLING, g.state_manager.state.FARKLE, g.state_manager.state.BANKED):
+            abm = getattr(g, 'ability_manager', None)
+            selecting_reroll = False
+            if abm:
+                sel = abm.selecting_ability()
+                selecting_reroll = bool(sel and sel.id == 'reroll')
             for d in g.dice:
                 d.draw(screen)
+                if selecting_reroll and not d.held:
+                    # Overlay semi-transparent green to indicate rerollable
+                    overlay = pygame.Surface((d.size, d.size), pygame.SRCALPHA)
+                    overlay.fill((60, 220, 140, 90))
+                    screen.blit(overlay, (d.x, d.y))
         # Buttons
         def dim(color):
             return tuple(max(0, int(c * 0.45)) for c in color)
@@ -232,11 +268,24 @@ class GameRenderer:
         roll_color = BTN_ROLL_COLOR if roll_enabled else dim(BTN_ROLL_COLOR)
         lock_color = BTN_LOCK_COLOR_ENABLED if lock_enabled else dim(BTN_LOCK_COLOR_DISABLED)
         bank_color = BTN_BANK_COLOR if bank_enabled else dim(BTN_BANK_COLOR)
+        # Reroll button state
+        reroll_remaining = getattr(g, 'rerolls_remaining', lambda:0)()
+        # Use ability logic (can_activate) rather than UI gating
+        reroll_enabled = False
+        abm = getattr(g, 'ability_manager', None)
+        if abm:
+            reroll_ability = abm.get('reroll')
+            if reroll_ability and reroll_ability.can_activate(abm):
+                reroll_enabled = True
+        reroll_color = (120,160,200) if reroll_enabled else dim((120,160,200))
+        pygame.draw.rect(screen, reroll_color, REROLL_BTN, border_radius=10)
         pygame.draw.rect(screen, roll_color, ROLL_BTN, border_radius=10)
         pygame.draw.rect(screen, lock_color, LOCK_BTN, border_radius=10)
         pygame.draw.rect(screen, bank_color, BANK_BTN, border_radius=10)
         def label_color(enabled: bool) -> Tuple[int,int,int]:
             return (0,0,0) if enabled else (60,60,60)
+        reroll_label = "REROLL*" if (getattr(g, 'ability_manager', None) and getattr(g, 'ability_manager').selecting_ability()) else "REROLL"
+        screen.blit(g.font.render(f"{reroll_label} ({reroll_remaining})", True, label_color(reroll_enabled)), (REROLL_BTN.x + 5, REROLL_BTN.y + 10))
         screen.blit(g.font.render("ROLL", True, label_color(roll_enabled)), (ROLL_BTN.x + 25, ROLL_BTN.y + 10))
         screen.blit(g.font.render("LOCK", True, label_color(lock_enabled)), (LOCK_BTN.x + 25, LOCK_BTN.y + 10))
         screen.blit(g.font.render("BANK", True, label_color(bank_enabled)), (BANK_BTN.x + 25, BANK_BTN.y + 10))

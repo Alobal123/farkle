@@ -44,6 +44,11 @@ def handle_roll(game) -> bool:
         game.hot_dice_reset(); game.set_message("HOT DICE! Roll all 6 again!")
     else:
         game.roll_dice()
+    # Mark that at least one roll occurred this turn
+    try:
+        game.initial_roll_done = True
+    except Exception:
+        pass
     # Emit a TURN_ROLL event after a successful roll operation
     try:
         game.event_listener.publish(GameEvent(GameEventType.TURN_ROLL, payload={"turn_score": game.turn_score}))
@@ -61,16 +66,18 @@ def handle_roll(game) -> bool:
             game.mark_scoring_dice()
         if game.check_farkle():
             game.state_manager.transition_to_farkle()
-            game.set_message("Farkle! You lose this turn's points.")
+            game.set_message("Farkle! You lose this turn's points." if game.rerolls_remaining() == 0 else "Farkle! You may use a REROLL.")
             game.turn_score = 0
             game.current_roll_score = 0
             try:
                 game.event_listener.publish(GameEvent(GameEventType.FARKLE))
                 game.event_listener.publish(GameEvent(GameEventType.TURN_FARKLE, payload={}))
-                game.event_listener.publish(GameEvent(GameEventType.TURN_END, payload={"reason": "farkle"}))
+                # Defer TURN_END if rerolls remain
+                if game.rerolls_remaining() == 0:
+                    game.event_listener.publish(GameEvent(GameEventType.TURN_END, payload={"reason": "farkle"}))
             except Exception:
                 pass
-            return True  # farkle ends roll attempt successfully (turn ended)
+            return True  # farkle ends roll attempt successfully (turn may continue if reroll used)
     return True
 
 def handle_bank(game) -> bool:

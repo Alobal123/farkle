@@ -28,3 +28,5 @@ ROLL_BTN = pygame.Rect(WIDTH//2 - 200, HEIGHT - 100, 120, 50)
 LOCK_BTN = pygame.Rect(WIDTH//2 - 60, HEIGHT - 100, 120, 50)
 BANK_BTN = pygame.Rect(WIDTH//2 + 80, HEIGHT - 100, 120, 50)
 NEXT_BTN = pygame.Rect(WIDTH//2 - 60, HEIGHT - 160, 120, 50)
+# Ability / utility buttons (expandable). Place to left of ROLL.
+REROLL_BTN = pygame.Rect(WIDTH//2 - 340, HEIGHT - 100, 120, 50)
