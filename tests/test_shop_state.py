@@ -38,22 +38,11 @@ class ShopStateTests(unittest.TestCase):
         self.game.event_listener.publish(GameEvent(GameEventType.REQUEST_ROLL))
         self.assertIn(GameEventType.TURN_ROLL, events)
 
-    def test_purchase_via_renderer_click(self):
-        """Simulate clicking the purchase button to ensure rects persist and purchase works."""
-        # Ensure enough gold
-        self.game.player.gold = 500
-        # Ensure shop is open and perform a full game draw (renderer + overlays)
+    def test_purchase_event_closes_shop_and_activates_relic(self):
+        self.game.player.gold = 999
         self.assertTrue(self.game.relic_manager.shop_open)
-        self.game.draw()
-        # Acquire first purchase rect from ShopOverlay GameObject directly after a frame
-        from ui_objects import ShopOverlay
-        overlay = next(o for o in self.game.ui_misc if isinstance(o, ShopOverlay))
-        self.assertTrue(overlay.purchase_rects, "No purchase rects available")
-        pr = overlay.purchase_rects[0]
-        overlay.handle_click(self.game, (pr.centerx, pr.centery))
-        # After click, shop should close
+        self.game.event_listener.publish(GameEvent(GameEventType.REQUEST_BUY_RELIC, payload={"offer_index":0}))
         self.assertEqual(self.game.state_manager.get_state().name, 'PRE_ROLL')
-        # Relic should be active
         self.assertGreater(len(self.game.relic_manager.active_relics), 0)
 
 if __name__ == '__main__':

@@ -35,7 +35,9 @@ class TurnEventTests(unittest.TestCase):
         # Fake make a scoring selection to allow lock
         d = self.game.dice[0]; d.scoring_eligible = True; d.selected = True; d.value = 1
         self.game.update_current_selection_score()
-        self.game.event_listener.publish(GameEvent(GameEventType.REQUEST_LOCK))
+        # Right-click auto-lock the selected scoring die
+        d_rect = self.game.dice[0].rect()
+        self.game._handle_die_click(d_rect.x+2, d_rect.y+2, button=3)
         self.assertIn(GameEventType.TURN_LOCK_ADDED, self._types())
         # Bank (after selection auto-lock if not already)
         self.game.event_listener.publish(GameEvent(GameEventType.REQUEST_BANK))

@@ -64,9 +64,8 @@ class ScoreModifierChain:
 
     def apply(self, base: int, context: ScoreContext) -> int:
         """Apply modifiers.
-
-    For selective part modifiers (CompositePartModifier descendants), we mutate parts and
-    then recompute aggregate from part effective values. Global multipliers are no-ops now.
+        For selective part modifiers (CompositePartModifier descendants), we mutate parts and
+        then recompute aggregate from part effective values.
         """
         score_obj = getattr(context, 'score_obj', None)
         running = base
@@ -81,17 +80,7 @@ class ScoreModifierChain:
                 running = sum((p.adjusted if p.adjusted is not None else p.raw) for p in score_obj.parts)
             except Exception:
                 pass
-        # No second pass for global multipliers (removed)
         return running
-
-    def effective_multiplier(self) -> float:
-        # Always 1.0 since global multipliers are removed
-        return 1.0
-
-    # Convenience for legacy style updates
-    def add_multiplier_delta(self, delta: float):
-        # Backward-compatible no-op: keep API but do not change gameplay
-        return
 
 #############################################
 # Matcher / Effect abstraction layer        #

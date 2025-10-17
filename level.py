@@ -18,7 +18,7 @@ class Level:
 
     @staticmethod
     def single(name: str, target_goal: int, max_turns: int, description: str = "", reward_gold: int = 50):
-        """Helper to create a legacy single-goal Level definition."""
+        """Helper to create a single-goal Level definition."""
         # Use the level name as the goal name for display consistency.
         return Level(name=name, max_turns=max_turns, description=description,
                      goals=((name, target_goal, True, reward_gold),))

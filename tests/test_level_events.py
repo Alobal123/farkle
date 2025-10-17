@@ -40,8 +40,9 @@ class LevelEventTests(unittest.TestCase):
             d.selected = False
             d.scoring_eligible = False
         self.game.update_current_selection_score()
-        # Lock selection
-        self.game.event_listener.publish(GameEvent(GameEventType.REQUEST_LOCK))
+        # Auto-lock via right-click
+        first_rect = self.game.dice[0].rect()
+        self.game._handle_die_click(first_rect.x+2, first_rect.y+2, button=3)
         # Bank to apply progress and trigger completion
         self.game.event_listener.publish(GameEvent(GameEventType.REQUEST_BANK))
     # No polling: advancement should happen automatically after TURN_END + completion

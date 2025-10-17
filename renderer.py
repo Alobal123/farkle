@@ -1,13 +1,9 @@
 import pygame
 from game_event import GameEvent, GameEventType
-from typing import List  # Tuple removed after pruning compute_button_states
 from settings import (
-    WIDTH, HEIGHT, DICE_SIZE, BG_COLOR, BTN_ROLL_COLOR, BTN_LOCK_COLOR_DISABLED, BTN_LOCK_COLOR_ENABLED,
-    BTN_BANK_COLOR, TEXT_PRIMARY, TEXT_ACCENT,
-    GOAL_BG_MANDATORY, GOAL_BG_MANDATORY_DONE, GOAL_BG_OPTIONAL, GOAL_BG_OPTIONAL_DONE,
-    GOAL_BORDER_ACTIVE, GOAL_TEXT, GOAL_PADDING, GOAL_WIDTH, GOAL_LINE_SPACING,
-    ROLL_BTN, LOCK_BTN, BANK_BTN, NEXT_BTN, REROLL_BTN
+    DICE_SIZE, BG_COLOR, REROLL_BTN
 )
+from modal_stack import ModalStack
 
 class GameRenderer:
     def __init__(self, game):
@@ -18,107 +14,66 @@ class GameRenderer:
         # Help overlay state
         self.help_icon_rect = pygame.Rect(10, self.game.screen.get_height() - 50, 40, 40)
         self.show_help = False
-        # Debug toggle for showing active relics (always on for now)
-        self.show_relic_debug = True
-        # Backwards-compat attributes expected by existing tests. Now also populated by ShopOverlay GameObject draw later in Game.draw.
+        # Sprite layering groups (initially empty). We keep existing draw path until dice sprites added.
+        # LayeredUpdates respects each sprite._layer.
+        self.layered = pygame.sprite.LayeredUpdates()
+        # Convenience subgroup references by semantic purpose (will share membership in layered)
+        self.sprite_groups = {
+            'world': pygame.sprite.Group(),
+            'dice': pygame.sprite.Group(),
+            'ui': pygame.sprite.Group(),
+            'overlay': pygame.sprite.Group(),
+            'modal': pygame.sprite.Group(),
+        }
+        # NOTE: For now we do not call layered.draw(); we wait until at least dice migrated to sprites.
+        # Modal stack placeholder (overlays like future shop popup)
+        self.modal_stack = ModalStack()
+    # Renderer focuses on core gameplay visuals; shop interaction rendered by ShopScreen / ShopOverlaySprite.
 
-    # --- debug helpers -------------------------------------------------
-    def get_active_relic_debug_lines(self) -> List[str]:
-        """Return human-readable lines describing currently active relics.
-
-        Format per relic: Name (+flat bonuses, multipliers).
-        Example: "Charm of Fives [+50 SingleValue:5]" or "Glyph of Triples [x1.50 ThreeOfAKind:*]".
-        """
-        lines: List[str] = []
-        rm = getattr(self.game, 'relic_manager', None)
-        if not rm:
-            return ["Relics: (manager missing)"]
-        if not rm.active_relics:
-            return ["Relics: (none)"]
-        from score_modifiers import FlatRuleBonus, RuleSpecificMultiplier
-        for relic in rm.active_relics:
-            parts: List[str] = []
-            try:
-                for m in relic.modifier_chain.snapshot():
-                    if isinstance(m, FlatRuleBonus):
-                        parts.append(f"+{m.amount} {m.rule_key}")
-                    elif isinstance(m, RuleSpecificMultiplier):
-                        # Collapse rule_key tail for readability
-                        rk = getattr(m, 'rule_key', '')
-                        parts.append(f"x{getattr(m,'mult',1.0):.2f} {rk}")
-            except Exception:
-                pass
-            suffix = (" [" + ", ".join(parts) + "]") if parts else ""
-            lines.append(f"{relic.name}{suffix}")
-        return lines
 
 
     # Internal helper so click handling can ensure rects exist even before first post-open draw flip
 
     def handle_click(self, game, pos):
-        """Handle a mouse click for dice/goal selection, publishing selection events.
-
-        Signature updated to accept game explicitly for consistency with GameObject pattern.
-        """
+        """Delegate click handling to game logic; renderer no longer performs selection logic."""
         g = game
         mx, my = pos
         consumed = False
-        # Ability buttons
-        if REROLL_BTN.collidepoint(mx, my):
-            # Map to ability manager reroll ability
-            abm = getattr(g, 'ability_manager', None)
-            if abm:
-                reroll = abm.get('reroll')
-                if reroll and reroll.can_activate(abm):
-                    abm.toggle_or_execute('reroll')
-                    # Mirror legacy flag for compatibility
-                    # Selection state internally tracked by ability manager; legacy flag removed.
-                else:
-                    g.set_message("No rerolls available.")
-            else:
-                g.event_listener.publish(GameEvent(GameEventType.REQUEST_REROLL))
+    # If shop is open, let ShopOverlaySprite consume interactions before normal UI.
+        if getattr(g, 'relic_manager', None) and g.relic_manager.shop_open:
+            # Delegate to shop overlay sprite for unit tests invoking renderer directly
+            try:
+                spr = getattr(g, 'shop_overlay_sprite', None)
+                if spr and hasattr(spr, 'handle_click'):
+                    if spr.handle_click(g, (mx,my)):
+                        return True
+            except Exception:
+                pass
             return True
+    # Route clicks to logical buttons (sprites mirror their rects) when shop not intercepting.
+        for btn in getattr(g, 'ui_buttons', []):
+            try:
+                # Skip if button not visible in current state
+                st = g.state_manager.get_state()
+                if hasattr(btn, 'visible_states') and st not in btn.visible_states:
+                    continue
+                if btn.rect.collidepoint(mx, my):
+                    # Delegate to UIButton logic (publishes appropriate REQUEST_* events)
+                    btn.handle_click(g, (mx, my))
+                    return True
+            except Exception:
+                continue
         # Help icon toggle (lowest priority so gameplay UI still works when overlay open)
         if self.help_icon_rect.collidepoint(mx, my):
             self.show_help = not self.show_help
             return True
-        # Shop click handling has priority
+    # Shop handled elsewhere; if open we already returned above.
         if getattr(g, 'relic_manager', None) and g.relic_manager.shop_open:
-            # First attempt: delegate to ShopOverlay GameObject if present (authoritative source of rects)
-            try:
-                from ui_objects import ShopOverlay as _ShopOverlay
-                for obj in getattr(g, 'ui_misc', []):
-                    if isinstance(obj, _ShopOverlay):
-                        if obj.handle_click(g, (mx,my)):
-                            return True
-            except Exception:
-                pass
+            return False
 
-        # Dice selection (allow ability targeting in FARKLE, too)
-        if g.state_manager.get_state() in (g.state_manager.state.ROLLING, g.state_manager.state.FARKLE):
-            for d in g.dice:
-                if d.rect().collidepoint(mx, my) and (not d.held):
-                    # Ability selection check
-                    abm = getattr(g, 'ability_manager', None)
-                    if abm and abm.is_selecting():
-                        sel = abm.selecting_ability()
-                        if sel and sel.target_type == 'die':
-                            if abm.attempt_target('die', g.dice.index(d)):
-                                # Ability selection completion handled; legacy flag removed.
-                                consumed = True
-                                break
-                    # Normal selection path requires scoring eligibility
-                    if d.scoring_eligible:
-                        d.toggle_select()
-                        g.update_current_selection_score()
-                        g.event_listener.publish(
-                            GameEvent(
-                                GameEventType.DIE_SELECTED if d.selected else GameEventType.DIE_DESELECTED,
-                                payload={"index": g.dice.index(d)}
-                            )
-                        )
-                        consumed = True
-                        break
+    # Dice selection handled centrally by Game._handle_die_click.
+        if g._handle_die_click(mx, my, button=1):
+            consumed = True
         # Goal selection via each goal's cached rect from last draw
         for idx, goal in enumerate(g.level_state.goals):
             rect = getattr(goal, '_last_rect', None)
@@ -133,58 +88,118 @@ class GameRenderer:
         g = self.game
         screen = g.screen
         screen.fill(BG_COLOR)
-        shop_open = getattr(g, 'relic_manager', None) and g.relic_manager.shop_open
-        # When shop open, dim gameplay background
-        if g.state_manager.get_state() in (g.state_manager.state.ROLLING, g.state_manager.state.FARKLE, g.state_manager.state.BANKED):
-            abm = getattr(g, 'ability_manager', None)
-            selecting_reroll = False
-            if abm:
-                sel = abm.selecting_ability()
-                selecting_reroll = bool(sel and sel.id == 'reroll')
-            # Draw dynamic objects (currently dice) via unified list
-            for obj in getattr(g, 'ui_dynamic', []):
-                try:
-                    obj.draw(screen)  # type: ignore[attr-defined]
-                    # If reroll selecting highlight dice that are not held
-                    if selecting_reroll and hasattr(obj, 'held') and hasattr(obj, 'x') and hasattr(obj, 'y') and not getattr(obj, 'held'):
-                        overlay = pygame.Surface((getattr(obj, 'size', DICE_SIZE), getattr(obj, 'size', DICE_SIZE)), pygame.SRCALPHA)
-                        overlay.fill((60, 220, 140, 90))
-                        screen.blit(overlay, (getattr(obj, 'x'), getattr(obj, 'y')))
-                except Exception:
-                    pass
-        # Buttons
-        # Button objects render their own enabled state via callbacks; no local state calc needed.
+        shop_open = bool(getattr(g, 'relic_manager', None) and g.relic_manager.shop_open)
+    # Dim background when shop open; rest of UI draws unchanged.
+        abm = getattr(g, 'ability_manager', None)
+        selecting_reroll = (g.state_manager.get_state() == g.state_manager.state.SELECTING_TARGETS and abm and abm.selecting_ability() and abm.selecting_ability().id == 'reroll')
+    # Perform dynamic button layout before sprite sync so button sprites update same frame.
+        try:
+            dice = getattr(g, 'dice', [])
+            if dice:
+                left = min(getattr(d, 'x') for d in dice)
+                right = max(getattr(d, 'x') + getattr(d, 'size', DICE_SIZE) for d in dice)
+                bottom = max(getattr(d, 'y') + getattr(d, 'size', DICE_SIZE) for d in dice)
+                roll_btn = next((b for b in g.ui_buttons if b.name == 'roll'), None)
+                bank_btn = next((b for b in g.ui_buttons if b.name == 'bank'), None)
+                next_btn = next((b for b in g.ui_buttons if b.name == 'next'), None)
+                if roll_btn:
+                    import pygame as _pg
+                    padding = 8
+                    new_width = max(160, (right - left) + padding * 2)
+                    new_height = 56
+                    new_x = left - padding
+                    if new_x < 10: new_x = 10
+                    new_y = bottom + 12
+                    from settings import HEIGHT as _H
+                    if new_y + new_height + 10 > _H:
+                        new_y = _H - new_height - 10
+                    roll_btn.rect = _pg.Rect(new_x, new_y, new_width, new_height)
+                    if bank_btn:
+                        spacing_y = 10
+                        bank_y = roll_btn.rect.bottom + spacing_y
+                        if bank_y + new_height + 10 > _H:
+                            bank_y = _H - new_height - 10
+                        bank_btn.rect = _pg.Rect(new_x, bank_y, new_width, new_height)
+                if next_btn:
+                    st = g.state_manager.get_state()
+                    import pygame as _pg
+                    padding = 8
+                    if st in (g.state_manager.state.FARKLE, g.state_manager.state.BANKED):
+                        new_width = max(160, (right - left) + padding * 2)
+                        new_height = 56
+                        new_x = left - padding
+                        if new_x < 10: new_x = 10
+                        # Next button sits directly below dice row
+                        base_y = bottom + 12
+                        from settings import HEIGHT as _H
+                        if base_y + new_height + 10 > _H:
+                            base_y = _H - new_height - 10
+                        next_btn.rect = _pg.Rect(new_x, base_y, new_width, new_height)
+                        # If roll button exists, push it further down below banner placeholder
+                        if roll_btn and hasattr(roll_btn, 'rect'):
+                            roll_btn.rect.y = next_btn.rect.bottom + 72  # space for banner (56) + margin
+                        if bank_btn and hasattr(bank_btn, 'rect'):
+                            bank_btn.rect.y = roll_btn.rect.bottom + 10 if roll_btn else next_btn.rect.bottom + 72
+        except Exception:
+            pass
+        try:
+            # Sync all sprites (dice, buttons, goals, HUD, overlays) AFTER layout changes.
+            self.layered.update()
+            self.layered.draw(screen)
+        except Exception:
+            pass
+        # Skip drawing non-dice dynamic UI when shop open
+        for obj in getattr(g, 'ui_dynamic', []):
+            if obj.__class__.__name__ == 'Die':
+                continue  # dice sprite-driven
+            if shop_open:
+                continue
+            try:
+                if hasattr(obj, 'should_draw') and not obj.should_draw(g):
+                    continue
+                obj.draw(screen)  # type: ignore[attr-defined]
+            except Exception:
+                pass
+        # Reroll selection overlay highlight over applicable dice (still manual until sprite effect added)
+        # Reroll highlight now handled by DieSprite overlay logic.
+        # (Button dynamic layout now occurs before sprite update; legacy block removed.)
         # Draw buttons via GameObjects
-        for btn in getattr(g, 'ui_buttons', []):
-            btn.draw_with_game(g, screen)
-        if g.state_manager.get_state() in (g.state_manager.state.FARKLE, g.state_manager.state.BANKED):
-            pygame.draw.rect(screen, (200, 50, 50), NEXT_BTN, border_radius=10)
-            screen.blit(g.font.render("Next Turn", True, (255, 255, 255)), (NEXT_BTN.x + 10, NEXT_BTN.y + 10))
-        # Status message
-        screen.blit(g.font.render(g.message, True, TEXT_PRIMARY), (80, 60))
-        # Score preview
-        dice_bottom_y = HEIGHT // 2 - DICE_SIZE // 2 + DICE_SIZE
-        score_y = dice_bottom_y + 15
-        # New richer selection preview
-        # Turn Score now directly displays accumulated turn_score without speculative pending selection addition.
-        screen.blit(g.font.render(f"Turn Score: {g.turn_score}", True, TEXT_PRIMARY), (100, score_y))
-        raw_sel, selective_sel, final_sel, total_mult = g.selection_preview()
-        if raw_sel > 0:
-            # Build preview string
-            if selective_sel != raw_sel and final_sel != selective_sel and total_mult != 1.0:
-                sel_text = f"Selecting: {raw_sel} -> {selective_sel} -> {final_sel}"
-            elif selective_sel != raw_sel:
-                sel_text = f"Selecting: {raw_sel} -> {selective_sel}"
-            elif final_sel != raw_sel and total_mult != 1.0:
-                sel_text = f"Selecting: {raw_sel} -> {final_sel}"
-            else:
-                sel_text = f"Selecting: {raw_sel}"
-            screen.blit(g.font.render(sel_text, True, TEXT_ACCENT), (100, score_y + 25))
-        # Goals now render themselves
-        for goal in g.level_state.goals:
-            goal.draw(screen)
+        # (Button drawing handled by UIButtonSprite now.)
+        # (Status message, turn score, and selection preview removed per new minimal UI requirement.)
+        # Goal drawing handled by GoalSprite instances.
         # Gods panel is drawn via a GameObject added to ui_misc
-        screen.blit(g.font.render(f"Level {g.level_index}", True, (180, 220, 255)), (80, 30))
-    # Note: display flip moved to Game.draw after overlay objects render.
+        if not shop_open:
+            screen.blit(g.font.render(f"Level {g.level_index}", True, (180, 220, 255)), (80, 30))
+        # Legacy goal draw removed if sprites exist; if any goal lacks sprite fallback to old approach
+        # Fallback goal draw removed; all goals expected to have sprites.
+        # Note: display flipping is performed in App.run() (single flip per frame). Renderer does not flip.
+        # Bottom status message near help icon (small font). Truncate if too long.
+        if not shop_open:
+            try:
+                msg = getattr(g, 'message', '') or ''
+                font_small = getattr(g, 'small_font', g.font)
+                max_width = 360
+                surf = font_small.render(msg, True, (230,235,240))
+                if surf.get_width() > max_width:
+                    ellipsis = '…'
+                    low, high = 0, len(msg)
+                    fit = ''
+                    while low <= high:
+                        mid = (low + high)//2
+                        test = msg[:mid] + ellipsis
+                        if font_small.render(test, True, (230,235,240)).get_width() <= max_width:
+                            fit = test
+                            low = mid + 1
+                        else:
+                            high = mid - 1
+                    surf = font_small.render(fit, True, (230,235,240))
+                pad = 8
+                y = screen.get_height() - surf.get_height() - pad
+                x = 60
+                screen.blit(surf, (x, y))
+            except Exception:
+                pass
+        # Shop overlay (in-place) if open: draw modal panel over gameplay
+        # Shop overlay now fully handled by ShopOverlaySprite; legacy inline draw removed.
 
 # Note: Avoid importing Game for type checking to prevent circular dependency.

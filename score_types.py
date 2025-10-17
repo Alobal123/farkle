@@ -25,7 +25,7 @@ class Score:
     parts: List[ScorePart] = field(default_factory=list)
     final_global_adjusted: Optional[int] = None  # result after global modifiers
 
-    # Legacy from_breakdown removed (distinct parts now created incrementally).
+    # Distinct parts created incrementally (old breakdown merging removed).
 
     def add_part(self, part: ScorePart) -> None:
         self.parts.append(part)

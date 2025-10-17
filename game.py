@@ -1,4 +1,15 @@
-import pygame, sys
+import pygame
+# Explicit sprite module imports to ensure classes load (avoid silent try/except swallowing)
+try:
+    import die_sprite  # ensures DieSprite definition loaded
+    import ui_sprites  # UIButtonSprite
+    import overlay_sprites  # HelpIconSprite, RulesOverlaySprite, ShopOverlaySprite
+    import goal_sprites  # GoalSprite, RelicPanelSprite
+    import hud_sprites  # PlayerHUDSprite, GodsPanelSprite
+    # Sprite modules imported successfully.
+except Exception as _e:
+    # Log silently in production; could hook into a logger.
+    pass
 from game_state_manager import GameStateManager
 from scoring import (
     ScoringRules,
@@ -20,7 +31,7 @@ from event_listener import EventListener
 from actions import handle_lock as action_handle_lock, handle_roll as action_handle_roll, handle_bank as action_handle_bank, handle_next_turn as action_handle_next_turn
 from input_controller import InputController
 from renderer import GameRenderer
-from ui_objects import build_core_buttons, HelpIcon, RelicPanel, ShopOverlay, RulesOverlay
+from ui_objects import build_core_buttons, HelpIcon, RelicPanel, RulesOverlay
 from game_object import GameObject
 from relic_manager import RelicManager
 from ability_manager import AbilityManager
@@ -28,6 +39,13 @@ from gods_manager import GodsManager, God
 
 class Game:
     def __init__(self, screen, font, clock, level: Level | None = None):
+        """Core gameplay model: state, dice, scoring, events.
+
+        UI concerns (tooltips, hotkeys, modal shop rendering) are handled by screen
+        classes (`GameScreen`, `ShopScreen`). This class intentionally avoids direct
+        per-frame input side-effects beyond event publication so it remains testable
+        with synthetic events.
+        """
         self.screen = screen
         self.font = font
         # Small font for auxiliary text
@@ -65,22 +83,81 @@ class Game:
         self.gods = GodsManager(self)
         # Renderer handles all drawing/UI composition
         self.renderer = GameRenderer(self)
+        # Recreate dice now that renderer exists so DieSprites attach to layered groups (initial container may have created dice before renderer ready)
+        try:
+            self.dice_container.reset_all()
+            self.ui_dynamic = list(self.dice_container.dice)
+        except Exception:
+            pass
         # UI game objects (buttons) built after renderer/font ready
         self.ui_buttons = build_core_buttons(self)
+        # Sprite wrappers for buttons (layered UI). Keep logical buttons for event logic & tests.
+        # Attach game reference so sprite gating logic can access state.
+        for _btn in self.ui_buttons:
+            try:
+                setattr(_btn, 'game', self)
+            except Exception:
+                pass
+        try:
+            from ui_sprites import UIButtonSprite
+            for btn in self.ui_buttons:
+                try:
+                    UIButtonSprite(btn, self, self.renderer.sprite_groups['ui'], self.renderer.layered)
+                except Exception:
+                    pass
+        except Exception:
+            pass
         # Misc UI objects (help icon, overlays later)
         self.show_help = False
-        # Order matters: draw gods and other panels before ShopOverlay so the shop visually covers them
+    # Shop interaction handled via separate ShopScreen/overlay sprite; legacy inline overlay fully removed.
         self.ui_misc: list[GameObject] = [
             HelpIcon(10, self.screen.get_height() - 50, 40),
             RelicPanel(),
             RulesOverlay(),
             self.player,
             self.gods,
-            ShopOverlay(),  # shop drawn last, on top
         ]
+        # Predeclare shop overlay sprite attribute for clarity (may remain None if creation fails)
+        self.shop_overlay_sprite = None
         for obj in self.ui_misc:
             obj.game = self  # type: ignore[attr-defined]
-    # Legacy reroll tracking fields removed; ability manager owns reroll state.
+        # Wrap certain misc UI objects with sprites (help icon, rules overlay)
+        try:
+            from overlay_sprites import HelpIconSprite, RulesOverlaySprite, ShopOverlaySprite
+            for o in list(self.ui_misc):
+                try:
+                    if o.__class__.__name__ == 'HelpIcon':
+                        HelpIconSprite(o, self, self.renderer.sprite_groups['ui'], self.renderer.layered)
+                        setattr(o, 'has_sprite', True)
+                    elif o.__class__.__name__ == 'RulesOverlay':
+                        RulesOverlaySprite(o, self, self.renderer.sprite_groups['overlay'], self.renderer.layered)
+                        setattr(o, 'has_sprite', True)
+                except Exception:
+                    pass
+            # Shop overlay sprite (modal) capturing clicks when shop_open flag set
+            def _safe_create_shop_overlay():
+                try:
+                    self.shop_overlay_sprite = ShopOverlaySprite(object(), self, self.renderer.sprite_groups['modal'], self.renderer.layered)
+                except Exception as e:
+                    # Minimal logging: store last error for debug inspection/tests instead of silent pass
+                    self.shop_overlay_sprite = None
+                    setattr(self, 'last_shop_overlay_error', repr(e))
+            _safe_create_shop_overlay()
+        except Exception:
+            pass
+        # Goal & relic panel sprites
+        self._init_goal_and_panel_sprites()
+        # Player & Gods HUD sprites
+        try:
+            from hud_sprites import PlayerHUDSprite, GodsPanelSprite
+            PlayerHUDSprite(self.player, self, self.renderer.sprite_groups['ui'], self.renderer.layered)
+            setattr(self.player, 'has_sprite', True)
+            GodsPanelSprite(self.gods, self, self.renderer.sprite_groups['ui'], self.renderer.layered)
+            setattr(self.gods, 'has_sprite', True)
+        except Exception:
+            pass
+        # Removed transient GameStateDebugSprite used for debugging state visibility.
+    # Ability manager owns reroll state (previous ad-hoc fields consolidated).
         self.ability_manager = AbilityManager(self)
         # Event listener hub
         self.event_listener = EventListener()
@@ -106,6 +183,32 @@ class Game:
         # Subscribe game itself for auto progression
         self.event_listener.subscribe(self.on_event)
     # dice already initialized by container
+
+    def _init_goal_and_panel_sprites(self):
+        """Instantiate GoalSprite and RelicPanelSprite for current goals & relic panel.
+
+        Safe to call multiple times: existing sprites persist; new goals (after level advance)
+        get wrapped. Relic panel sprite re-created idempotently.
+        """
+        try:
+            from goal_sprites import GoalSprite, RelicPanelSprite
+            # Wrap goals
+            for gl in self.level_state.goals:
+                if not getattr(gl, 'has_sprite', False):
+                    try:
+                        GoalSprite(gl, self, self.renderer.sprite_groups['ui'], self.renderer.layered)
+                    except Exception:
+                        pass
+            # Find relic panel
+            from ui_objects import RelicPanel as _RelicPanel
+            panel = next((o for o in self.ui_misc if isinstance(o, _RelicPanel)), None)
+            if panel and not getattr(panel, 'has_sprite', False):  # retain conditional until panel always guaranteed sprite earlier
+                try:
+                    RelicPanelSprite(panel, self, self.renderer.sprite_groups['ui'], self.renderer.layered)
+                except Exception:
+                    pass
+        except Exception:
+            pass
 
     def _init_rules(self):
         # Base three-of-a-kind values
@@ -255,23 +358,19 @@ class Game:
             # During advancement do NOT replace the event_listener (keeps queued events like LEVEL_GENERATED intact)
             try:
                 from goal import Goal as _Goal
-                # Remove old goal callbacks
-                filtered = []
+                # Unsubscribe existing goal callbacks
                 for cb in list(getattr(self.event_listener, "_subs_all", [])):
                     bound_self = getattr(cb, "__self__", None)
                     if bound_self is not None and isinstance(bound_self, _Goal):
-                        # remove
                         try:
                             self.event_listener.unsubscribe(cb)
                         except Exception:
                             pass
-                    else:
-                        filtered.append(cb)
-                # Re-subscribe new goals with updated level_state
-                for g in self.level_state.goals:
-                    g.game = self  # type: ignore[attr-defined]
-                    self.event_listener.subscribe(g.on_event)
-                # Ensure game.on_event still subscribed
+                # Subscribe new level goals
+                for gobj in self.level_state.goals:
+                    gobj.game = self  # type: ignore[attr-defined]
+                    self.event_listener.subscribe(gobj.on_event)
+                # Ensure game.on_event remains subscribed
                 if self.on_event not in getattr(self.event_listener, "_subs_all", []):
                     self.event_listener.subscribe(self.on_event)
             except Exception:
@@ -342,6 +441,7 @@ class Game:
 
     def mark_scoring_dice(self):
         self.dice_container.mark_scoring()
+
 
     def _on_state_change(self, old_state, new_state):
         try:
@@ -494,65 +594,75 @@ class Game:
         self.reset_game()
         # Defer start of first turn until shop closes; TURN_START will be emitted after SHOP_CLOSED.
         self._defer_turn_start = True
+        # Ensure new level goals get sprites
+        try:
+            self._init_goal_and_panel_sprites()
+        except Exception:
+            pass
 
     def draw(self):
         # Base scene
         self.renderer.draw()
         # Overlay misc UI objects (help icon etc.) after base renderer so they appear on top but below modal overlays drawn inside renderer
         for obj in getattr(self, 'ui_misc', []):
+            # Skip if object now represented by a sprite
+            if getattr(obj, 'has_sprite', False):
+                continue
             if hasattr(obj, 'draw'):
                 try:
                     obj.draw(self.screen)  # type: ignore[attr-defined]
                 except Exception:
                     pass
-        try:
-            import pygame as _pg
-            _pg.display.flip()
-        except Exception:
+        # NOTE: Removed internal display.flip() to avoid double flipping; App.run() handles flipping once per frame.
+
+
+
+    # --- Single-step helpers for App controller (screen system) ---
+    def _process_event_single(self, event):
+        """Process one pygame event (subset of run loop logic) so an external App can drive per-frame iteration."""
+        import pygame as _pg
+        if event.type == pygame.MOUSEMOTION:
+            # Tooltip logic handled in GameScreen; ignore.
             pass
-
-
-    def run(self):
-        running = True
-        while running:
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    running = False
-                elif event.type == pygame.KEYDOWN:
-                    # Allow immediate shop skip via ESC or 'S'
-                    if self.relic_manager.shop_open and event.key in (pygame.K_ESCAPE, pygame.K_s):
-                        try:
-                            self.event_listener.publish(GameEvent(GameEventType.REQUEST_SKIP_SHOP))
-                        except Exception:
-                            pass
-                    # Hotkeys to switch active god (1-3)
-                    if event.key in (pygame.K_1, pygame.K_2, pygame.K_3):
-                        try:
-                            idx = {pygame.K_1: 0, pygame.K_2: 1, pygame.K_3: 2}[event.key]
-                            if hasattr(self, 'gods') and self.gods and 0 <= idx < len(self.gods.worshipped):
-                                self.gods.select_active(idx)
-                        except Exception:
-                            pass
-                elif event.type == pygame.MOUSEBUTTONDOWN:
-                    mx, my = event.pos
-                    # Delegate to UI buttons first
-                    for btn in self.ui_buttons:
-                        if btn.handle_click(self, (mx, my)):
-                            break
+        elif event.type == pygame.KEYDOWN:
+            return  # Key handling now performed in GameScreen.
+        elif event.type == pygame.MOUSEBUTTONDOWN:
+            mx,my = event.pos
+            if getattr(event, 'button', None) == 3:
+                if self.state_manager.get_state() in (self.state_manager.state.ROLLING, self.state_manager.state.FARKLE, self.state_manager.state.SELECTING_TARGETS):
+                    if self.state_manager.get_state() == self.state_manager.state.SELECTING_TARGETS:
+                        die_hit = any((not d.held) and d.rect().collidepoint(mx,my) for d in self.dice)
+                        if not die_hit and self.cancel_target_selection(reason="cancelled"):
+                            return
                     else:
-                        # Misc UI objects (help icon etc.)
-                        for obj in self.ui_misc:
-                            if hasattr(obj, 'handle_click') and obj.handle_click(self, (mx,my)):  # type: ignore[attr-defined]
-                                break
-                        else:
-                            # Fallback to renderer click logic (dice, goals, shop, etc.)
-                            self.renderer.handle_click(self, (mx, my))
-            # Use unified draw so modal overlays (shop, rules, relic panel, player HUD) render.
-            # Previously this called renderer.draw() directly which skipped ShopOverlay and others.
-            self.draw()
-            self.clock.tick(30)
-        pygame.quit()
-        sys.exit()
+                        die_hit = any((not d.held) and d.rect().collidepoint(mx,my) for d in self.dice)
+                        if not die_hit and self.clear_all_selected_dice():
+                            self.set_message("Selection cleared."); return
+                    self._handle_die_click(mx,my, button=3)
+                    return
+            for btn in self.ui_buttons:
+                if btn.handle_click(self, (mx,my)):
+                    return
+            for obj in self.ui_misc:
+                if hasattr(obj, 'handle_click') and obj.handle_click(self, (mx,my)):
+                    return
+            # Overlay sprites (shop, rules, farkle banner). Shop overlay should intercept first.
+            try:
+                overlay_group = self.renderer.sprite_groups.get('overlay')
+                if overlay_group:
+                    # Ensure deterministic ordering: shop overlay first if present
+                    sprites = list(overlay_group)
+                    sprites.sort(key=lambda s: 0 if s.__class__.__name__ == 'ShopOverlaySprite' else 1)
+                    for spr in sprites:
+                        if hasattr(spr, 'handle_click') and spr.handle_click(self, (mx,my)):
+                            return
+            except Exception:
+                pass
+            self.renderer.handle_click(self, (mx,my))
+
+    def _step_frame(self):
+        """Execute draw + tooltip resolution + tick once (subset of original run loop)."""
+        self.draw()
 
     def set_message(self, text: str):
         """Set current UI status message.
@@ -560,6 +670,125 @@ class Game:
         Future extension: maintain a history or timestamp for debugging/logs.
         """
         self.message = text
+
+    # Unified die click handling (left/right)
+    def _handle_die_click(self, mx: int, my: int, button: int = 1) -> bool:
+        """Handle a click on dice area.
+
+        button 1: normal select toggle (now unified here)
+        button 3: select scoring die and auto-lock if valid combo.
+        Returns True if consumed.
+        """
+        play_states = (self.state_manager.state.ROLLING, self.state_manager.state.FARKLE, self.state_manager.state.SELECTING_TARGETS)
+        # Find die under cursor
+        target = None
+        for d in self.dice:
+            if (not d.held) and d.rect().collidepoint(mx, my):
+                if hasattr(d, 'should_interact') and not d.should_interact(self):
+                    continue
+                target = d; break
+        if target is None:
+            return False
+        if self.state_manager.get_state() not in play_states:
+            return False
+        # Ability targeting precedence
+        abm = getattr(self, 'ability_manager', None)
+        if self.state_manager.get_state() == self.state_manager.state.SELECTING_TARGETS and abm and abm.selecting_ability():
+            sel = abm.selecting_ability()
+            if sel and sel.target_type == 'die':
+                if abm.attempt_target('die', self.dice.index(target)):
+                    return True
+        if button == 3:
+            if target.scoring_eligible:
+                # Right-click should only act if the resulting selection can lock immediately.
+                # If die not selected, test whether selecting it would yield a single combo.
+                if not target.selected:
+                    # Temporarily select
+                    target.toggle_select()
+                    self.update_current_selection_score()
+                    lockable = self.selection_is_single_combo() and self.any_scoring_selection()
+                    if not lockable:
+                        # Revert and do nothing
+                        target.toggle_select()
+                        self.update_current_selection_score()
+                        return True  # consumed but no change
+                    # Emit DIE_SELECTED only if we proceed to lock
+                    try:
+                        self.event_listener.publish(GameEvent(GameEventType.DIE_SELECTED, payload={"index": self.dice.index(target)}))
+                    except Exception:
+                        pass
+                else:
+                    # Already selected: only proceed if selection currently lockable
+                    if not (self.selection_is_single_combo() and self.any_scoring_selection()):
+                        return True  # do nothing
+                # Perform lock
+                if self.state_manager.get_state() == self.state_manager.state.PRE_ROLL:
+                    try:
+                        self.state_manager.transition_to_rolling()
+                    except Exception:
+                        pass
+                if self._auto_lock_selection("Locked"):
+                    self.set_message(self.message + " (right-click)")
+                    try:
+                        self.event_listener.publish(GameEvent(GameEventType.TURN_LOCK_ADDED, payload={"turn_score": self.turn_score}))
+                    except Exception:
+                        pass
+                return True
+            return False
+        if button == 1:
+            # Standard selection toggle provided target is scoring eligible and not in targeting mode (handled above)
+            if target.scoring_eligible:
+                was_selected = target.selected
+                target.toggle_select()
+                self.update_current_selection_score()
+                # Emit appropriate event
+                try:
+                    self.event_listener.publish(GameEvent(GameEventType.DIE_SELECTED if not was_selected else GameEventType.DIE_DESELECTED, payload={"index": self.dice.index(target)}))
+                except Exception:
+                    pass
+                return True
+            return False
+        return False
+
+    # Centralized cancellation utility for ability target selection
+    def cancel_target_selection(self, reason: str = "cancelled") -> bool:
+        if self.state_manager.get_state() != self.state_manager.state.SELECTING_TARGETS:
+            return False
+        abm = getattr(self, 'ability_manager', None)
+        if not abm:
+            return False
+        sel = abm.selecting_ability()
+        if not sel:
+            return False
+        sel.selecting = False
+        try:
+            self.state_manager.exit_selecting_targets()
+        except Exception:
+            pass
+        try:
+            self.event_listener.publish(GameEvent(GameEventType.TARGET_SELECTION_FINISHED, payload={"ability": sel.id, "reason": reason}))
+        except Exception:
+            pass
+        try:
+            self.set_message(f"{sel.name} selection cancelled.")
+        except Exception:
+            pass
+        return True
+
+    def clear_all_selected_dice(self) -> bool:
+        """Deselect every currently selected, scoring-eligible die. Returns True if any were deselected."""
+        any_deselected = False
+        for d in self.dice:
+            if d.selected:
+                d.selected = False
+                any_deselected = True
+                try:
+                    self.event_listener.publish(GameEvent(GameEventType.DIE_DESELECTED, payload={"index": self.dice.index(d)}))
+                except Exception:
+                    pass
+        if any_deselected:
+            self.update_current_selection_score()
+        return any_deselected
 
 
     # --- ability logic -------------------------------------------------
@@ -626,6 +855,19 @@ class Game:
                 # Now that scoring application cycle finished, clear per-turn tallies
                 self.turn_score = 0
                 self.current_roll_score = 0
+                # Auto-begin next turn if level not completed and turns remain (prevents BANKED stall)
+                if (not self.level_state.completed
+                    and self.level_state.turns_left > 0
+                    and self.state_manager.get_state() == self.state_manager.state.BANKED):
+                    try:
+                        # Begin next turn lifecycle (consumes a turn via reset_turn)
+                        self.reset_turn()
+                    except Exception:
+                        # Fallback: emit TURN_START directly if reset fails
+                        try:
+                            self.begin_turn(fallback=True)
+                        except Exception:
+                            pass
             # Failure detection: out of turns and not complete
             if not self.level_state.completed and self.level_state.turns_left == 0 and not self.level_state._all_mandatory_fulfilled():
                 if not self.level_state.failed:
@@ -660,6 +902,34 @@ class Game:
                 self.state_manager.exit_shop_to_pre_roll()
                 # Clear defer flag and begin first turn now
                 self._defer_turn_start = False
+                # Guarantee fresh dice set for new level (avoid leftover held state from pre-shop view)
+                try:
+                    self._recreate_dice()
+                except Exception:
+                    pass
+                # Refresh goal & panel sprites for new level (remove stale sprites first)
+                try:
+                    if hasattr(self.renderer, 'layered'):
+                        # Kill existing goal sprites tied to old logical goals
+                        for spr in list(self.renderer.sprite_groups.get('ui', [])):
+                            if getattr(spr, 'logical', None) and spr.logical.__class__.__name__ == 'Goal':
+                                spr.kill()
+                        # Recreate goal + panel sprites
+                        self._init_goal_and_panel_sprites()
+                except Exception:
+                    pass
+                # Ensure button sprites re-sync (size/visibility may differ at level start)
+                try:
+                    from ui_sprites import UIButtonSprite
+                    for btn in self.ui_buttons:
+                        # If sprite exists just force a sync via setting dirty flag; else create
+                        spr = getattr(btn, 'sprite', None)
+                        if spr and hasattr(spr, 'sync_from_logical'):
+                            spr.sync_from_logical()
+                        else:
+                            UIButtonSprite(btn, self, self.renderer.sprite_groups['ui'], self.renderer.layered)
+                except Exception:
+                    pass
                 self.begin_turn(from_shop=True)
             except Exception:
                 pass
@@ -677,6 +947,20 @@ class Game:
                 pass
         # Begin advancement
         self.create_next_level()
+
+    # --- Testing helpers ----------------------------------------------------
+    def testing_advance_level(self):
+        """Helper for tests: perform a full level advancement sequence and close shop immediately.
+
+        This bypasses needing to emit individual events manually which can skip internal flags.
+        Result: level_index incremented, shop considered closed, PRE_ROLL state with dice hidden.
+        """
+        try:
+            self.create_next_level()
+            # Simulate immediate shop closure (skipped purchase flow)
+            self.event_listener.publish(GameEvent(GameEventType.SHOP_CLOSED, payload={"skipped": True}))
+        except Exception:
+            pass
     
     # --- Turn initialization -------------------------------------------------
     def begin_turn(self, initial: bool = False, advancing: bool = False, fallback: bool = False, from_shop: bool = False):
@@ -702,6 +986,7 @@ class Game:
                 d.selected = False
                 d.scoring_eligible = False
             self.mark_scoring_dice()
+            # Hidden flag removed; state PRE_ROLL automatically hides dice via their visible_states.
             payload = {
                 "level": self.level.name,
                 "turn_index": 1 if (initial or advancing) else None,
@@ -715,3 +1000,4 @@ class Game:
             self.event_listener.publish(GameEvent(GameEventType.TURN_START, payload=payload))
         except Exception:
             pass
+

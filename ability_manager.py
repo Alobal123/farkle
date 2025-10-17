@@ -29,8 +29,37 @@ class AbilityManager:
         ability = self.get(ability_id)
         if not ability:
             return False
+        prev_selecting = ability.selecting
         started = ability.begin(self)
-        # If it returned True and not selecting, it executed instantly.
+        # Handle state transitions when entering/exiting selection mode
+        if ability.selectable:
+            if not prev_selecting and ability.selecting:
+                # Enter selecting state
+                try:
+                    self.game.state_manager.enter_selecting_targets()
+                except Exception:
+                    pass
+                try:
+                    from game_event import GameEvent, GameEventType
+                    self.game.event_listener.publish(GameEvent(GameEventType.TARGET_SELECTION_STARTED, payload={"ability": ability.id}))
+                except Exception:
+                    pass
+            elif prev_selecting and not ability.selecting:
+                # Exited selection (either executed or cancelled)
+                # Restoration handled by state manager using stored prior play state
+                try:
+                    self.game.state_manager.exit_selecting_targets()
+                except Exception:
+                    pass
+                try:
+                    from game_event import GameEvent, GameEventType
+                    self.game.event_listener.publish(GameEvent(GameEventType.TARGET_SELECTION_FINISHED, payload={"ability": ability.id}))
+                    # If the ability just rescued a farkle, ensure message persists
+                    if ability.id == 'reroll' and self.game.state_manager.get_state().name == 'ROLLING' and 'rescued' not in getattr(self.game, 'message','').lower():
+                        # Message safeguard (rare race condition)
+                        self.game.set_message('Farkle rescued by reroll! Continue.')
+                except Exception:
+                    pass
         return started
 
     def is_selecting(self) -> bool:
@@ -52,7 +81,19 @@ class AbilityManager:
         if isinstance(a, TargetedAbility) and a.targets_needed > 1:
             a.collected_targets.append(target_index)
             if len(a.collected_targets) >= a.targets_needed:
-                return a.execute(self, list(a.collected_targets))
+                executed = a.execute(self, list(a.collected_targets))
+                if executed:
+                    a.selecting = False
+                    try:
+                        self.game.state_manager.exit_selecting_targets()
+                    except Exception:
+                        pass
+                    try:
+                        from game_event import GameEvent, GameEventType
+                        self.game.event_listener.publish(GameEvent(GameEventType.TARGET_SELECTION_FINISHED, payload={"ability": a.id}))
+                    except Exception:
+                        pass
+                return executed
             else:
                 # Provide UI feedback via message if available
                 try:
@@ -61,4 +102,16 @@ class AbilityManager:
                     pass
                 return True  # partial progress
         else:
-            return a.execute(self, target_index)
+            executed = a.execute(self, target_index)
+            if executed:
+                a.selecting = False
+                try:
+                    self.game.state_manager.exit_selecting_targets()
+                except Exception:
+                    pass
+                try:
+                    from game_event import GameEvent, GameEventType
+                    self.game.event_listener.publish(GameEvent(GameEventType.TARGET_SELECTION_FINISHED, payload={"ability": a.id, "target_index": target_index}))
+                except Exception:
+                    pass
+            return executed

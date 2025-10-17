@@ -55,7 +55,9 @@ class DiceEventTests(unittest.TestCase):
         d = self.game.dice[0]
         d.value = 1; d.selected = True; d.scoring_eligible = True
         self.game.update_current_selection_score()
-        self.game.event_listener.publish(GameEvent(GameEventType.REQUEST_LOCK))
+        # Right-click to auto-lock
+        rect = d.rect()
+        self.game._handle_die_click(rect.x+2, rect.y+2, button=3)
         types = [e.type for e in self.collector.events]
         self.assertIn(GameEventType.DIE_HELD, types)
 

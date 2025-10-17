@@ -264,6 +264,19 @@ class GodsManager(GameObject):
             st = game.state_manager.get_state()
             if st == game.state_manager.state.SHOP:
                 return False
+            # Gating: allow switching while in PRE_ROLL (before first roll) or BANKED (after banking, before next turn starts)
+            if st not in (game.state_manager.state.PRE_ROLL, game.state_manager.state.BANKED):
+                # Provide subtle feedback message (non-intrusive); swallow click if over a god label
+                for god in self.worshipped:
+                    r = getattr(god, '_rect', None)
+                    if r and r.collidepoint(mx, my):
+                        try:
+                            from game_event import GameEvent as GE, GameEventType as GET
+                            game.event_listener.publish(GE(GET.MESSAGE, payload={"text": "Can only switch gods before or after a turn (banked)."}))
+                        except Exception:
+                            pass
+                        return True  # treat as consumed so other handlers don't misinterpret
+                return False
         except Exception:
             pass
         # Prefer per-god rects for click detection

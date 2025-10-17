@@ -64,13 +64,11 @@ class GameLogicTests(unittest.TestCase):
         # Fresh game should be in PRE_ROLL
         states = {b.name: b.is_enabled_fn(fresh_game) for b in fresh_game.ui_buttons}
         self.assertTrue(states['roll'])
-        self.assertFalse(states['lock'])
         self.assertFalse(states['bank'])
 
     def test_button_states_valid_selection(self):
         self._select_values([1])
         states = {b.name: b.is_enabled_fn(self.game) for b in self.game.ui_buttons}
-        self.assertTrue(states['lock'])
         self.assertTrue(states['bank'])  # valid combo allows banking
         # roll allowed because valid combo present even if not yet locked
         self.assertTrue(states['roll'])
@@ -83,7 +81,6 @@ class GameLogicTests(unittest.TestCase):
             d.selected = False
         states = {b.name: b.is_enabled_fn(self.game) for b in self.game.ui_buttons}
         self.assertTrue(states['roll'])  # can roll after locking
-        self.assertFalse(states['lock'])
         self.assertTrue(states['bank'])  # can bank accumulated turn score
 
 if __name__ == '__main__':

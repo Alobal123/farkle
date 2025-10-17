@@ -106,11 +106,17 @@ class RerollAbility(TargetedAbility):
         except Exception:
             pass
         game.mark_scoring_dice()
-        if game.state_manager.get_state().name == 'FARKLE':
+        # Use effective_play_state to detect underlying FARKLE during targeting
+        if getattr(game.state_manager.effective_play_state(), 'name', None) == 'FARKLE':
             if not game.check_farkle():
-                game.state_manager.transition_to_rolling()
+                try:
+                    game.state_manager.rescue_farkle_to_rolling()
+                except Exception:
+                    game.state_manager.transition_to_rolling()
                 game.set_message("Farkle rescued by reroll! Continue.")
+                self.selecting = False
             else:
+                game.set_message("Reroll produced no scoring dice. Farkle persists.")
                 if self.available() == 0:
                     try:
                         game.event_listener.publish(GameEvent(GameEventType.TURN_END, payload={"reason":"farkle"}))

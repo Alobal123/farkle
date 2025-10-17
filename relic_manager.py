@@ -24,7 +24,7 @@ class RelicManager:
     def __init__(self, game):
         self.game = game
         self.active_relics: List[Relic] = []
-        self.current_offer: Optional[RelicOffer] = None  # legacy single-offer reference (selected one)
+        self.current_offer: Optional[RelicOffer] = None  # single-offer reference (first offer convenience)
         self.offers: List[RelicOffer] = []  # multiple offers for new shop
         self.shop_open: bool = False
 
@@ -73,7 +73,7 @@ class RelicManager:
         # Flat singles
         r5 = Relic(name="Charm of Fives", base_multiplier=None)
         r5.add_modifier(FlatRuleBonus(rule_key="SingleValue:5", amount=50))
-        charm_offer = RelicOffer(relic=r5, cost=30)  # legacy cost expected by tests
+        charm_offer = RelicOffer(relic=r5, cost=30)  # deterministic cost expected by tests
         pool.append(charm_offer)
 
         r1 = Relic(name="Charm of Ones", base_multiplier=None)
@@ -146,3 +146,35 @@ class RelicManager:
         self.current_offer = None
         self.offers = []
         self.shop_open = False
+
+    def active_relic_lines(self) -> list[str]:
+        """Return human-readable lines describing currently active relics.
+
+        Format per relic: Name (+flat bonuses, multipliers).
+        Example: "Charm of Fives [+50 SingleValue:5]".
+        """
+        lines: list[str] = []
+        if not self.active_relics:
+            return ["Relics: (none)"]
+        try:
+            from score_modifiers import FlatRuleBonus, RuleSpecificMultiplier
+        except Exception:
+            FlatRuleBonus = RuleSpecificMultiplier = tuple()  # type: ignore
+        for relic in self.active_relics:
+            parts: list[str] = []
+            try:
+                for m in relic.modifier_chain.snapshot():
+                    try:
+                        from score_modifiers import FlatRuleBonus, RuleSpecificMultiplier
+                        if isinstance(m, FlatRuleBonus):
+                            parts.append(f"+{m.amount} {m.rule_key}")
+                        elif isinstance(m, RuleSpecificMultiplier):
+                            rk = getattr(m, 'rule_key', '')
+                            parts.append(f"x{getattr(m,'mult',1.0):.2f} {rk}")
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+            suffix = (" [" + ", ".join(parts) + "]") if parts else ""
+            lines.append(f"{relic.name}{suffix}")
+        return lines

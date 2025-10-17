@@ -3,6 +3,7 @@ from typing import List
 from die import Die
 from game_event import GameEvent, GameEventType
 from settings import HEIGHT, DICE_SIZE, MARGIN
+from die_sprite import DieSprite  # new sprite bridge
 
 
 class DiceContainer:
@@ -16,14 +17,33 @@ class DiceContainer:
 
     # --- lifecycle -------------------------------------------------
     def reset_all(self):
-        self.dice = [
-            Die(
+        self.dice = []
+        # Clear out existing die sprites from groups (if any) by killing them
+        renderer = getattr(self.game, 'renderer', None)
+        if renderer and hasattr(renderer, 'sprite_groups'):
+            # Remove previous dice sprites from layered group
+            for spr in list(renderer.sprite_groups['dice']):
+                spr.kill()
+        for i in range(self.count):
+            d = Die(
                 random.randint(1, 6),
                 100 + i * (DICE_SIZE + MARGIN),
                 HEIGHT // 2 - DICE_SIZE // 2,
             )
-            for i in range(self.count)
-        ]
+            # Attach game reference for sprite gating & highlight logic
+            try:
+                d.game = self.game
+            except Exception:
+                pass
+            self.dice.append(d)
+            # Attach sprite
+            if renderer:
+                try:
+                    ds = DieSprite(d, renderer.sprite_groups['dice'], renderer.layered)
+                    # Ensure logical linkage for tests
+                    d.sprite = ds
+                except Exception:
+                    pass
 
     def roll(self):
         el = self.game.event_listener
@@ -75,9 +95,21 @@ class DiceContainer:
 
     # --- mutations -------------------------------------------------
     def hold_selected_publish(self):
+        # Determine current selection's rule_key and raw score so dice can record combo metadata
+        rule_key = None
+        raw_score = 0
+        try:
+            if self.game.selection_is_single_combo() and self.game.any_scoring_selection():
+                raw_score, _ = self.calculate_selected_score()
+                rule_key = self.selection_rule_key()
+        except Exception:
+            rule_key = None; raw_score = 0
         for d in self.dice:
             if d.selected:
                 d.hold()
+                if rule_key and raw_score > 0:
+                    d.combo_rule_key = rule_key
+                    d.combo_points = raw_score
                 self.game.event_listener.publish(GameEvent(GameEventType.DIE_HELD, payload={"index": self.dice.index(d), "value": d.value}))
 
     # --- scoring helpers -------------------------------------------

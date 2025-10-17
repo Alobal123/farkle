@@ -25,7 +25,9 @@ class LevelAdvanceRequestTests(unittest.TestCase):
         d = self.game.dice[0]
         d.value = 1; d.selected = True; d.scoring_eligible = True
         self.game.update_current_selection_score()
-        self.game.event_listener.publish(GameEvent(GameEventType.REQUEST_LOCK))
+        # Auto-lock via right-click
+        rect = d.rect()
+        self.game._handle_die_click(rect.x+2, rect.y+2, button=3)
         self.game.event_listener.publish(GameEvent(GameEventType.REQUEST_BANK))
     # No polling needed; events synchronous. Advancement should occur automatically after TURN_END and LEVEL_COMPLETE.
 

@@ -24,7 +24,7 @@ class RelicDebugOverlayTests(unittest.TestCase):
         self.game.renderer.draw()
 
     def test_debug_lines_include_relic(self):
-        lines = self.game.renderer.get_active_relic_debug_lines()
+        lines = self.game.relic_manager.active_relic_lines()
         # Expect at least one line containing Charm of Fives
         self.assertTrue(any('Charm of Fives' in ln for ln in lines), f"Expected Charm of Fives in relic debug lines: {lines}")
 

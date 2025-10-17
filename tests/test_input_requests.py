@@ -34,13 +34,14 @@ class InputRequestTests(unittest.TestCase):
         self.assertEqual(before_count, self.collector.events.count(GameEventType.ROLL), "Second roll should be denied")
         self.assertIn(GameEventType.REQUEST_DENIED, self.collector.events)
 
-    def test_lock_request_generates_lock_event(self):
-        # Prepare a scoring die (value 1) and select it
+    def test_right_click_generates_lock_event(self):
+        # Prepare a scoring die (value 1) and select it then right-click to lock
         self.game.state_manager.transition_to_rolling()
         d = self.game.dice[0]
         d.value = 1; d.selected = True; d.scoring_eligible = True
         self.game.update_current_selection_score()
-        self.game.event_listener.publish(GameEvent(GameEventType.REQUEST_LOCK))
+        rect = d.rect()
+        self.game._handle_die_click(rect.x+3, rect.y+3, button=3)
         self.assertIn(GameEventType.LOCK, self.collector.events)
 
 if __name__ == '__main__':

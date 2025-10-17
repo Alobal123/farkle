@@ -1,0 +1,22 @@
+# Ruff configuration for Farkle project
+line-length = 100
+indent-width = 4
+target-version = "py311"
+
+[lint]
+select = [
+  "E",  # pyflakes / errors
+  "F",  # pyflakes
+  "I",  # import sorting
+  "UP", # pyupgrade suggestions
+  "B",  # flake8-bugbear
+  "SIM",# flake8-simplify
+]
+ignore = [
+  "E501",  # line length (enforced separately)
+]
+
+[format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"

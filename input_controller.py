@@ -15,11 +15,6 @@ class InputController:
                 self._deny("Shop open: purchase or skip.")
             else:
                 self._handle_roll_request()
-        elif t == GameEventType.REQUEST_LOCK:
-            if g.state_manager.get_state().name == 'SHOP':
-                self._deny("Shop open: purchase or skip.")
-            else:
-                self._handle_lock_request()
         elif t == GameEventType.REQUEST_BANK:
             if g.state_manager.get_state().name == 'SHOP':
                 self._deny("Shop open: purchase or skip.")
@@ -33,7 +28,7 @@ class InputController:
         elif t == GameEventType.REQUEST_SKIP_SHOP:
             pass
         elif t == GameEventType.REQUEST_REROLL:
-            # Legacy event: map to generic ability request for 'reroll'
+            # Map old reroll request event to generic ability request
             self._handle_generic_ability_request('reroll')
         elif t == GameEventType.REQUEST_ABILITY:
             ability_id = event.get('id') or (event.payload.get('ability_id') if event.payload else None)
@@ -91,8 +86,8 @@ class InputController:
 
     def _handle_next_turn_request(self):
         g = self.game
+        # Let actions.handle_next_turn manage state transition & TURN_START emission.
         g.handle_next_turn()
-        self._emit(GameEventType.TURN_START, {"turns_left": g.level_state.turns_left})
 
     def _handle_generic_ability_request(self, ability_id: str):
         g = self.game
@@ -105,8 +100,7 @@ class InputController:
         if not ability.can_activate(mgr):
             self._deny(f"{ability.name} not available."); return
         started = mgr.toggle_or_execute(ability_id)
-        # Mirror legacy reroll_selecting flag for tests if reroll ability
-        # Legacy reroll_selecting flag removed; rely on ability.selecting directly in tests.
+    # Ability selection state indicated by ability.selecting (reroll button outline uses this).
         if ability.selectable:
             if ability.selecting:
                 g.set_message(f"Select target(s) for {ability.name}.")

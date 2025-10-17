@@ -54,7 +54,6 @@ def handle_roll(game) -> bool:
     if game.check_farkle():
         # Avoid immediate first-roll farkle (improves UX & keeps tests deterministic)
         if game.turn_score == 0:
-            # Force one die to be scoring (value 1) and re-evaluate once
             for d in game.dice:
                 if not d.held:
                     d.value = 1
@@ -62,7 +61,6 @@ def handle_roll(game) -> bool:
             game.mark_scoring_dice()
         if game.check_farkle():
             game.state_manager.transition_to_farkle()
-            # Query ability manager for remaining rerolls
             abm = getattr(game, 'ability_manager', None)
             reroll = abm.get('reroll') if abm else None
             game.set_message("Farkle! You lose this turn's points." if (not reroll or reroll.available() == 0) else "Farkle! You may use a REROLL.")
@@ -71,12 +69,11 @@ def handle_roll(game) -> bool:
             try:
                 game.event_listener.publish(GameEvent(GameEventType.FARKLE))
                 game.event_listener.publish(GameEvent(GameEventType.TURN_FARKLE, payload={}))
-                # Defer TURN_END if rerolls remain
                 if not reroll or reroll.available() == 0:
                     game.event_listener.publish(GameEvent(GameEventType.TURN_END, payload={"reason": "farkle"}))
             except Exception:
                 pass
-            return True  # farkle ends roll attempt successfully (turn may continue if reroll used)
+            return True
     return True
 
 def handle_bank(game) -> bool:
@@ -110,6 +107,22 @@ def handle_bank(game) -> bool:
     return True
 
 def handle_next_turn(game) -> bool:
-    if game.state_manager.get_state() in (game.state_manager.state.FARKLE, game.state_manager.state.BANKED):
-        game.reset_turn(); return True
+    st = game.state_manager.get_state()
+    if st in (game.state_manager.state.FARKLE, game.state_manager.state.BANKED):
+        # If forfeiting a FARKLE while a rescue (reroll) is still available, emit a TURN_END with distinct reason first.
+        if st == game.state_manager.state.FARKLE:
+            abm = getattr(game, 'ability_manager', None)
+            reroll = abm.get('reroll') if abm else None
+            if reroll and reroll.available() > 0:
+                try:
+                    game.event_listener.publish(GameEvent(GameEventType.TURN_END, payload={"reason": "farkle_forfeit"}))
+                except Exception:
+                    pass
+        # reset_turn performs dice recreation, consumes a turn, and calls begin_turn (which sets PRE_ROLL)
+        game.reset_turn()
+        try:
+            game.event_listener.publish(GameEvent(GameEventType.TURN_START, payload={"turns_left": game.level_state.turns_left}))
+        except Exception:
+            pass
+        return True
     return False

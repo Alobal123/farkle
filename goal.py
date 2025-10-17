@@ -188,22 +188,33 @@ class Goal(GameObject):
         # Compute dynamic text lines similarly to renderer logic
         base_remaining = self.get_remaining()
         pending_raw = getattr(self, 'pending_raw', 0)
-        if self.is_fulfilled():
-            remaining_text = "Done"
-        else:
-            if pending_raw > 0:
-                # Use game's preview helper for projected adjusted pending value
-                try:
-                    projected = g.compute_goal_pending_final(self)
-                except Exception:
-                    projected = pending_raw
-                show_after = max(0, base_remaining - projected)
-                remaining_text = f"Rem: {base_remaining} (pending {projected})"
-            else:
-                remaining_text = f"Rem: {base_remaining}"
-        desc = g.level.description if idx == 0 else ""
-        lines_out = self.build_lines(g.small_font, per_box_width, remaining_text, desc, GOAL_PADDING, GOAL_LINE_SPACING)
-        box_height = self.compute_box_height(g.small_font, lines_out, GOAL_PADDING, GOAL_LINE_SPACING)
+        # Calculate dynamic progress values (applied, pending, preview)
+        applied = self.target_score - base_remaining
+        projected_pending = 0
+        if not self.is_fulfilled() and pending_raw > 0:
+            try:
+                projected_pending = max(0, g.compute_goal_pending_final(self))
+            except Exception:
+                projected_pending = pending_raw
+        preview_add = 0
+        try:
+            if g.selection_is_single_combo() and g.any_scoring_selection():
+                preview_tuple = g.selection_preview()
+                if isinstance(preview_tuple, tuple) and len(preview_tuple) >= 3 and g.active_goal_index == goals.index(self):
+                    preview_add = int(preview_tuple[2])
+        except Exception:
+            preview_add = 0
+        # Build lines: only name/tag (description removed; now shown only via hover tooltip)
+        tag = "M" if self.mandatory else "O"
+        header = f"{self.name} [{tag}]"
+        content = header
+        lines_out: list[str] = []
+        for raw_line in content.split("\n"):
+            wrapped = self.wrap_text(g.small_font, raw_line, per_box_width - 2 * GOAL_PADDING)
+            lines_out.extend(wrapped)
+        # Reserve space for progress bar at bottom
+        bar_reserved_height = 20
+        box_height = GOAL_PADDING * 2 + len(lines_out) * (g.small_font.get_height() + GOAL_LINE_SPACING) - GOAL_LINE_SPACING + bar_reserved_height
         panel_y = 90
         box_rect = pygame.Rect(x, panel_y, per_box_width, box_height)
         self._last_rect = box_rect
@@ -219,4 +230,63 @@ class Goal(GameObject):
         pygame.draw.rect(surface, bg, box_rect, border_radius=10)
         if g.active_goal_index == idx:
             pygame.draw.rect(surface, GOAL_BORDER_ACTIVE, box_rect, width=3, border_radius=10)
-        self.draw_into(surface, box_rect, g.small_font, lines_out, GOAL_PADDING, GOAL_LINE_SPACING, GOAL_TEXT)
+        # Draw text lines first (top region)
+        y_line = box_rect.y + GOAL_PADDING
+        for ln in lines_out:
+            surface.blit(g.small_font.render(ln, True, GOAL_TEXT), (box_rect.x + GOAL_PADDING, y_line))
+            y_line += g.small_font.get_height() + GOAL_LINE_SPACING
+        # Progress bar at bottom
+        bar_margin = 6
+        bar_height = 14
+        bar_x = box_rect.x + bar_margin
+        bar_y = box_rect.bottom - bar_margin - bar_height
+        bar_width = box_rect.width - bar_margin * 2
+        # Background track
+        track_color = (50, 55, 60)
+        pygame.draw.rect(surface, track_color, pygame.Rect(bar_x, bar_y, bar_width, bar_height), border_radius=4)
+        # Segment calculations (avoid division by zero)
+        total = max(1, self.target_score)
+        applied_w = int(bar_width * applied / total)
+        pending_w = int(bar_width * projected_pending / total)
+        preview_w = int(bar_width * preview_add / total)
+        # Clamp cumulative widths to bar_width
+        # If applied exceeds bar, cap applied and zero others
+        if applied_w > bar_width:
+            applied_w = bar_width
+            pending_w = 0
+            preview_w = 0
+        else:
+            # Reduce pending if it would overflow
+            if applied_w + pending_w > bar_width:
+                pending_w = max(0, bar_width - applied_w)
+                preview_w = 0
+            # Reduce preview if it would overflow
+            if applied_w + pending_w + preview_w > bar_width:
+                preview_w = max(0, bar_width - applied_w - pending_w)
+        # Store debug values for tests
+        self._last_bar_widths = {
+            'applied': applied_w,
+            'pending': pending_w,
+            'preview': preview_w,
+            'total': bar_width
+        }
+        # Colors (could move to settings if reused)
+        applied_color = (70, 180, 110)
+        pending_color = (200, 150, 60)
+        preview_color = (110, 140, 220)
+        # Draw applied segment
+        if applied_w > 0:
+            pygame.draw.rect(surface, applied_color, pygame.Rect(bar_x, bar_y, applied_w, bar_height), border_radius=4)
+        # Draw pending segment (stacks after applied)
+        if pending_w > 0:
+            pygame.draw.rect(surface, pending_color, pygame.Rect(bar_x + applied_w, bar_y, pending_w, bar_height), border_radius=0)
+        # Draw preview segment (after applied+pending)
+        if preview_w > 0:
+            pygame.draw.rect(surface, preview_color, pygame.Rect(bar_x + applied_w + pending_w, bar_y, preview_w, bar_height), border_radius=0)
+        # Text overlay inside bar (compact summary)
+        summary = f"{applied}/{self.target_score}"
+        if projected_pending:
+            summary += f"+{projected_pending}"
+        if preview_add:
+            summary += f"+{preview_add}"
+        surface.blit(g.small_font.render(summary, True, (230,230,228)), (bar_x + 4, bar_y - 1))

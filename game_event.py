@@ -34,7 +34,6 @@ class GameEventType(Enum):
     LEVEL_ADVANCE_FINISHED = auto()
     # UI / intent layer
     REQUEST_ROLL = auto()
-    REQUEST_LOCK = auto()
     REQUEST_BANK = auto()
     REQUEST_NEXT_TURN = auto()
     REQUEST_DENIED = auto()
@@ -59,6 +58,8 @@ class GameEventType(Enum):
     REROLL = auto()
     REQUEST_ABILITY = auto()
     ABILITY_EXECUTED = auto()
+    TARGET_SELECTION_STARTED = auto()
+    TARGET_SELECTION_FINISHED = auto()
 
 @dataclass(slots=True)
 class GameEvent:

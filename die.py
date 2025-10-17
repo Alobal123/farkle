@@ -25,6 +25,20 @@ class Die(GameObject):
         self.held = False
         self.selected = False
         self.scoring_eligible = False
+        self.game = None  # set by container for sprite gating & highlight logic
+        # Sprite reference (assigned by DieSprite); use Any to avoid circular import for type checkers.
+        from typing import Any as _Any
+        self.sprite: _Any = None
+        # Combo metadata (set when die becomes part of a locked combo)
+        self.combo_rule_key: str | None = None
+        self.combo_points: int | None = None
+        # Visible only after first roll or during subsequent play states (never in PRE_ROLL).
+        from game_state_enum import GameState
+        self.visible_states = {GameState.ROLLING, GameState.FARKLE, GameState.SELECTING_TARGETS, GameState.BANKED}
+        self.interactable_states = {GameState.ROLLING, GameState.FARKLE, GameState.SELECTING_TARGETS}
+
+    def draw(self, surface: pygame.Surface) -> None:  # satisfy abstract base; sprite handles rendering
+        return
 
     def rect(self):
         return pygame.Rect(self.x, self.y, DICE_SIZE, DICE_SIZE)
@@ -33,33 +47,15 @@ class Die(GameObject):
         self.held = False
         self.selected = False
         self.scoring_eligible = False
+        self.combo_rule_key = None
+        self.combo_points = None
 
     def hold(self):
         self.held = True
         self.selected = False
+        # Holding does not itself assign combo metadata; game logic assigns when locking.
 
     def toggle_select(self):
         self.selected = not self.selected
 
-    def draw(self, surface):  # type: ignore[override]
-        """Blit this die to surface using cached rendered surface keyed by its state."""
-        key = (self.value, self.held, self.selected, self.scoring_eligible)
-        cached = _die_surface_cache.get(key)
-        if cached is None:
-            # Color based on state
-            if self.held:
-                color = (200, 80, 80)  # red for held
-            elif self.selected:
-                color = (80, 150, 250)  # blue for selected this roll
-            else:
-                color = (230, 230, 230)  # white
-            surf = pygame.Surface((DICE_SIZE, DICE_SIZE), pygame.SRCALPHA)
-            pygame.draw.rect(surf, color, surf.get_rect(), border_radius=8)
-            pygame.draw.rect(surf, (0, 0, 0), surf.get_rect(), 3, border_radius=8)
-            if not self.held and not self.scoring_eligible:
-                surf.set_alpha(130)
-            for px, py in PIP_POSITIONS[self.value]:
-                pygame.draw.circle(surf, (0, 0, 0), (px * DICE_SIZE, py * DICE_SIZE), 7)
-            _die_surface_cache[key] = surf
-            cached = surf
-        surface.blit(cached, (self.x, self.y))
+    # Logical draw removed; rendering handled by DieSprite.
