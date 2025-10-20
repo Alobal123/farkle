@@ -113,7 +113,7 @@ def resolve_hover(game, pos: tuple[int,int]) -> Optional[Dict]:
                 projected = 0
                 if pending_raw > 0 and not goal.is_fulfilled():
                     try:
-                        projected = game.compute_goal_pending_final(goal)
+                        projected = goal.projected_pending()
                     except Exception:
                         projected = pending_raw
                 # Selection preview (only if this goal active)

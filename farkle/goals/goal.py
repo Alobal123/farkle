@@ -38,6 +38,18 @@ class Goal(GameObject):
     def get_remaining(self) -> int:
         return self.remaining
 
+    # Projection helper for UI/logic: ask scoring manager directly.
+    def projected_pending(self) -> int:
+        if not self.game:
+            return 0
+        try:
+            sm = getattr(self.game, 'scoring_manager', None)
+            if sm:
+                return sm.project_goal_pending(self)
+        except Exception:
+            pass
+        return int(getattr(self, 'pending_raw', 0) or 0)
+
     # Rendering helpers (decoupled from Game specifics but reusable)
     @staticmethod
     def wrap_text(font: pygame.font.Font, text: str, max_width: int) -> list[str]:
@@ -199,7 +211,7 @@ class Goal(GameObject):
         projected_pending = 0
         if not self.is_fulfilled() and pending_raw > 0:
             try:
-                projected_pending = max(0, g.compute_goal_pending_final(self))
+                projected_pending = max(0, self.projected_pending())
             except Exception:
                 projected_pending = pending_raw
         preview_add = 0

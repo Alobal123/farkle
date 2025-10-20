@@ -1,6 +1,7 @@
 from __future__ import annotations
 from typing import List, Optional
 from farkle.abilities.ability import Ability, RerollAbility, TargetedAbility
+from farkle.core.game_event import GameEventType
 
 class AbilityManager:
     def __init__(self, game):
@@ -9,8 +10,23 @@ class AbilityManager:
         # Register default abilities
         self.register(RerollAbility())
 
+    def activate_all(self):
+        """Activate all abilities subscribing each to its charge modification event."""
+        for a in self.abilities:
+            try:
+                self.game.event_listener.subscribe(a.on_event, types={GameEventType.ABILITY_CHARGES_ADDED})
+            except Exception:
+                pass
+
     def register(self, ability: Ability):
         self.abilities.append(ability)
+        # If event listener already present (e.g., in lightweight DummyGame), subscribe immediately
+        el = getattr(self.game, 'event_listener', None)
+        if el is not None:
+            try:
+                el.subscribe(ability.on_event, types={GameEventType.ABILITY_CHARGES_ADDED})
+            except Exception:
+                pass
 
     def reset_level(self):
         for a in self.abilities:

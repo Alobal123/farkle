@@ -29,7 +29,7 @@ class GoalPendingPreviewTests(unittest.TestCase):
         self.game.mark_scoring_dice(); self.game.dice[0].selected = True
         self.game.handle_lock()
         # Directly use game's authoritative computation (renderer shim removed)
-        projected = self.game.compute_goal_pending_final(self.game.level_state.goals[0])
+        projected = self.game.level_state.goals[0].projected_pending()
         self.assertEqual(projected, 100)
 
 if __name__ == '__main__':

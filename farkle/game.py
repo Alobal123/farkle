@@ -35,6 +35,7 @@ from farkle.ui.ui_objects import build_core_buttons, HelpIcon, RelicPanel, Rules
 from farkle.core.game_object import GameObject
 from farkle.relics.relic_manager import RelicManager
 from farkle.abilities.ability_manager import AbilityManager
+from farkle.scoring.scoring_manager import ScoringManager
 from farkle.gods.gods_manager import GodsManager, God
 
 class Game:
@@ -61,6 +62,8 @@ class Game:
         self.rules = ScoringRules()
         self._init_rules()
         self.state_manager = GameStateManager(on_change=self._on_state_change)
+        # Centralized scoring manager (replaces inline preview logic)
+        self.scoring_manager = ScoringManager(self)
         # Dice container encapsulates all dice logic
         self.dice_container = DiceContainer(self)
         # Dynamic GameObjects (dice etc.) for unified rendering pipeline
@@ -157,16 +160,22 @@ class Game:
         except Exception:
             pass
         # Removed transient GameStateDebugSprite used for debugging state visibility.
-    # Ability manager owns reroll state (previous ad-hoc fields consolidated).
-        self.ability_manager = AbilityManager(self)
-        # Event listener hub
+        # Event listener hub (create before abilities so filtered subscriptions can attach)
         self.event_listener = EventListener()
+        # Ability manager owns reroll ability; create then subscribe filtered
+        self.ability_manager = AbilityManager(self)
+        try:
+            self.ability_manager.activate_all()
+        except Exception:
+            pass
         # Internal flag: when True we defer TURN_START emission (e.g., awaiting shop interaction after advancement)
         self._defer_turn_start = False
         # Subscribe player & goals
         self._subscribe_core_objects()
         # Subscribe relic manager
         self.event_listener.subscribe(self.relic_manager.on_event)
+        # Subscribe scoring manager for incremental modifier events
+        self.event_listener.subscribe(self.scoring_manager.on_event)
         # Input controller (handles REQUEST_* events)
         self.input_controller = InputController(self)
         self.event_listener.subscribe(self.input_controller.on_event)
@@ -233,88 +242,10 @@ class Game:
         self.rules.add_rule(Straight2to6(1000))
 
     # --- scoring preview helpers -------------------------------------------------
-    def compute_goal_pending_final(self, goal) -> int:
-        """Return projected final adjusted score for a goal's current pending_raw using unified preview pipeline."""
-        pending_raw = int(getattr(goal, 'pending_raw', 0) or 0)
-        if pending_raw <= 0:
-            return 0
-        try:
-            score_obj = getattr(goal, '_pending_score', None)
-            if score_obj is None:
-                return pending_raw
-            # Build parts list from cloned score for isolation
-            clone = score_obj.clone()
-            parts = [(p.rule_key, p.raw) for p in clone.parts]
-            preview = self.compute_preview(parts, source="goal_pending")
-            return int(preview.get('final_preview', pending_raw))
-        except Exception:
-            return pending_raw
 
     def compute_preview(self, parts: list[tuple[str,int]], source: str = "selection") -> dict:
-        """Compute a preview Score object applying selective modifiers (via SCORE_PRE_MODIFIERS) and global multipliers.
-
-        parts: list of (rule_key, raw)
-        Returns dict with keys: parts (list of {rule_key, raw, adjusted}), total_raw, selective_effective,
-        multiplier, final_preview, score (serialized full score dict) for potential future use.
-        Emits SCORE_PREVIEW_REQUEST then SCORE_PREVIEW_COMPUTED for observers (non-mutating).
-        """
-        """Compute a preview Score object applying selective modifiers (via SCORE_PRE_MODIFIERS).
-
-        Global multipliers have been removed from gameplay; preview's final equals selective.
-        Returns a dict with: parts (list[rule_key, raw]), total_raw, selective_effective,
-        multiplier (always 1.0), final_preview, score (serialized full score dict).
-        """
-        from farkle.core.game_event import GameEvent as GE, GameEventType as GET
-        result: dict = {}
-        try:
-            from farkle.scoring.score_types import Score, ScorePart
-            score_obj = Score()
-            for rk, raw in parts:
-                try:
-                    score_obj.add_part(ScorePart(rule_key=rk, raw=int(raw)))
-                except Exception:
-                    pass
-            # Fire preview request event (informational)
-            try:
-                self.event_listener.publish(GE(GET.SCORE_PREVIEW_REQUEST, payload={
-                    "parts": [{"rule_key": rk, "raw": raw} for rk, raw in parts],
-                    "source": source
-                }))
-            except Exception:
-                pass
-            # Apply selective modifiers by leveraging SCORE_PRE_MODIFIERS immediate hook
-            try:
-                self.event_listener.publish_immediate(GE(GET.SCORE_PRE_MODIFIERS, payload={
-                    "score_obj": score_obj,
-                    "preview": True,
-                    "source": source
-                }))
-            except Exception:
-                pass
-            selective_effective = score_obj.total_effective
-            # Global multipliers are not applied; final equals selective
-            total_mult = 1.0
-            final_preview = selective_effective
-            score_dict = None
-            try:
-                score_dict = score_obj.to_dict()
-            except Exception:
-                score_dict = None
-            result = {
-                "parts": score_dict.get('parts') if score_dict else [{"rule_key": rk, "raw": raw} for rk, raw in parts],
-                "total_raw": sum(raw for _,raw in parts),
-                "selective_effective": selective_effective,
-                "multiplier": total_mult,
-                "final_preview": final_preview,
-                "score": score_dict,
-            }
-            try:
-                self.event_listener.publish(GE(GET.SCORE_PREVIEW_COMPUTED, payload=result | {"source": source}))
-            except Exception:
-                pass
-            return result
-        except Exception:
-            return {"parts": [{"rule_key": rk, "raw": raw} for rk, raw in parts], "total_raw": sum(raw for _,raw in parts), "selective_effective": sum(raw for _,raw in parts), "multiplier": 1.0, "final_preview": sum(raw for _,raw in parts)}
+        """Delegated preview to `ScoringManager` (legacy compatibility wrapper)."""
+        return self.scoring_manager.preview(parts, source=source)
 
     def reset_dice(self):
         self.dice_container.reset_all()
@@ -791,8 +722,6 @@ class Game:
         return any_deselected
 
 
-    # --- ability logic -------------------------------------------------
-    # Reroll functionality has been moved entirely into the ability system.
 
     # Internal: subscribe core objects
     def _subscribe_core_objects(self, reset: bool = False):
@@ -811,6 +740,14 @@ class Game:
             self.event_listener.subscribe(self.gods.on_event)
         # Ensure game progression listener is present after resets
         self.event_listener.subscribe(self.on_event)
+        # Re-subscribe ability charge listener(s) if reset occurred
+        if reset and hasattr(self, 'ability_manager') and self.ability_manager:
+            try:
+                from farkle.core.game_event import GameEventType as _GET
+                for a in self.ability_manager.abilities:
+                    self.event_listener.subscribe(a.on_event, types={_GET.ABILITY_CHARGES_ADDED})
+            except Exception:
+                pass
 
     # Auto progression logic
     def on_event(self, event: GameEvent):  # type: ignore[override]

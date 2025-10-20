@@ -22,7 +22,6 @@ class GameEventType(Enum):
     # Scoring application (player-mediated multiplier)
     SCORE_APPLY_REQUEST = auto()
     SCORE_APPLIED = auto()
-    SCORE_PRE_MODIFIERS = auto()
     # Non-mutating preview lifecycle
     SCORE_PREVIEW_REQUEST = auto()
     SCORE_PREVIEW_COMPUTED = auto()
@@ -60,6 +59,9 @@ class GameEventType(Enum):
     ABILITY_EXECUTED = auto()
     TARGET_SELECTION_STARTED = auto()
     TARGET_SELECTION_FINISHED = auto()
+    ABILITY_CHARGES_ADDED = auto()
+    SCORE_MODIFIER_ADDED = auto()
+    SCORE_MODIFIER_REMOVED = auto()
 
 @dataclass(slots=True)
 class GameEvent:

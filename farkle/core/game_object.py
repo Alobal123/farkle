@@ -17,6 +17,21 @@ class GameObject(ABC):
         # Interaction gating separate from visibility (object may be visible but not clickable)
         self.interactable_states = None  # type: ignore[attr-defined]
         self.interactable_predicate = None  # type: ignore[attr-defined]
+    # Activation flag. Subclasses wanting deferred activation (e.g., relic before purchase)
+    # can set this False then call activate(game) later.
+        self.active: bool = True
+        # Internal subscription bookkeeping so deactivate can unsubscribe only
+        # the callbacks this object registered through activate(). Each entry
+        # is (callback, events_or_None)
+        self._subscriptions: list[tuple] = []  # type: ignore[attr-defined]
+
+    # ---------------------------------------------------------------------
+    # Overridable section: subclasses typically implement one or more of:
+    #   on_activate(game)   -> side-effects when first activated
+    #   on_event(event)     -> react to GameEvent stream
+    #   on_deactivate(game) -> cleanup / side-effects on deactivation
+    # draw() is separately abstract for visual objects.
+    # ---------------------------------------------------------------------
 
     @abstractmethod
     def draw(self, surface: pygame.Surface) -> None:
@@ -25,6 +40,73 @@ class GameObject(ABC):
 
     def on_event(self, event: GameEvent) -> None:  # default no-op
         pass
+
+    # --- Overridable lifecycle hooks (implement in subclasses as needed) ---
+    def on_activate(self, game) -> None:  # default no-op
+        """Called exactly once when this object transitions from inactive to active via activate()."""
+        pass
+
+    def on_deactivate(self, game) -> None:  # default no-op
+        """Called exactly once when this object transitions from active to inactive via deactivate()."""
+        pass
+
+    # --- Lifecycle helpers -------------------------------------------------
+    def activate(self, game, *, events=None, callback=None) -> None:
+        """Activate this object if not already active.
+
+        Behavior:
+          * Marks self.active = True
+          * Subscribes self.on_event to the global event listener (optionally
+            filtered to 'events') if not already subscribed via activate.
+          * Optional 'callback' allows registering an additional callable
+            tied to this activation (will be auto-unsubscribed on deactivate).
+
+    Duplicate subscriptions are avoided by EventListener.
+        """
+        if self.active:
+            # Already active: still allow adding supplemental callback
+            if callback:
+                game.event_listener.subscribe(callback, events)
+                self._subscriptions.append((callback, events))
+            return
+        self.active = True
+        game.event_listener.subscribe(self.on_event, events)
+        self._subscriptions.append((self.on_event, events))
+        if callback:
+            game.event_listener.subscribe(callback, events)
+            self._subscriptions.append((callback, events))
+        try:
+            self.on_activate(game)
+        except Exception:
+            pass
+
+    def deactivate(self, game) -> None:
+        """Deactivate this object, unsubscribing callbacks registered via activate()."""
+        if not self.active:
+            return
+        self.active = False
+        try:
+            for cb, _events in list(self._subscriptions):
+                game.event_listener.unsubscribe(cb)
+        finally:
+            self._subscriptions.clear()
+        try:
+            self.on_deactivate(game)
+        except Exception:
+            pass
+
+    def emit(self, game, event_type, payload=None):
+        """Convenience helper for emitting an event from this object.
+
+        Shorthand for game.event_listener.publish(GameEvent(type, source=self, payload=payload)).
+        Returns the created GameEvent for optional chaining/testing.
+        """
+        ev = GameEvent(event_type, source=self, payload=payload)
+        try:
+            game.event_listener.publish(ev)
+        except Exception:
+            pass
+        return ev
 
     # Convenience for filtering
     def is_type(self, cls) -> bool:
@@ -35,11 +117,7 @@ class GameObject(ABC):
         return False
 
     def should_draw(self, game) -> bool:
-        """(Legacy) Visibility decision for non-sprite objects.
-
-        New code should rely on sprite-level gating (BaseSprite.visible_states / visible_predicate).
-        This method is retained only for tests injecting Dummy objects without sprites.
-        """
+        """Visibility decision for non-sprite objects (tests / legacy helpers)."""
         try:
             st = game.state_manager.get_state()
             if self.visible_states is not None and st not in self.visible_states:

@@ -51,7 +51,7 @@ class GoalSprite(BaseSprite):
         projected_pending = 0
         if not goal.is_fulfilled() and pending_raw > 0:
             try:
-                projected_pending = max(0, g.compute_goal_pending_final(goal))
+                projected_pending = max(0, goal.projected_pending())
             except Exception:
                 projected_pending = pending_raw
         preview_add = 0

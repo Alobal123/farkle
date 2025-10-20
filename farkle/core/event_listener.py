@@ -60,8 +60,8 @@ class EventListener:
     def publish_immediate(self, event: GameEvent):
         """Dispatch an event synchronously even during another publish.
 
-        Used for hook-style events (e.g., SCORE_PRE_MODIFIERS) where immediate
-        mutation is required before subsequent logic proceeds.
+        Reserved for events requiring strict in-order side-effects before the
+        next queued event dispatch (e.g., ability charge adjustments).
         """
         # Directly invoke without queuing to guarantee ordering
         for cb in list(self._subs_all):
@@ -74,3 +74,4 @@ class EventListener:
                 cb(event)
             except Exception:
                 pass
+        # Debug logging removed after stabilization.

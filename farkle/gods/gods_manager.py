@@ -133,7 +133,7 @@ class GodsManager(GameObject):
 
     - Up to three gods are worshipped at a time (displayed in UI).
     - Only one god can be active; only the active god's effects apply to score events.
-    - Effects are selective modifiers applied during SCORE_PRE_MODIFIERS so previews and final scoring align.
+    - Effects are selective modifiers contributed via events (SCORE_MODIFIER_ADDED) and applied centrally by ScoringManager.
     """
     def __init__(self, game):
         super().__init__(name="GodsManager")
@@ -168,13 +168,7 @@ class GodsManager(GameObject):
                 pass
 
     def on_event(self, event: GameEvent):  # type: ignore[override]
-        if event.type == GameEventType.SCORE_PRE_MODIFIERS:
-            # Apply active god's selective modifiers to score_obj
-            score_obj = event.get('score_obj')
-            g = self.active_god()
-            if g and score_obj is not None:
-                g.apply_selective(score_obj)
-        elif event.type == GameEventType.SCORE_APPLIED:
+        if event.type == GameEventType.SCORE_APPLIED:
             # Award XP to active god equal to applied adjusted points
             adjusted = int(event.get('adjusted', 0) or 0)
             if adjusted > 0:

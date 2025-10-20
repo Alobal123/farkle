@@ -89,14 +89,20 @@ def build_core_buttons(game):
         abm = getattr(g,'ability_manager',None)
         if not abm: return False
         a = abm.get('reroll')
-        return bool(a and a.can_activate(abm))
+        can = bool(a and a.can_activate(abm))
+        if a:
+            st = g.state_manager.get_state().name
+        return can
     def reroll_label(g):
         abm = getattr(g,'ability_manager',None)
         sel = abm.selecting_ability() if abm else None
         reroll = abm.get('reroll') if abm else None
         remaining = reroll.available() if reroll else 0
         star = '*' if (sel and sel.id=='reroll') else ''
-        return f"REROLL{star} ({remaining})"
+        cap = reroll.charges_per_level if reroll else 0
+        used = reroll.charges_used if reroll else 0
+        label = f"REROLL{star} ({remaining} / {cap})" if star else f"REROLL ({remaining} / {cap})"
+        return label
     def next_enabled(g):
         # Always enabled while in a FARKLE state to allow player to forfeit rescue.
         return g.state_manager.get_state() == g.state_manager.state.FARKLE

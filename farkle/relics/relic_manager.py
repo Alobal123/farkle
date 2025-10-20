@@ -68,40 +68,41 @@ class RelicManager:
         Costs chosen for rough balance; can be tweaked later.
         """
         from farkle.scoring.score_modifiers import RuleSpecificMultiplier
+        from farkle.relics.relic import ExtraRerollRelic
         pool: List[RelicOffer] = []
 
-        # Flat singles
-        r5 = Relic(name="Charm of Fives", base_multiplier=None)
+        # Flat singles & ability-enhancing relics
+        r5 = Relic(name="Charm of Fives")
         r5.add_modifier(FlatRuleBonus(rule_key="SingleValue:5", amount=50))
         charm_offer = RelicOffer(relic=r5, cost=30)  # deterministic cost expected by tests
         pool.append(charm_offer)
 
-        r1 = Relic(name="Charm of Ones", base_multiplier=None)
+        r1 = Relic(name="Charm of Ones")
         r1.add_modifier(FlatRuleBonus(rule_key="SingleValue:1", amount=100))
         pool.append(RelicOffer(relic=r1, cost=45))
 
+        extra_reroll = ExtraRerollRelic()
+        pool.append(RelicOffer(relic=extra_reroll, cost=40))
+
         # Pattern multipliers
-        m3 = Relic(name="Glyph of Triples", base_multiplier=None)
-        # Apply to all three-of-a-kind variants (values 1..6)
+        m3 = Relic(name="Glyph of Triples")
         for v in range(1,7):
             m3.add_modifier(RuleSpecificMultiplier(rule_key=f"ThreeOfAKind:{v}", mult=1.5))
         pool.append(RelicOffer(relic=m3, cost=70))
 
-        m4 = Relic(name="Sigil of Quadruples", base_multiplier=None)
+        m4 = Relic(name="Sigil of Quadruples")
         for v in range(1,7):
             m4.add_modifier(RuleSpecificMultiplier(rule_key=f"FourOfAKind:{v}", mult=1.5))
         pool.append(RelicOffer(relic=m4, cost=65))
 
-        ms = Relic(name="Runestone of Straights", base_multiplier=None)
+        ms = Relic(name="Runestone of Straights")
         for rk in ("Straight6", "Straight1to5", "Straight2to6"):
             ms.add_modifier(RuleSpecificMultiplier(rule_key=rk, mult=1.5))
         pool.append(RelicOffer(relic=ms, cost=60))
 
-        # Choose any 3 distinct offers randomly each shop
         random.shuffle(pool)
         level = getattr(self.game, 'level_index', 1)
         if level == 1:
-            # Ensure Charm of Fives present and first (tests rely on this deterministic offer)
             others = [o for o in pool if o.relic.name != "Charm of Fives"]
             random.shuffle(others)
             return [charm_offer] + others[:2]
@@ -119,20 +120,48 @@ class RelicManager:
     def _attempt_purchase(self, index: int = 0):
         if not self.offers:
             return
-        if index < 0 or index >= len(self.offers):
+        # Normalize index (handle None or non-int)
+        try:
+            if not isinstance(index, int):
+                index = 0
+        except Exception:
+            index = 0
+        try:
+            if index < 0 or index >= len(self.offers):
+                index = 0
+        except Exception:
             index = 0
         offer = self.offers[index]
         player = self.game.player
         if player.gold >= offer.cost:
+            reroll_before = None
+            try:
+                reroll_before = self.game.ability_manager.get('reroll').charges_per_level
+            except Exception:
+                pass
             player.gold -= offer.cost
             self.active_relics.append(offer.relic)
-            # Subscribe relic so it can (potentially) react to events later
-            self.game.event_listener.subscribe(offer.relic.on_event)
+            # Activate relic (handles subscription bookkeeping). Relics start
+            # active by default, but calling activate ensures future relics
+            # that opt into deferred activation are wired consistently.
+            try:
+                # Force activation sequence even if relic.active True (set inactive then activate)
+                offer.relic.active = False
+                offer.relic.activate(self.game)
+                # Explicit subscription safeguard (idempotent) to guarantee selective modifiers fire
+                self.game.event_listener.subscribe(offer.relic.on_event)
+            except Exception:
+                # Fallback to legacy direct subscription if activate missing
+                self.game.event_listener.subscribe(offer.relic.on_event)
             self.game.event_listener.publish(GameEvent(GameEventType.RELIC_PURCHASED, payload={
                 "name": offer.relic.name,
                 "offer_index": index,
                 "cost": offer.cost,
             }))
+            try:
+                reroll_after = self.game.ability_manager.get('reroll').charges_per_level
+            except Exception:
+                reroll_after = None
             self._close_shop(skipped=False)
         else:
             self.game.event_listener.publish(GameEvent(GameEventType.MESSAGE, payload={
@@ -173,6 +202,14 @@ class RelicManager:
                             parts.append(f"x{getattr(m,'mult',1.0):.2f} {rk}")
                     except Exception:
                         pass
+            except Exception:
+                pass
+            # Ability modifications (+/- charges)
+            try:
+                for ability_id, delta in getattr(relic, 'ability_mods', []):
+                    sign = '+' if delta > 0 else ''
+                    unit = 'charge' if abs(delta) == 1 else 'charges'
+                    parts.append(f"{sign}{delta} {ability_id} {unit}")
             except Exception:
                 pass
             suffix = (" [" + ", ".join(parts) + "]") if parts else ""

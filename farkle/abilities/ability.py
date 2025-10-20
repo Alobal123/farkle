@@ -1,13 +1,14 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
-from typing import Protocol, Callable, Any, Sequence
+from typing import Protocol, Any, Sequence
 from farkle.core.game_event import GameEvent, GameEventType
+from farkle.core.game_object import GameObject
 
 class AbilityContext(Protocol):
     game: Any
 
 @dataclass
-class Ability:
+class Ability(GameObject):
     id: str
     name: str
     charges_per_level: int = 0
@@ -17,6 +18,23 @@ class Ability:
     # Internal runtime state
     charges_used: int = 0
     selecting: bool = False
+
+    def __post_init__(self):
+        # Preserve ability's string id while initializing GameObject which defines its own numeric id
+        _ability_id = self.id
+        GameObject.__init__(self, self.name)
+        # Store numeric GameObject id separately
+        self.object_id = self.id  # type: ignore[attr-defined]
+        # Restore ability string id
+        self.id = _ability_id
+        # Abilities are logic-only; remain active so they receive events once subscribed.
+        # Subscription is coordinated by AbilityManager after event_listener exists.
+        # Debug logging removed after stabilization.
+
+    # --- GameObject required draw override ---
+    def draw(self, surface):  # type: ignore[override]
+        # Abilities do not render directly.
+        return None
 
     def available(self) -> int:
         return max(0, self.charges_per_level - self.charges_used)
@@ -47,6 +65,32 @@ class Ability:
     def reset_level(self):
         self.charges_used = 0
         self.selecting = False
+
+    # --- Event handling ---
+    def on_event(self, event: GameEvent):  # type: ignore[override]
+        # Handle per-ability charge modifications
+        if event.type != GameEventType.ABILITY_CHARGES_ADDED:
+            return
+        ability_id = event.get('ability_id')
+        if ability_id != self.id:
+            return
+        try:
+            delta = int(event.get('delta', 0) or 0)
+        except Exception:
+            return
+        if delta == 0:
+            return
+        before = self.charges_per_level
+        try:
+            if delta > 0:
+                self.charges_per_level += delta
+            else:
+                new_cap = self.charges_per_level + delta
+                if new_cap < self.charges_used:
+                    new_cap = self.charges_used
+                self.charges_per_level = max(0, new_cap)
+        except Exception:
+            return
 
 @dataclass
 class TargetedAbility(Ability):

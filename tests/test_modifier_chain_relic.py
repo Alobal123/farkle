@@ -6,7 +6,7 @@ from farkle.scoring.score_types import Score, ScorePart
 class TestModifierChainRelic(unittest.TestCase):
     def test_relic_modifiers_compose_selectively(self):
         # Create a relic with both a rule-specific multiplier and a flat bonus
-        relic = Relic(name="Hybrid Relic", base_multiplier=None)
+        relic = Relic(name="Hybrid Relic")
         relic.add_modifier(RuleSpecificMultiplier(rule_key="SingleValue:1", mult=2.0))
         relic.add_modifier(FlatRuleBonus(rule_key="SingleValue:5", amount=50))
         # Build a Score with one SingleValue:1 (100) and one SingleValue:5 (50)

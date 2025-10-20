@@ -55,6 +55,23 @@ class ScoreModifierChain:
         if modifier in self._mods:
             self._mods.remove(modifier)
 
+    def remove_by_identity(self, modifier_type: str, data: dict) -> bool:
+        """Remove first modifier matching class name and provided scalar attributes.
+
+        Returns True if removed, False otherwise.
+        """
+        for m in list(self._mods):
+            try:
+                if m.__class__.__name__ != modifier_type:
+                    continue
+                # All key/value pairs in data must match getattr(m, key)
+                if all(getattr(m, k, None) == v for k, v in data.items()):
+                    self._mods.remove(m)
+                    return True
+            except Exception:
+                continue
+        return False
+
     # --- query API ---
     def __iter__(self):  # pragma: no cover - trivial
         return iter(self._mods)

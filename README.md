@@ -1,13 +1,14 @@
 # Farkle (Event‑Driven, Multi‑Goal Variant)
 
-An event-driven, extensible twist on classic Farkle built with Pygame. Multiple goals, selective + global score modifiers, a between-level relic shop, and a sprite-first UI layer make the system highly testable and modular.
+An event-driven, extensible twist on classic Farkle (Python / Pygame). Multiple simultaneous goals, selective per‑rule and global score modifiers, a between‑level relic shop, and a sprite‑first UI layer make the system highly testable and modular.
 
 Key design pillars:
 * Pure event flow for all meaningful state changes (no polling loops for progression).
-* Strict dice + score lifecycle (preview vs pending vs applied are distinct).
-* Composable modifier chain (selective rule edits + global multipliers).
-* Deterministic ordering guarantees enabling precise unit tests (97 currently passing).
-* Sprite-centric rendering and gating (single pass draw; easy layering).
+* Strict dice + score lifecycle (preview vs pending vs applied are distinct phases with tests enforcing order).
+* Composable modifier chain (selective rule edits + global multipliers) applied in deterministic phases.
+* Explicit object lifecycle hooks (activate / deactivate) for modular feature gating (relics, abilities, temporary rules).
+* Deterministic ordering guarantees enabling precise unit tests (≈100 currently passing).
+* Sprite-centric rendering and gating (single pass draw; stable layering for tests and future animation).
 
 ## Quick Start
 ```
@@ -20,11 +21,6 @@ Run tests:
 python -m pytest -q
 ```
 
-Lint (Ruff):
-```
-pip install ruff
-ruff check .
-```
 
 ## Core Gameplay Loop
 1. Roll dice (ROLL) – scoring candidates are highlighted.
@@ -43,7 +39,7 @@ All state transitions produce `GameEvent` instances. Selected high-level events:
 |----------|--------|
 | Turn | `TURN_START`, `TURN_ROLL`, `TURN_LOCK_ADDED`, `TURN_END`, `TURN_BANKED`, `TURN_FARKLE` |
 | Dice | `PRE_ROLL`, `DIE_ROLLED`, `POST_ROLL`, `DIE_HELD`, `DIE_SELECTED`, `DIE_DESELECTED` |
-| Scoring | `LOCK`, `SCORE_PRE_MODIFIERS`, `SCORE_APPLY_REQUEST`, `SCORE_APPLIED` |
+| Scoring | `LOCK`, `SCORE_APPLY_REQUEST`, `SCORE_APPLIED`, `SCORE_PREVIEW_REQUEST`, `SCORE_PREVIEW_COMPUTED`, `SCORE_MODIFIER_ADDED`, `SCORE_MODIFIER_REMOVED` |
 | Goals | `GOAL_PROGRESS`, `GOAL_FULFILLED` |
 | Level | `LEVEL_ADVANCE_STARTED`, `LEVEL_GENERATED`, `LEVEL_ADVANCE_FINISHED`, `LEVEL_COMPLETE`, `LEVEL_FAILED` |
 | Shop | `SHOP_OPENED`, `RELIC_OFFERED`, `RELIC_PURCHASED`, `SHOP_CLOSED`, `REQUEST_BUY_RELIC`, `REQUEST_SKIP_SHOP` |
@@ -51,7 +47,7 @@ All state transitions produce `GameEvent` instances. Selected high-level events:
 
 Ordering guarantees (samples):
 * Per roll: `PRE_ROLL` -> `DIE_ROLLED`* -> `POST_ROLL` -> `TURN_ROLL`.
-* Banking path: `BANK` -> (`SCORE_APPLY_REQUEST` -> `SCORE_PRE_MODIFIERS` -> `SCORE_APPLIED`)+ -> `TURN_END(reason=banked)` -> (auto `TURN_START` of next turn if level incomplete).
+* Banking path: `BANK` -> (`SCORE_APPLY_REQUEST` -> `SCORE_APPLIED`)+ -> `TURN_END(reason=banked)` -> (auto `TURN_START` of next turn if level incomplete).
 * Level advancement: `TURN_END(reason=banked)` -> `LEVEL_COMPLETE` -> `LEVEL_ADVANCE_STARTED` -> `LEVEL_GENERATED` -> `TURN_START` -> `LEVEL_ADVANCE_FINISHED` -> (Shop events if any).
 * Shop never emits a second `TURN_START`; gameplay resumes in the already-open turn.
 
@@ -61,9 +57,11 @@ Score application distinguishes raw locked points from selectively adjusted part
 Phases:
 1. Pending accumulation (`LOCK`): goals track `pending_raw` but do not mutate `remaining`.
 2. Banking triggers each pending goal to emit `SCORE_APPLY_REQUEST`.
-3. Immediate hook `SCORE_PRE_MODIFIERS` allows gods/relics to mutate per-part values (selective modifiers).
-4. Player aggregates effective part totals, applies chained global multipliers (player base multiplier + relic multipliers).
-5. `SCORE_APPLIED` finalizes adjustment; goal reduces `remaining` and emits progress/fulfillment events.
+3. ScoringManager builds effective part totals from its modifier chain (selective rule modifiers only; global multipliers removed).
+4. `SCORE_APPLIED` finalizes adjustment; goal reduces `remaining` and emits progress/fulfillment events.
+
+Goal Pending Projection:
+`Goal.projected_pending()` queries `ScoringManager.project_goal_pending(goal)` to show adjusted pending points (e.g., in tooltips or progress bars) without emitting preview events. This replaced the deprecated `Game.compute_goal_pending_final` wrapper, further centralizing scoring concerns.
 
 Serialization fields (excerpt): `parts`, `detailed_parts`, `total_raw`, `total_effective`, `final_global_adjusted`, `multiplier`.
 
@@ -107,32 +105,61 @@ Benefits achieved:
 ## Relic Shop & Progression
 After each level advancement finishes (`LEVEL_ADVANCE_FINISHED`), the shop may open (`SHOP_OPENED`) offering one relic (currently a +10% multiplier) with scaling gold cost. Player chooses purchase (`REQUEST_BUY_RELIC`) or skip (`REQUEST_SKIP_SHOP`). On resolution (`SHOP_CLOSED`), normal turn actions resume.
 
-Combined multiplier example:
-Base 1.00 + (completed_levels_after_first * 0.05) then multiplied by each relic’s 1.10. Example: entering level 6 with four post-first completions (base 1.20) and two relics: `1.20 * 1.10 * 1.10 = 1.452` -> integer truncate -> 145 on raw 100.
+Relics focus on selective per‑rule modifications (e.g., +50 to all `SingleValue:5` parts, +100 to `SingleValue:1`, or 1.5x to families like `ThreeOfAKind:*`). Global multipliers were removed in favor of transparent, per‑part adjustments applied centrally by the `ScoringManager` modifier chain. Tests assert modified part values to guarantee determinism.
 
-Future expansion: multiple offers, rarity tiers, non-multiplicative modifiers, reroll shop.
+Future expansion ideas: multiple simultaneous offers, rarity tiers, rerolling the shop, time‑limited / per‑turn relic activation, stacking diminishing returns.
 
-## File & Architecture Overview
-| File | Role |
-|------|------|
-| `game.py` | Orchestrates input, game state transitions, high-level event publication. |
-| `dice_container.py` | Dice lifecycle + roll/hold events with ordering guarantees. |
-| `goal.py` | Goal state, pending tracking, progress/fulfillment emissions. |
-| `player.py` | Score application coordination + gold management. |
-| `relic_manager.py` | Shop state & relic offer lifecycle. |
-| `relic.py` | Relic definition + selective modifier hook handling. |
-| `score_modifiers.py` | Modifier chain abstractions (global multiplier etc.). |
-| `scoring.py` | Scoring pattern definitions. |
-| `level.py` | Level config + advancement sequencing. |
-| `gods_manager.py` | Ability/god selective modifier integration. |
-| `actions.py` | Button action helpers (request events). |
-| `renderer.py` | Layout + unified sprite pass. |
-| `ui_objects.py` | Logical UI button layer (state & dynamic label). |
-| `overlay_sprites.py`, `hud_sprites.py`, etc. | Sprite subclasses + sync logic. |
-| `event_listener.py` | Pub/sub hub (immediate + queued dispatch). |
-| `game_event.py` | Event enum & dataclass payload wrapper. |
-| `settings.py` | Tunable constants (timings, colors, delays). |
-| `tests/` | Comprehensive unit tests (95 passing). |
+### Relic Activation Lifecycle
+Relics subclass `GameObject` and leverage its lifecycle:
+1. Offered relics are constructed but may be (re)set to `active = False` before activation.
+2. On purchase the manager forces `relic.active = False` then calls `relic.activate(game)` ensuring a fresh activation pass and event subscription.
+3. On activation each relic emits a `SCORE_MODIFIER_ADDED` event per modifier it contributes. The `ScoringManager` listens and incrementally builds its modifier chain (no bulk scans on `RELIC_PURCHASED`).
+4. On deactivation, relics emit `SCORE_MODIFIER_REMOVED` events allowing the manager to prune stale entries and restore original scoring behavior.
+
+Relic string representations for the UI are assembled via `RelicManager.active_relic_lines()` producing human readable summaries (e.g., `Charm of Fives [+50 SingleValue:5]`).
+
+## Architecture Overview
+
+The codebase has been reorganized into domain‑centric packages under `farkle/`:
+
+```
+farkle/
+	core/        foundational engine pieces (events, game object base, state machine, actions)
+	dice/        dice + container logic and roll sequencing
+	goals/       goal definitions, progress tracking
+	gods/        god / ability management (selective modifiers similar to relics)
+	level/       level configuration & advancement orchestration
+	players/     player entity (gold economy & HUD only; scoring application centralized in ScoringManager)
+	relics/      relic + relic manager (shop lifecycle, selective modifiers)
+	scoring/     scoring patterns, rule keys, modifier implementations
+	ui/          sprites, overlays, hud/panels, tooltip plumbing
+	settings.py  global tunables (timers, colors, layout constants)
+	game.py      high-level composition root (wires subsystems, bootstrap)
+```
+
+### Core Layer (`farkle/core`)
+* `game_object.py` – Base class introducing explicit lifecycle: `activate(game)`, `deactivate(game)`, `on_activate(game)`, `on_event(event)`, `on_deactivate(game)`, plus `emit()` helper and visibility/interactivity predicates (legacy support for non‑sprite objects in tests).
+* `event_listener.py` – Pub/sub hub supporting immediate vs queued publication. Ordering determinism is central; tests rely on it for scoring phases.
+* `game_event.py` – Event enumeration + payload convenience wrapper.
+* `game_state_manager.py` & `game_state_enum.py` – Simple state machine gating UI / interaction.
+* `actions.py` – Input action helpers emitting request events.
+
+### Lifecycle Hooks
+Subclass responsibilities when extending `GameObject`:
+* Override `on_activate(game)` for one‑time setup (e.g., subscribing extra callbacks, seeding data). Called exactly once per inactive→active transition.
+* Override `on_event(event)` for reactive behavior. It will only run while `active` is True and the object remains subscribed.
+* Override `on_deactivate(game)` for teardown (unregister timers, release resources). Called exactly once per active→inactive transition.
+* Use `activate(game, events=None, callback=None)` to (re)wire the object. Passing `events` restricts subscription, and `callback` allows attaching an extra function tracked for auto‑unsubscribe.
+* Use `deactivate(game)` to atomically flip `active=False` and remove all callbacks registered via `activate()`.
+* Use `emit(game, event_type, payload)` to publish events sourced from the object.
+
+Hooks swallow exceptions defensively (tests favor stability over failing fast in hook code); consider adding internal logging if richer diagnostics become important.
+
+### Selective Modifier Model
+Selective (per‑rule) modifiers are owned centrally by `ScoringManager` and applied during preview and finalization. Implementations (e.g., `FlatRuleBonus`, `RuleSpecificMultiplier`) live in `scoring/score_modifiers.py`. The incremental event pair (`SCORE_MODIFIER_ADDED` / `SCORE_MODIFIER_REMOVED`) lets the manager maintain an authoritative chain. Modifiers never directly mutate player/global state outside this controlled phase.
+
+### Testing Philosophy
+Tests assert event ordering, scoring adjustments, UI visibility, and lifecycle hook semantics. Focus tests exist for: dice roll ordering, locking invariants, modifier application, relic shop gating, tooltip content, and lifecycle (single invocation of `on_activate` / `on_deactivate`).
 
 ## Development Workflow
 * Run: `python demo.py`
@@ -158,6 +185,3 @@ Future expansion: multiple offers, rarity tiers, non-multiplicative modifiers, r
 
 ## License
 MIT (if added). Otherwise all rights reserved by repository owner until explicit license file is present.
-
----
-This README reflects the current sprite-based, fully event-driven architecture (Farkle banner removed; Next Turn button now offers optional rescue forfeit) and the active test/lint tooling.
