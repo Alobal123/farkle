@@ -1,8 +1,8 @@
 import unittest, pygame
-from game import Game
-from settings import WIDTH, HEIGHT
-from tooltip import resolve_hover
-from game_event import GameEvent, GameEventType
+from farkle.game import Game
+from farkle.ui.settings import WIDTH, HEIGHT
+from farkle.ui.tooltip import resolve_hover
+from farkle.core.game_event import GameEvent, GameEventType
 
 class TooltipGoalHoverTests(unittest.TestCase):
     @classmethod

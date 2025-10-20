@@ -1,6 +1,6 @@
 import pygame, unittest
-from game import Game
-from game_event import GameEvent, GameEventType
+from farkle.game import Game
+from farkle.core.game_event import GameEvent, GameEventType
 
 class Collector:
     def __init__(self):

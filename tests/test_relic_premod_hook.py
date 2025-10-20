@@ -1,9 +1,9 @@
 import pygame, unittest
-from game import Game
-from settings import WIDTH, HEIGHT
-from game_event import GameEvent, GameEventType
-from relic import Relic
-from score_types import ScorePart
+from farkle.game import Game
+from farkle.ui.settings import WIDTH, HEIGHT
+from farkle.core.game_event import GameEvent, GameEventType
+from farkle.relics.relic import Relic
+from farkle.scoring.score_types import ScorePart
 
 class HookRelic(Relic):
     def on_event(self, event):  # type: ignore[override]

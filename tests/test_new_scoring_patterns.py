@@ -1,5 +1,5 @@
 import pytest
-from scoring import ScoringRules, ThreeOfAKind, FourOfAKind, FiveOfAKind, SixOfAKind, SingleValue, Straight1to5, Straight2to6, Straight6
+from farkle.scoring.scoring import ScoringRules, ThreeOfAKind, FourOfAKind, FiveOfAKind, SixOfAKind, SingleValue, Straight1to5, Straight2to6, Straight6
 
 
 def build_rules():

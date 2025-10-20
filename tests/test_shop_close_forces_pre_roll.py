@@ -1,7 +1,7 @@
 import unittest, pygame
-from game import Game
-from settings import WIDTH, HEIGHT
-from game_event import GameEvent, GameEventType
+from farkle.game import Game
+from farkle.ui.settings import WIDTH, HEIGHT
+from farkle.core.game_event import GameEvent, GameEventType
 
 class TestShopCloseForcesPreRoll(unittest.TestCase):
     @classmethod

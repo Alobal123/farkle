@@ -1,7 +1,7 @@
 import unittest, pygame
-from game import Game
-from settings import WIDTH, HEIGHT
-from game_event import GameEventType
+from farkle.game import Game
+from farkle.ui.settings import WIDTH, HEIGHT
+from farkle.core.game_event import GameEventType
 
 class EventCollector:
     def __init__(self):
@@ -43,7 +43,7 @@ class TargetSelectionCancelTests(unittest.TestCase):
         # Simulate cancellation (ESC) by clearing selecting flag and exiting selecting state
         sel.selecting = False
         self.game.state_manager.exit_selecting_targets()  # should restore to FARKLE
-        from game_event import GameEvent, GameEventType
+        from farkle.core.game_event import GameEvent, GameEventType
         self.game.event_listener.publish(GameEvent(GameEventType.TARGET_SELECTION_FINISHED, payload={"ability": sel.id, "reason": "cancelled"}))
         types = [e.type for e in self.collector.events]
         self.assertIn(GameEventType.TARGET_SELECTION_FINISHED, types)
@@ -60,7 +60,7 @@ class TargetSelectionCancelTests(unittest.TestCase):
         # Directly perform cancellation logic (since we don't post real pygame events in test)
         sel.selecting = False
         self.game.state_manager.exit_selecting_targets()
-        from game_event import GameEvent, GameEventType
+        from farkle.core.game_event import GameEvent, GameEventType
         self.game.event_listener.publish(GameEvent(GameEventType.TARGET_SELECTION_FINISHED, payload={"ability": sel.id, "reason": "cancelled"}))
         self.assertEqual(self.game.state_manager.get_state().name, 'ROLLING')
         types = [e.type for e in self.collector.events]

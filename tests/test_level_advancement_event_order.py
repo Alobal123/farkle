@@ -1,7 +1,7 @@
 import pygame
-from game import Game
-from level import Level
-from game_event import GameEvent, GameEventType
+from farkle.game import Game
+from farkle.level.level import Level
+from farkle.core.game_event import GameEvent, GameEventType
 
 # Helper to capture events
 class Collector:

@@ -1,7 +1,7 @@
 """Shared test utilities for the Farkle project."""
 from __future__ import annotations
 from typing import List
-from game_event import GameEvent, GameEventType
+from farkle.core.game_event import GameEvent, GameEventType
 
 class EventCollector:
     """Simple event sink used in tests to capture published GameEvents.

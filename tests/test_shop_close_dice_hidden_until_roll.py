@@ -1,7 +1,7 @@
 import unittest, pygame
-from game import Game
-from settings import WIDTH, HEIGHT
-from game_event import GameEvent, GameEventType
+from farkle.game import Game
+from farkle.ui.settings import WIDTH, HEIGHT
+from farkle.core.game_event import GameEvent, GameEventType
 
 class TestShopCloseDiceHiddenUntilRoll(unittest.TestCase):
     @classmethod
@@ -28,7 +28,7 @@ class TestShopCloseDiceHiddenUntilRoll(unittest.TestCase):
     def test_dice_not_clickable_when_hidden(self):
         # Attempt to click where a die would be; ensure no selection happens
         any_die = self.game.dice[0]
-        from settings import DICE_SIZE
+        from farkle.ui.settings import DICE_SIZE
         mx, my = any_die.x + DICE_SIZE//2, any_die.y + DICE_SIZE//2
         before_selected = any_die.selected
         consumed = self.game._handle_die_click(mx, my, button=1)
@@ -45,7 +45,7 @@ class TestShopCloseDiceHiddenUntilRoll(unittest.TestCase):
         self.assertIsNotNone(scoring_die, 'After first roll at least one die should be scoring eligible')
         if scoring_die is None:
             return  # safety for static analyzer; assertion already fails test
-        from settings import DICE_SIZE
+        from farkle.ui.settings import DICE_SIZE
         mx, my = scoring_die.x + DICE_SIZE//2, scoring_die.y + DICE_SIZE//2
         consumed = self.game._handle_die_click(mx, my, button=1)
         self.assertTrue(consumed, 'Click on a scoring die should be consumed after dice become visible')

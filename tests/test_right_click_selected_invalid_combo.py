@@ -1,7 +1,7 @@
 import unittest, pygame
-from game import Game
-from settings import WIDTH, HEIGHT
-from game_event import GameEventType
+from farkle.game import Game
+from farkle.ui.settings import WIDTH, HEIGHT
+from farkle.core.game_event import GameEventType
 from tests.test_utils import EventCollector
 
 class RightClickSelectedInvalidComboTests(unittest.TestCase):

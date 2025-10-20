@@ -1,7 +1,7 @@
 import unittest, pygame
-from game import Game
-from settings import WIDTH, HEIGHT
-from tooltip import resolve_hover, friendly_rule_label
+from farkle.game import Game
+from farkle.ui.settings import WIDTH, HEIGHT
+from farkle.ui.tooltip import resolve_hover, friendly_rule_label
 
 class FriendlyRuleLabelTooltipTests(unittest.TestCase):
     @classmethod

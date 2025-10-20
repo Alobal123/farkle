@@ -1,7 +1,7 @@
 import unittest, pygame
-from game import Game
-from settings import WIDTH, HEIGHT
-from game_event import GameEventType
+from farkle.game import Game
+from farkle.ui.settings import WIDTH, HEIGHT
+from farkle.core.game_event import GameEventType
 
 class TestFarkleUI(unittest.TestCase):
     @classmethod
@@ -19,7 +19,7 @@ class TestFarkleUI(unittest.TestCase):
     def test_farkle_banner_and_buttons(self):
         # Transition to FARKLE and ensure sprites reflect visibility rules.
         self.game.state_manager.transition_to_farkle()
-        from game_state_enum import GameState
+        from farkle.core.game_state_enum import GameState
         self.assertEqual(self.game.state_manager.get_state(), GameState.FARKLE)
         # Trigger sprite update/draw cycle.
         self.game.renderer.draw()

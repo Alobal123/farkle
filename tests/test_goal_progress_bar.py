@@ -1,6 +1,6 @@
 import unittest, pygame
-from game import Game
-from settings import WIDTH, HEIGHT
+from farkle.game import Game
+from farkle.ui.settings import WIDTH, HEIGHT
 from tests.test_utils import EventCollector
 
 class GoalProgressBarTests(unittest.TestCase):

@@ -1,9 +1,9 @@
 import unittest, pygame
-from game import Game
-from settings import WIDTH, HEIGHT
-from game_object import GameObject
-from game_event import GameEventType
-from actions import handle_bank
+from farkle.game import Game
+from farkle.ui.settings import WIDTH, HEIGHT
+from farkle.core.game_object import GameObject
+from farkle.core.game_event import GameEventType
+from farkle.core.actions import handle_bank
 
 class Collector(GameObject):
     def __init__(self):

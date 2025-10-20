@@ -1,7 +1,7 @@
 import unittest, pygame
-from game import Game
-from settings import WIDTH, HEIGHT, TOOLTIP_BUTTON_DELAY_MS, TOOLTIP_DELAY_MS
-from tooltip import resolve_hover
+from farkle.game import Game
+from farkle.ui.settings import WIDTH, HEIGHT, TOOLTIP_BUTTON_DELAY_MS, TOOLTIP_DELAY_MS
+from farkle.ui.tooltip import resolve_hover
 
 class TooltipButtonDelayTests(unittest.TestCase):
     @classmethod

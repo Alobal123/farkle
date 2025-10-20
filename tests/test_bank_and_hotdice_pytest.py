@@ -4,9 +4,9 @@ Pytest could not be installed in the current runtime environment; these tests
 provide equivalent coverage using the built-in unittest framework.
 """
 import unittest, pygame
-from game import Game
-from settings import WIDTH, HEIGHT
-from actions import handle_bank, handle_roll
+from farkle.game import Game
+from farkle.ui.settings import WIDTH, HEIGHT
+from farkle.core.actions import handle_bank, handle_roll
 
 class BankingAndHotDiceTests(unittest.TestCase):
     @classmethod

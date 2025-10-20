@@ -1,7 +1,7 @@
 import unittest, pygame
-from game import Game
-from settings import WIDTH, HEIGHT
-from game_event import GameEvent, GameEventType
+from farkle.game import Game
+from farkle.ui.settings import WIDTH, HEIGHT
+from farkle.core.game_event import GameEvent, GameEventType
 
 class FiveFlatBonusRelicTests(unittest.TestCase):
     @classmethod
@@ -18,7 +18,7 @@ class FiveFlatBonusRelicTests(unittest.TestCase):
         # Give player enough gold to buy (30)
         self.game.player.gold = 30
         # Simulate end of level 1 to open shop (level_index starts at 1 so emulate advance finish)
-        from game_event import GameEventType as GET, GameEvent as GE
+        from farkle.core.game_event import GameEventType as GET, GameEvent as GE
         self.game.event_listener.publish(GE(GET.LEVEL_ADVANCE_FINISHED, payload={"level_index":1}))
         # Ensure offer is the Charm of Fives
         self.assertTrue(self.game.relic_manager.current_offer)

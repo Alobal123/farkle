@@ -1,7 +1,7 @@
 import unittest, pygame
-from game import Game
-from settings import WIDTH, HEIGHT
-from game_state_enum import GameState
+from farkle.game import Game
+from farkle.ui.settings import WIDTH, HEIGHT
+from farkle.core.game_state_enum import GameState
 
 class GodSwitchingGateTests(unittest.TestCase):
     @classmethod
@@ -21,7 +21,7 @@ class GodSwitchingGateTests(unittest.TestCase):
         # Ensure we have at least two gods to switch between
         gm = self.game.gods  # attribute is 'gods' in Game
         if len(gm.worshipped) < 2:
-            from gods_manager import God
+            from farkle.gods.gods_manager import God
             extra = God("TestGod")
             gm.worshipped.append(extra)
             # God draws rely on god.game for font access; assignment may trigger static analysis warning.

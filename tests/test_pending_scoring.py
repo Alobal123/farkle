@@ -1,7 +1,7 @@
 import unittest, pygame
-from game import Game
-from settings import WIDTH, HEIGHT
-from game_event import GameEvent, GameEventType
+from farkle.game import Game
+from farkle.ui.settings import WIDTH, HEIGHT
+from farkle.core.game_event import GameEvent, GameEventType
 
 class PendingScoringTests(unittest.TestCase):
     @classmethod
@@ -43,7 +43,7 @@ class PendingScoringTests(unittest.TestCase):
         # Ensure at least two goals; if only one, add a temporary second by adjusting level state.
         if len(self.game.level_state.goals) == 1:
             # Extend manually (test-only) by appending a new Goal clone
-            from goal import Goal
+            from farkle.goals.goal import Goal
             new_goal = Goal(150, name="Temp", mandatory=False, reward_gold=0)
             self.game.level_state.goals.append(new_goal)
             # Also wire into event system

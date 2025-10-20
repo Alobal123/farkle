@@ -1,8 +1,8 @@
 import pygame
 import pytest
-from game import Game
-from level import Level
-from game_event import GameEvent, GameEventType
+from farkle.game import Game
+from farkle.level.level import Level
+from farkle.core.game_event import GameEvent, GameEventType
 
 def complete_level_via_events(game: Game):
     # Simulate fulfilling all mandatory goals by emitting GOAL_FULFILLED for each mandatory goal name.

@@ -1,7 +1,7 @@
 import unittest
-from relic import Relic
-from score_modifiers import RuleSpecificMultiplier, FlatRuleBonus
-from score_types import Score, ScorePart
+from farkle.relics.relic import Relic
+from farkle.scoring.score_modifiers import RuleSpecificMultiplier, FlatRuleBonus
+from farkle.scoring.score_types import Score, ScorePart
 
 class TestModifierChainRelic(unittest.TestCase):
     def test_relic_modifiers_compose_selectively(self):

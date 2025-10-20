@@ -1,7 +1,7 @@
 import unittest, pygame
-from game import Game
-from screens.game_screen import GameScreen
-from settings import WIDTH, HEIGHT, TOOLTIP_DELAY_MS
+from farkle.game import Game
+from farkle.ui.screens.game_screen import GameScreen
+from farkle.ui.settings import WIDTH, HEIGHT, TOOLTIP_DELAY_MS
 
 class TooltipCachedPersistenceTests(unittest.TestCase):
     @classmethod

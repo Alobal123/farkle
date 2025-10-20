@@ -1,8 +1,8 @@
 """Demo entry point for the Farkle game."""
 import pygame
-from game import Game
-from screens.app import App
-from settings import WIDTH, HEIGHT
+from farkle.game import Game
+from farkle.ui.screens.app import App
+from farkle.ui.settings import WIDTH, HEIGHT
 
 def main():
     pygame.init()

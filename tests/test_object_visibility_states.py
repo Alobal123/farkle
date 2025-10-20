@@ -1,8 +1,8 @@
 import unittest, pygame
-from game import Game
-from settings import WIDTH, HEIGHT
-from game_state_enum import GameState
-from game_object import GameObject
+from farkle.game import Game
+from farkle.ui.settings import WIDTH, HEIGHT
+from farkle.core.game_state_enum import GameState
+from farkle.core.game_object import GameObject
 
 class DummyObj(GameObject):
     def __init__(self):

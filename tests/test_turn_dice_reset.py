@@ -1,7 +1,7 @@
 import pygame
 import pytest
-from game import Game
-from level import Level
+from farkle.game import Game
+from farkle.level.level import Level
 
 @pytest.mark.parametrize("bank_path", [True])
 def test_dice_reset_between_turns(bank_path):
@@ -13,7 +13,7 @@ def test_dice_reset_between_turns(bank_path):
 
     # First roll
     assert g.state_manager.get_state().name == 'PRE_ROLL'
-    from actions import handle_roll, handle_lock, handle_bank, handle_next_turn
+    from farkle.core.actions import handle_roll, handle_lock, handle_bank, handle_next_turn
     handle_roll(g)
     # Try to create a scoring lock path then bank; perform up to two roll cycles
     for _ in range(2):

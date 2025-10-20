@@ -1,8 +1,8 @@
 import unittest, pygame
-from game import Game
-from settings import WIDTH, HEIGHT
-from game_event import GameEvent, GameEventType
-from score_modifiers import RuleSpecificMultiplier
+from farkle.game import Game
+from farkle.ui.settings import WIDTH, HEIGHT
+from farkle.core.game_event import GameEvent, GameEventType
+from farkle.scoring.score_modifiers import RuleSpecificMultiplier
 
 class PreviewEventScoringTests(unittest.TestCase):
     @classmethod
@@ -17,7 +17,7 @@ class PreviewEventScoringTests(unittest.TestCase):
     def setUp(self):
         self.game = Game(self.screen, self.font, self.clock)
         # Add rule specific doubling for SingleValue:5
-        from relic import Relic
+        from farkle.relics.relic import Relic
         relic = Relic(name="Preview Sigil")
         relic.add_modifier(RuleSpecificMultiplier(rule_key="SingleValue:5", mult=2.0))
         self.game.relic_manager.active_relics.append(relic)

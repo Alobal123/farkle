@@ -1,8 +1,8 @@
 import unittest, pygame
-from game import Game
-from settings import WIDTH, HEIGHT
-from score_modifiers import RuleSpecificMultiplier, FlatRuleBonus
-from game_event import GameEventType
+from farkle.game import Game
+from farkle.ui.settings import WIDTH, HEIGHT
+from farkle.scoring.score_modifiers import RuleSpecificMultiplier, FlatRuleBonus
+from farkle.core.game_event import GameEventType
 
 class ScoreModifierTests(unittest.TestCase):
     @classmethod
@@ -25,7 +25,7 @@ class ScoreModifierTests(unittest.TestCase):
 
     def test_rule_specific_multiplier_applies(self):
         # Double only SingleValue:1 using a rule-specific multiplier on a temporary relic
-        from relic import Relic
+        from farkle.relics.relic import Relic
         relic = Relic(name="Test Mult")
         relic.add_modifier(RuleSpecificMultiplier(rule_key="SingleValue:1", mult=2.0))
         self.game.relic_manager.active_relics.append(relic)

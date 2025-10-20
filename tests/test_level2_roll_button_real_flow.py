@@ -1,8 +1,8 @@
 import pygame, pytest
-from game import Game
-from level import Level
-from actions import handle_roll, handle_lock, handle_bank
-from game_event import GameEvent, GameEventType
+from farkle.game import Game
+from farkle.level.level import Level
+from farkle.core.actions import handle_roll, handle_lock, handle_bank
+from farkle.core.game_event import GameEvent, GameEventType
 
 def complete_level_legit(game: Game):
     # Play turns until mandatory goals fulfilled by brute force (safety cap)

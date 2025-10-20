@@ -1,7 +1,7 @@
 import unittest
 import pygame
-from game import Game
-from settings import WIDTH, HEIGHT
+from farkle.game import Game
+from farkle.ui.settings import WIDTH, HEIGHT
 
 class GameLogicTests(unittest.TestCase):
     @classmethod
