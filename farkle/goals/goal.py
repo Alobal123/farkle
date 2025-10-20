@@ -158,9 +158,15 @@ class Goal(GameObject):
                 self.pending_raw = 0
                 self._pending_score = None
         elif et == GameEventType.FARKLE:
-            # Lose pending points for the turn
-            self.pending_raw = 0
-            self._pending_score = None
+            # No longer clears pending immediately. Pending points are retained until TURN_END
+            # with a farkle-related reason. This supports future in-farkle recovery mechanics.
+            pass
+        elif et == GameEventType.TURN_END:
+            # If a farkle is being finalized (player forfeits or rescue failed), ensure pending cleared.
+            reason = event.get("reason")
+            if reason in ("farkle", "farkle_forfeit"):
+                self.pending_raw = 0
+                self._pending_score = None
         # Other events (progress, fulfilled) currently ignored for animation hooks.
 
     def draw(self, surface):  # type: ignore[override]

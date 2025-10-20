@@ -84,15 +84,19 @@ class PendingScoringTests(unittest.TestCase):
         self.assertEqual(pre0 - g0.remaining, 100)
         self.assertEqual(pre1 - g1.remaining, 100)
 
-    def test_farkle_clears_pending(self):
+    def test_farkle_does_not_clear_pending_until_turn_end(self):
         goal = self.game.level_state.goals[0]
         # Set up one lock
         self.prepare_scoring_die(0, 1)
         self.assertTrue(self.game._auto_lock_selection("Locked"))
         self.assertGreater(goal.pending_raw, 0)
-        # Simulate a farkle: publish FARKLE event directly
+        before = goal.pending_raw
+        # Simulate a farkle: publish FARKLE event directly (pending should persist)
         self.game.event_listener.publish(GameEvent(GameEventType.FARKLE, payload={}))
-        self.assertEqual(goal.pending_raw, 0, "Pending should clear on FARKLE")
+        self.assertEqual(goal.pending_raw, before, "Pending should persist after FARKLE event until turn actually ends")
+        # Simulate forfeiting the farkle (player moves on) -> TURN_END(farkle)
+        self.game.event_listener.publish(GameEvent(GameEventType.TURN_END, payload={"reason":"farkle"}))
+        self.assertEqual(goal.pending_raw, 0, "Pending should clear on farkle TURN_END")
 
 if __name__ == '__main__':
     unittest.main()

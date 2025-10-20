@@ -141,20 +141,17 @@ def resolve_hover(game, pos: tuple[int,int]) -> Optional[Dict]:
                 return {"title": f"{goal.name} ({tag})", "lines": lines, "target": rect.copy(), "id": f"goal_{idx_goal}"}
     except Exception:
         pass
-    # 3. Dice (only during rolling/selecting states)
+    # 3. Dice (only during rolling/selecting states). Do NOT early-return None if die not eligible; allow buttons below to resolve.
     try:
         if game.state_manager.get_state() in (game.state_manager.state.ROLLING, game.state_manager.state.FARKLE, game.state_manager.state.SELECTING_TARGETS):
             for d in game.dice:
                 if d.rect().collidepoint(mx,my):
-                    # Show tooltip ONLY if die is selected (part of potential combo) or held (locked combo)
                     if not (d.selected or d.held):
-                        return None
+                        break  # uninteractable die under cursor; continue to other UI elements
                     lines: List[str] = []
-                    # If held and has combo metadata, show locked combo info
                     if d.held and getattr(d, 'combo_rule_key', None) and getattr(d, 'combo_points', None):
                         fr = friendly_rule_label(getattr(d,'combo_rule_key'))
                         lines.append(f"Locked: {fr} = {d.combo_points}")
-                    # If currently selected and selection qualifies as a single combo, preview its score
                     elif d.selected and game.selection_is_single_combo() and game.any_scoring_selection():
                         try:
                             raw, _, = game.calculate_score_from_dice()
@@ -179,7 +176,18 @@ def resolve_hover(game, pos: tuple[int,int]) -> Optional[Dict]:
                 }
                 lines = desc_map.get(btn.name, ["Button action."])
                 # Provide element-specific delay override for buttons
-                return {"title": btn.label, "lines": lines, "delay_ms": getattr(__import__('settings'), 'TOOLTIP_BUTTON_DELAY_MS', 900), "target": btn.rect.copy(), "id": f"btn_{btn.name}"}
+                # Import button delay from new consolidated ui.settings (fallback to 900ms)
+                delay_override = 900
+                try:
+                    from farkle.ui.settings import TOOLTIP_BUTTON_DELAY_MS as _BTN_DELAY
+                    delay_override = int(_BTN_DELAY)
+                except Exception:
+                    try:
+                        from farkle.settings import TOOLTIP_BUTTON_DELAY_MS as _OLD_BTN_DELAY
+                        delay_override = int(_OLD_BTN_DELAY)
+                    except Exception:
+                        pass
+                return {"title": btn.label, "lines": lines, "delay_ms": delay_override, "target": btn.rect.copy(), "id": f"btn_{btn.name}"}
     except Exception:
         pass
     # 5. Relic panel (active relics list)
