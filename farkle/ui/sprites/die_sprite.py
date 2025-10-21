@@ -65,14 +65,30 @@ class DieSprite(BaseSprite):
         if game:
             try:
                 abm = getattr(game, 'ability_manager', None)
-                if abm and abm.selecting_ability() and abm.selecting_ability().id == 'reroll' and not d.held:
-                    # Non-held dice get a translucent green overlay.
-                    base = self.image
-                    highlighted = base.copy()
-                    overlay = pygame.Surface(base.get_size(), pygame.SRCALPHA)
-                    overlay.fill((60,220,140,90))
-                    highlighted.blit(overlay, (0,0))
-                    self.image = highlighted
+                sel_ab = abm.selecting_ability() if abm else None
+                if sel_ab and sel_ab.id == 'reroll' and not d.held:
+                    # Multi-target selection visuals:
+                    # - Unselected selectable dice: green outline only
+                    # - Selected dice: green fill overlay
+                    base = self.image.copy()
+                    import pygame as _pg
+                    die_index = None
+                    try:
+                        die_index = d.game.dice.index(d)
+                    except Exception:
+                        pass
+                    collected = getattr(sel_ab, 'collected_targets', []) if sel_ab else []
+                    if die_index is not None and die_index in collected:
+                        overlay = _pg.Surface(base.get_size(), _pg.SRCALPHA)
+                        overlay.fill((60,220,140,100))
+                        base.blit(overlay, (0,0))
+                        self.image = base
+                    else:
+                        # Draw only circumference highlight
+                        ring = _pg.Surface(base.get_size(), _pg.SRCALPHA)
+                        _pg.draw.rect(ring, (60,220,140), ring.get_rect(), 4, border_radius=8)
+                        base.blit(ring, (0,0))
+                        self.image = base
             except Exception:
                 pass
         # Mark dirty so a future DirtyLayeredUpdates would re-blit

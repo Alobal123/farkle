@@ -53,8 +53,9 @@ class FarkleRescueRerollTests(unittest.TestCase):
         random.randint = lambda a,b: 1
         try:
             target_index = next(i for i,d in enumerate(self.game.dice) if not d.held)
-            # Use ability manager targeting to ensure selecting state exits properly
+            # Select die then finalize selection (right-click analog)
             self.assertTrue(self.game.ability_manager.attempt_target('die', target_index))
+            self.assertTrue(self.game.ability_manager.finalize_selection())
         finally:
             random.randint = original_randint
         # 6. After reroll, selecting state should have exited and game returned to ROLLING via rescue.

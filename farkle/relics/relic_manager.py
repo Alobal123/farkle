@@ -62,13 +62,10 @@ class RelicManager:
         Pool:
           * Flat +50 SingleValue:5
           * Flat +100 SingleValue:1
-          * x1.5 multiplier to ALL ThreeOfAKind parts
-          * x1.5 multiplier to ALL FourOfAKind parts
-          * x1.5 multiplier to ALL Straights (full + partial)
         Costs chosen for rough balance; can be tweaked later.
         """
         from farkle.scoring.score_modifiers import RuleSpecificMultiplier
-        from farkle.relics.relic import ExtraRerollRelic
+        from farkle.relics.relic import ExtraRerollRelic, MultiRerollRelic
         pool: List[RelicOffer] = []
 
         # Flat singles & ability-enhancing relics
@@ -84,28 +81,15 @@ class RelicManager:
         extra_reroll = ExtraRerollRelic()
         pool.append(RelicOffer(relic=extra_reroll, cost=40))
 
-        # Pattern multipliers
         m3 = Relic(name="Glyph of Triples")
         for v in range(1,7):
             m3.add_modifier(RuleSpecificMultiplier(rule_key=f"ThreeOfAKind:{v}", mult=1.5))
         pool.append(RelicOffer(relic=m3, cost=70))
 
-        m4 = Relic(name="Sigil of Quadruples")
-        for v in range(1,7):
-            m4.add_modifier(RuleSpecificMultiplier(rule_key=f"FourOfAKind:{v}", mult=1.5))
-        pool.append(RelicOffer(relic=m4, cost=65))
-
-        ms = Relic(name="Runestone of Straights")
-        for rk in ("Straight6", "Straight1to5", "Straight2to6"):
-            ms.add_modifier(RuleSpecificMultiplier(rule_key=rk, mult=1.5))
-        pool.append(RelicOffer(relic=ms, cost=60))
-
+        # New multi-reroll target relic
+        multi_reroll = MultiRerollRelic()
+        pool.append(RelicOffer(relic=multi_reroll, cost=50))
         random.shuffle(pool)
-        level = getattr(self.game, 'level_index', 1)
-        if level == 1:
-            others = [o for o in pool if o.relic.name != "Charm of Fives"]
-            random.shuffle(others)
-            return [charm_offer] + others[:2]
         return pool[:3]
 
     def _offer_payload(self, offer: RelicOffer) -> dict:
@@ -134,11 +118,6 @@ class RelicManager:
         offer = self.offers[index]
         player = self.game.player
         if player.gold >= offer.cost:
-            reroll_before = None
-            try:
-                reroll_before = self.game.ability_manager.get('reroll').charges_per_level
-            except Exception:
-                pass
             player.gold -= offer.cost
             self.active_relics.append(offer.relic)
             # Activate relic (handles subscription bookkeeping). Relics start
@@ -158,10 +137,6 @@ class RelicManager:
                 "offer_index": index,
                 "cost": offer.cost,
             }))
-            try:
-                reroll_after = self.game.ability_manager.get('reroll').charges_per_level
-            except Exception:
-                reroll_after = None
             self._close_shop(skipped=False)
         else:
             self.game.event_listener.publish(GameEvent(GameEventType.MESSAGE, payload={

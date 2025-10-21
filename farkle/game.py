@@ -627,8 +627,16 @@ class Game:
         if self.state_manager.get_state() == self.state_manager.state.SELECTING_TARGETS and abm and abm.selecting_ability():
             sel = abm.selecting_ability()
             if sel and sel.target_type == 'die':
-                if abm.attempt_target('die', self.dice.index(target)):
-                    return True
+                die_index = self.dice.index(target)
+                if button == 1:  # left click toggle
+                    if abm.attempt_target('die', die_index):
+                        return True
+                elif button == 3:  # right click finalize
+                    # Ensure current die is selected before finalizing (toggle if not)
+                    if die_index not in getattr(sel, 'collected_targets', []):
+                        abm.attempt_target('die', die_index)
+                    if abm.finalize_selection():
+                        return True
         if button == 3:
             if target.scoring_eligible:
                 # Right-click should only act if the resulting selection can lock immediately.

@@ -24,52 +24,35 @@ class Relic(GameObject):
     def add_modifier(self, modifier: ScoreModifier):
         self.modifier_chain.add(modifier)
 
-    def on_activate(self, game):  # type: ignore[override]
-        """Emit SCORE_MODIFIER_ADDED for each score modifier this relic contributes.
+    # --- Internal helpers -------------------------------------------------
+    def _collect_modifier_data(self, mod: ScoreModifier) -> dict:
+        return {k: getattr(mod, k) for k in dir(mod)
+                if not k.startswith('_') and isinstance(getattr(mod, k), (int, float, str))}
 
-        This bridges the refactored scoring flow: ScoringManager now builds its
-        modifier aggregation incrementally from SCORE_MODIFIER_ADDED events
-        rather than scanning active relics on RELIC_PURCHASED.
-        """
+    def _emit_all_modifier_events(self, game, event_type: GameEventType):
+        """Emit an event per modifier (added or removed)."""
         try:
-            from farkle.core.game_event import GameEvent, GameEventType
+            from farkle.core.game_event import GameEvent
             for mod in self.modifier_chain.snapshot():
                 try:
-                    # Collect simple public scalar attributes (int/float/str) for reconstruction.
-                    data = {k: getattr(mod, k) for k in dir(mod)
-                            if not k.startswith('_') and isinstance(getattr(mod, k), (int, float, str))}
-                    game.event_listener.publish_immediate(GameEvent(GameEventType.SCORE_MODIFIER_ADDED, payload={
+                    game.event_listener.publish_immediate(GameEvent(event_type, payload={
                         "relic": self.name,
                         "modifier_type": mod.__class__.__name__,
                         "priority": getattr(mod, 'priority', None),
-                        "data": data,
+                        "data": self._collect_modifier_data(mod),
                     }))
                 except Exception:
                     pass
         except Exception:
             pass
+
+    def on_activate(self, game):  # type: ignore[override]
+        """Base activation: emit SCORE_MODIFIER_ADDED events for all modifiers."""
+        self._emit_all_modifier_events(game, GameEventType.SCORE_MODIFIER_ADDED)
 
     def on_deactivate(self, game):  # type: ignore[override]
-        """Emit SCORE_MODIFIER_REMOVED for each modifier this relic contributed.
-
-        Ensures ScoringManager prunes stale modifiers if a relic is disabled.
-        """
-        try:
-            from farkle.core.game_event import GameEvent, GameEventType
-            for mod in self.modifier_chain.snapshot():
-                try:
-                    data = {k: getattr(mod, k) for k in dir(mod)
-                            if not k.startswith('_') and isinstance(getattr(mod, k), (int, float, str))}
-                    game.event_listener.publish_immediate(GameEvent(GameEventType.SCORE_MODIFIER_REMOVED, payload={
-                        "relic": self.name,
-                        "modifier_type": mod.__class__.__name__,
-                        "priority": getattr(mod, 'priority', None),
-                        "data": data,
-                    }))
-                except Exception:
-                    pass
-        except Exception:
-            pass
+        """Base deactivation: emit SCORE_MODIFIER_REMOVED for all modifiers."""
+        self._emit_all_modifier_events(game, GameEventType.SCORE_MODIFIER_REMOVED)
 
     def on_event(self, event):  # type: ignore[override]
         # No per-event score mutation; effects applied centrally.
@@ -90,6 +73,7 @@ class ExtraRerollRelic(Relic):
         self.ability_mods = [("reroll", 1)]
 
     def on_activate(self, game):  # type: ignore[override]
+        # Emit ability-specific effect then defer to base for modifier events
         try:
             from farkle.core.game_event import GameEvent, GameEventType
             game.event_listener.publish_immediate(GameEvent(GameEventType.ABILITY_CHARGES_ADDED, payload={
@@ -97,41 +81,36 @@ class ExtraRerollRelic(Relic):
                 "delta": 1,
                 "source": self.name
             }))
-            # Emit score modifier events for each modifier this relic contributes
-            for mod in self.modifier_chain.snapshot():
-                try:
-                    game.event_listener.publish_immediate(GameEvent(GameEventType.SCORE_MODIFIER_ADDED, payload={
-                        "relic": self.name,
-                        "modifier_type": mod.__class__.__name__,
-                        "priority": getattr(mod, 'priority', None),
-                        "data": {k: getattr(mod, k) for k in dir(mod) if not k.startswith('_') and isinstance(getattr(mod, k), (int,float,str))}
-                    }))
-                except Exception:
-                    pass
         except Exception:
             pass
+        super().on_activate(game)
+
+class MultiRerollRelic(Relic):
+    """Relic that increases reroll ability target cap by +1 (allowing two dice to be rerolled together)."""
+    def __init__(self):
+        super().__init__(name="Sigil of Duplication")
+        self.ability_mods = [("reroll", 1)]  # descriptive only (targets, not charges)
+
+    def on_activate(self, game):  # type: ignore[override]
+        try:
+            from farkle.core.game_event import GameEvent, GameEventType
+            game.event_listener.publish_immediate(GameEvent(GameEventType.ABILITY_TARGETS_ADDED, payload={
+                "ability_id": "reroll",
+                "delta": 1,
+                "source": self.name
+            }))
+        except Exception:
+            pass
+        super().on_activate(game)
 
     def on_deactivate(self, game):  # type: ignore[override]
         try:
             from farkle.core.game_event import GameEvent, GameEventType
-            # Emit removal for reroll ability charge
-            game.event_listener.publish_immediate(GameEvent(GameEventType.ABILITY_CHARGES_ADDED, payload={
+            game.event_listener.publish_immediate(GameEvent(GameEventType.ABILITY_TARGETS_ADDED, payload={
                 "ability_id": "reroll",
                 "delta": -1,
                 "source": self.name
             }))
-            # Emit removal events for each score modifier (in case relic gets deactivated mid-level)
-            for mod in self.modifier_chain.snapshot():
-                try:
-                    data = {k: getattr(mod, k) for k in dir(mod)
-                            if not k.startswith('_') and isinstance(getattr(mod, k), (int, float, str))}
-                    game.event_listener.publish_immediate(GameEvent(GameEventType.SCORE_MODIFIER_REMOVED, payload={
-                        "relic": self.name,
-                        "modifier_type": mod.__class__.__name__,
-                        "priority": getattr(mod, 'priority', None),
-                        "data": data,
-                    }))
-                except Exception:
-                    pass
         except Exception:
             pass
+        super().on_deactivate(game)

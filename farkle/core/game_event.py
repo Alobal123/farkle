@@ -60,6 +60,7 @@ class GameEventType(Enum):
     TARGET_SELECTION_STARTED = auto()
     TARGET_SELECTION_FINISHED = auto()
     ABILITY_CHARGES_ADDED = auto()
+    ABILITY_TARGETS_ADDED = auto()
     SCORE_MODIFIER_ADDED = auto()
     SCORE_MODIFIER_REMOVED = auto()
 

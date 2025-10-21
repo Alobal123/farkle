@@ -14,7 +14,7 @@ class AbilityManager:
         """Activate all abilities subscribing each to its charge modification event."""
         for a in self.abilities:
             try:
-                self.game.event_listener.subscribe(a.on_event, types={GameEventType.ABILITY_CHARGES_ADDED})
+                self.game.event_listener.subscribe(a.on_event, types={GameEventType.ABILITY_CHARGES_ADDED, GameEventType.ABILITY_TARGETS_ADDED})
             except Exception:
                 pass
 
@@ -24,7 +24,7 @@ class AbilityManager:
         el = getattr(self.game, 'event_listener', None)
         if el is not None:
             try:
-                el.subscribe(ability.on_event, types={GameEventType.ABILITY_CHARGES_ADDED})
+                el.subscribe(ability.on_event, types={GameEventType.ABILITY_CHARGES_ADDED, GameEventType.ABILITY_TARGETS_ADDED})
             except Exception:
                 pass
 
@@ -95,39 +95,77 @@ class AbilityManager:
             return False
         # Multi-target accumulation logic
         if isinstance(a, TargetedAbility) and a.targets_needed > 1:
-            a.collected_targets.append(target_index)
-            if len(a.collected_targets) >= a.targets_needed:
-                executed = a.execute(self, list(a.collected_targets))
-                if executed:
-                    a.selecting = False
-                    try:
-                        self.game.state_manager.exit_selecting_targets()
-                    except Exception:
-                        pass
-                    try:
-                        from farkle.core.game_event import GameEvent, GameEventType
-                        self.game.event_listener.publish(GameEvent(GameEventType.TARGET_SELECTION_FINISHED, payload={"ability": a.id}))
-                    except Exception:
-                        pass
-                return executed
+            # Toggle selection: add if absent, remove if present
+            if target_index in a.collected_targets:
+                a.collected_targets.remove(target_index)
             else:
-                # Provide UI feedback via message if available
-                try:
-                    self.game.set_message(f"Select {a.targets_needed - len(a.collected_targets)} more target(s) for {a.name}.")
-                except Exception:
-                    pass
-                return True  # partial progress
+                # Enforce capacity
+                if len(a.collected_targets) >= a.targets_needed:
+                    # Provide feedback instead of adding
+                    try:
+                        self.game.set_message(f"Already selected {a.targets_needed} dice for {a.name}. Right-click to reroll or deselect.")
+                    except Exception:
+                        pass
+                    return True
+                a.collected_targets.append(target_index)
+            # Provide UI feedback without auto-executing; right-click will finalize
+            try:
+                remaining = max(0, a.targets_needed - len(a.collected_targets))
+                if remaining > 0:
+                    self.game.set_message(f"Selected {len(a.collected_targets)}/{a.targets_needed} dice for {a.name}. Right-click to reroll.")
+                else:
+                    self.game.set_message(f"Selected {len(a.collected_targets)}/{a.targets_needed} dice for {a.name}. Right-click to reroll or deselect.")
+            except Exception:
+                pass
+            return True
         else:
-            executed = a.execute(self, target_index)
-            if executed:
-                a.selecting = False
+            # Single-target behaves like multi: toggle selection only (if targeted ability)
+            if isinstance(a, TargetedAbility):
+                if target_index in a.collected_targets:
+                    a.collected_targets.remove(target_index)
+                else:
+                    a.collected_targets.clear()
+                    a.collected_targets.append(target_index)
                 try:
-                    self.game.state_manager.exit_selecting_targets()
+                    if len(a.collected_targets) == 1:
+                        self.game.set_message(f"1 die selected for {a.name}. Right-click to confirm.")
+                    else:
+                        self.game.set_message(f"No die selected for {a.name}.")
                 except Exception:
                     pass
-                try:
-                    from farkle.core.game_event import GameEvent, GameEventType
-                    self.game.event_listener.publish(GameEvent(GameEventType.TARGET_SELECTION_FINISHED, payload={"ability": a.id, "target_index": target_index}))
-                except Exception:
-                    pass
-            return executed
+                return True
+            return False
+
+    def finalize_selection(self) -> bool:
+        """Manually finalize multi-target selection (e.g., right-click submit)."""
+        a = self.selecting_ability()
+        if not a or not isinstance(a, TargetedAbility):
+            return False
+        if not a.selecting:
+            return False
+        if len(a.collected_targets) == 0:
+            return False
+        # Require exact target count for multi-target abilities
+        if a.targets_needed > 1 and len(a.collected_targets) != a.targets_needed:
+            try:
+                self.game.set_message(f"Need {a.targets_needed} selected dice (currently {len(a.collected_targets)}).")
+            except Exception:
+                pass
+            return False
+        executed = False
+        if a.targets_needed > 1:
+            executed = a.execute(self, list(a.collected_targets))
+        else:
+            executed = a.execute(self, a.collected_targets[0])
+        if executed:
+            a.selecting = False
+            try:
+                self.game.state_manager.exit_selecting_targets()
+            except Exception:
+                pass
+            try:
+                from farkle.core.game_event import GameEvent, GameEventType
+                self.game.event_listener.publish(GameEvent(GameEventType.TARGET_SELECTION_FINISHED, payload={"ability": a.id, "targets": list(a.collected_targets)}))
+            except Exception:
+                pass
+        return executed

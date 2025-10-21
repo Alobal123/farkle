@@ -68,29 +68,46 @@ class Ability(GameObject):
 
     # --- Event handling ---
     def on_event(self, event: GameEvent):  # type: ignore[override]
-        # Handle per-ability charge modifications
-        if event.type != GameEventType.ABILITY_CHARGES_ADDED:
+        # Charge modifications
+        if event.type == GameEventType.ABILITY_CHARGES_ADDED:
+            ability_id = event.get('ability_id')
+            if ability_id != self.id:
+                return
+            try:
+                delta = int(event.get('delta', 0) or 0)
+            except Exception:
+                return
+            if delta == 0:
+                return
+            try:
+                if delta > 0:
+                    self.charges_per_level += delta
+                else:
+                    new_cap = self.charges_per_level + delta
+                    if new_cap < self.charges_used:
+                        new_cap = self.charges_used
+                    self.charges_per_level = max(0, new_cap)
+            except Exception:
+                return
             return
-        ability_id = event.get('ability_id')
-        if ability_id != self.id:
-            return
-        try:
-            delta = int(event.get('delta', 0) or 0)
-        except Exception:
-            return
-        if delta == 0:
-            return
-        before = self.charges_per_level
-        try:
-            if delta > 0:
-                self.charges_per_level += delta
-            else:
-                new_cap = self.charges_per_level + delta
-                if new_cap < self.charges_used:
-                    new_cap = self.charges_used
-                self.charges_per_level = max(0, new_cap)
-        except Exception:
-            return
+        # Target count modifications (only for TargetedAbility instances)
+        if event.type == GameEventType.ABILITY_TARGETS_ADDED and isinstance(self, TargetedAbility):
+            ability_id = event.get('ability_id')
+            if ability_id != self.id:
+                return
+            try:
+                delta = int(event.get('delta', 0) or 0)
+            except Exception:
+                return
+            if delta == 0:
+                return
+            try:
+                new_needed = getattr(self, 'targets_needed', 1) + delta
+                if new_needed < 1:
+                    new_needed = 1
+                self.targets_needed = new_needed
+            except Exception:
+                pass
 
 @dataclass
 class TargetedAbility(Ability):
@@ -150,15 +167,17 @@ class RerollAbility(TargetedAbility):
         except Exception:
             pass
         game.mark_scoring_dice()
-        # Use effective_play_state to detect underlying FARKLE during targeting
-        if getattr(game.state_manager.effective_play_state(), 'name', None) == 'FARKLE':
-            if not game.check_farkle():
+        # Evaluate underlying play state (handles selecting targets transient) and farkle condition
+        underlying_state = getattr(game.state_manager.effective_play_state(), 'name', None)
+        visible_state = getattr(game.state_manager.get_state(), 'name', None)
+        is_farkle_now = game.check_farkle()
+        if underlying_state == 'FARKLE':
+            if not is_farkle_now:
                 try:
                     game.state_manager.rescue_farkle_to_rolling()
                 except Exception:
                     game.state_manager.transition_to_rolling()
                 game.set_message("Farkle rescued by reroll! Continue.")
-                self.selecting = False
             else:
                 game.set_message("Reroll produced no scoring dice. Farkle persists.")
                 if self.available() == 0:
@@ -166,6 +185,24 @@ class RerollAbility(TargetedAbility):
                         game.event_listener.publish(GameEvent(GameEventType.TURN_END, payload={"reason":"farkle"}))
                     except Exception:
                         pass
+        elif underlying_state == 'ROLLING' and is_farkle_now:
+            if visible_state == 'SELECTING_TARGETS':
+                try:
+                    from farkle.core.game_state_enum import GameState
+                    game.state_manager._prior_play_state = GameState.FARKLE  # type: ignore[attr-defined]
+                except Exception:
+                    pass
+            else:
+                try:
+                    game.state_manager.transition_to_farkle()
+                except Exception:
+                    pass
+            game.set_message("Farkle! No scoring dice after reroll.")
+            if self.available() == 0:
+                try:
+                    game.event_listener.publish(GameEvent(GameEventType.TURN_END, payload={"reason":"farkle"}))
+                except Exception:
+                    pass
         else:
             game.set_message("Die rerolled.")
         self.selecting = False
