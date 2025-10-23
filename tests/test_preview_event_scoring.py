@@ -37,15 +37,12 @@ class PreviewEventScoringTests(unittest.TestCase):
 
     def test_selection_preview_uses_modifier_chain(self):
         self._force_single_five()
-        raw, selective, final_, mult = self.game.selection_preview()
+        raw, adjusted, final_, mult = self.game.selection_preview()
         self.assertEqual(raw, 50)
-        self.assertEqual(selective, 100, "Selective should reflect doubling modifier")
-        self.assertEqual(final_, int(selective * mult))
-        # Ensure event emitted with consistent data
-        self.assertIsNotNone(self.captured_preview, "Expected SCORE_PREVIEW_COMPUTED event")
-        if self.captured_preview:
-            self.assertEqual(self.captured_preview.get('selective_effective'), selective)
-            self.assertEqual(self.captured_preview.get('final_preview'), final_)
+        self.assertEqual(adjusted, 100, "Adjusted should reflect doubling modifier")
+        self.assertEqual(final_, adjusted)
+        # Lean mode: no preview events; ensure captured_preview remains None
+        self.assertIsNone(self.captured_preview, "Preview events removed in lean scoring manager")
 
 if __name__ == '__main__':
     unittest.main()

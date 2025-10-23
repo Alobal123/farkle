@@ -39,7 +39,7 @@ from farkle.scoring.scoring_manager import ScoringManager
 from farkle.gods.gods_manager import GodsManager, God
 
 class Game:
-    def __init__(self, screen, font, clock, level: Level | None = None):
+    def __init__(self, screen, font, clock, level: Level | None = None, *, rng_seed: int | None = None):
         """Core gameplay model: state, dice, scoring, events.
 
         UI concerns (tooltips, hotkeys, modal shop rendering) are handled by screen
@@ -80,6 +80,12 @@ class Game:
         # Player meta progression container
         self.player = Player()
         self.player.game = self
+        # Global randomness source (seeded optionally for deterministic tests)
+        try:
+            from farkle.core.random_source import RandomSource
+            self.rng = RandomSource(seed=rng_seed)
+        except Exception:
+            self.rng = None  # fallback; direct random usage will occur until fixed
         # Relic manager handles between-level shop & relic aggregation
         self.relic_manager = RelicManager(self)
         # Gods manager: manages worshipped gods and applies selective effects
@@ -256,9 +262,7 @@ class Game:
         return {
             "parts": [{"rule_key": rk, "raw": raw, "adjusted": raw} for rk, raw in parts],
             "total_raw": total,
-            "selective_effective": total,
-            "multiplier": 1.0,
-            "final_preview": total
+            "adjusted_total": total,
         }
 
     def reset_dice(self):
@@ -428,13 +432,15 @@ class Game:
         try:
             scoring_mgr = getattr(self, 'scoring_manager', None)
             if scoring_mgr:
-                preview = scoring_mgr.preview([(rule_key, raw)], source="selection")
-                return (
-                    raw,
-                    int(preview.get('selective_effective', raw)),
-                    int(preview.get('final_preview', raw)),
-                    float(preview.get('multiplier', 1.0))
-                )
+                # Fetch active goal if available for conditional modifiers
+                goal = None
+                try:
+                    goal = self.level_state.goals[self.active_goal_index]
+                except Exception:
+                    goal = None
+                preview = scoring_mgr.preview([(rule_key, raw)], source="selection", goal=goal)
+                adj = int(preview.get('adjusted_total', raw))
+                return (raw, adj, adj, 1.0)
         except Exception:
             pass
         return (raw, raw, raw, 1.0)
@@ -473,15 +479,9 @@ class Game:
         else:
             prev = None
         if prev:
-            selective = int(prev.get('selective_effective', add_score))
-            final_preview = int(prev.get('final_preview', selective))
-            mult = float(prev.get('multiplier', 1.0))
-            if selective != add_score and final_preview != selective and mult != 1.0:
-                self.message = f"{verb} {add_score} -> {selective} -> {final_preview} to {gname}."
-            elif selective != add_score:
-                self.message = f"{verb} {add_score} -> {selective} to {gname}."
-            elif final_preview != add_score and mult != 1.0:
-                self.message = f"{verb} {add_score} -> {final_preview} to {gname}."
+            adjusted = int(prev.get('adjusted_total', add_score))
+            if adjusted != add_score:
+                self.message = f"{verb} {add_score} -> {adjusted} to {gname}."
             else:
                 self.message = f"{verb} {add_score} to {gname}."
         else:

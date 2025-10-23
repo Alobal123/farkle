@@ -1,4 +1,3 @@
-import random
 from typing import List
 from farkle.dice.die import Die
 from farkle.core.game_event import GameEvent, GameEventType
@@ -25,8 +24,10 @@ class DiceContainer:
             for spr in list(renderer.sprite_groups['dice']):
                 spr.kill()
         for i in range(self.count):
+            rng = getattr(self.game, 'rng', None)
+            initial_val = rng.randint(1,6) if rng else __import__('random').randint(1,6)
             d = Die(
-                random.randint(1, 6),
+                initial_val,
                 100 + i * (DICE_SIZE + MARGIN),
                 HEIGHT // 2 - DICE_SIZE // 2,
             )
@@ -52,7 +53,8 @@ class DiceContainer:
         for idx, d in enumerate(self.dice):
             if not d.held:
                 old = d.value
-                d.value = random.randint(1, 6)
+                rng = getattr(self.game, 'rng', None)
+                d.value = rng.randint(1,6) if rng else __import__('random').randint(1,6)
                 d.selected = False
                 raw_values.append(d.value)
                 el.publish(GameEvent(GameEventType.DIE_ROLLED, payload={"index": idx, "old": old, "new": d.value}))

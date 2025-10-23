@@ -9,9 +9,10 @@ from farkle.scoring.score_modifiers import ScoreModifierChain, ScoreModifier, Sc
 
 class _ScoreCtx:
     """Concrete context implementing ScoreContext protocol for modifier application."""
-    def __init__(self, score_obj: Score):
+    def __init__(self, score_obj: Score, goal: object | None = None):
         self.score_obj = score_obj
         self.pending_raw = score_obj.total_raw
+        self.goal = goal
 
 
 @dataclass
@@ -21,24 +22,22 @@ class ScoringManager(GameObject):
     Responsibilities:
     * Own active scoring rules (delegates to Game.rules for now; future: move rules fully here).
     * Aggregate all part-level score modifiers contributed by relics (and future sources) via SCORE_MODIFIER_ADDED events.
-    * Provide preview() and finalize() helpers returning the same structure previous Game.compute_preview produced.
-    * Emit SCORE_PREVIEW_REQUEST and SCORE_PREVIEW_COMPUTED events for compatibility.
-    * Track per-turn cumulative score (turn_score) and current selection preview cache.
-    * Incrementally builds modifier_chain on SCORE_MODIFIER_ADDED (no bulk rebuild on RELIC_PURCHASED anymore).
+    * Provide preview() helper returning adjusted score parts.
+    * Lean mode: no SCORE_PREVIEW_* events emitted.
+    * Track per-turn cumulative score (turn_score) only.
+    * Incrementally builds modifier_chain on SCORE_MODIFIER_ADDED.
     """
     game: object  # runtime Game reference (no direct type import to avoid circular dependency)
     modifier_chain: ScoreModifierChain = field(default_factory=ScoreModifierChain)
     turn_score: int = 0
-    current_preview: Optional[dict] = None
-    modifier_records: list[dict] = field(default_factory=list)
+    # Removed: current_preview cache & modifier_records bookkeeping
 
     def __init__(self, game):
         GameObject.__init__(self, name="ScoringManager")
         self.game = game
         self.modifier_chain = ScoreModifierChain()
         self.turn_score = 0
-        self.current_preview = None
-        self.modifier_records = []
+        # Lean: no preview cache, no modifier_records
 
     # --- Event handling ----------------------------------------------------
     def on_event(self, event: GameEvent):  # type: ignore[override]
@@ -61,30 +60,17 @@ class ScoringManager(GameObject):
                 created = None
             if created:
                 self.modifier_chain.add(created)
-                try:
-                    self.modifier_records.append({
-                        'type': modifier_type,
-                        'data': data
-                    })
-                except Exception:
-                    pass
         elif et == GameEventType.SCORE_MODIFIER_REMOVED:
             payload = event.payload or {}
             modifier_type = payload.get('modifier_type')
             data = payload.get('data', {}) if isinstance(payload.get('data'), dict) else {}
             try:
                 self.modifier_chain.remove_by_identity(modifier_type, data)  # type: ignore[attr-defined]
-                # Remove first matching record for bookkeeping
-                for rec in list(self.modifier_records):
-                    if rec.get('type') == modifier_type and all(rec.get('data', {}).get(k) == v for k, v in data.items()):
-                        self.modifier_records.remove(rec)
-                        break
             except Exception:
                 pass
         elif et == GameEventType.TURN_END:
             # Clear per-turn state after bank/farkle.
             self.turn_score = 0
-            self.current_preview = None
         elif et == GameEventType.LOCK:
             # Update turn_score incrementally when a lock adds points (points in payload)
             pts = int(event.get('points', 0) or 0)
@@ -113,10 +99,10 @@ class ScoringManager(GameObject):
             parts_for_preview: List[tuple[str,int]] = []
             if score_obj is not None:
                 parts_for_preview = [(p.rule_key, p.raw) for p in score_obj.parts]
-            comp = self._compute_score_dict(parts_for_preview, emit_preview_events=False, source='apply') if parts_for_preview else {
-                'parts': [], 'total_raw': pending_raw, 'selective_effective': pending_raw, 'multiplier': 1.0, 'final_preview': pending_raw, 'score': None
+            comp = self._compute_score_dict(parts_for_preview, emit_preview_events=False, source='apply', goal=goal) if parts_for_preview else {
+                'parts': [], 'total_raw': pending_raw, 'adjusted_total': pending_raw, 'score': None
             }
-            adjusted = int(comp.get('final_preview', pending_raw))
+            adjusted = int(comp.get('adjusted_total', pending_raw))
             # Patch adjusted values back into score_obj parts
             if score_obj is not None:
                 pv_parts = comp.get('parts', [])
@@ -145,24 +131,19 @@ class ScoringManager(GameObject):
 
 
     # --- Preview / scoring API ---------------------------------------------
-    def preview(self, parts: List[tuple[str,int]], source: str = "selection") -> dict:
-        """Public preview API with event emission."""
-        result = self._compute_score_dict(parts, emit_preview_events=True, source=source)
-        self.current_preview = result
-        return result
+    def preview(self, parts: List[tuple[str,int]], source: str = "selection", goal: object | None = None) -> dict:
+        """Return adjusted preview (no events)."""
+        return self._compute_score_dict(parts, emit_preview_events=False, source=source, goal=goal)
 
     # Convenience wrapper for a single rule part
-    def preview_single(self, rule_key: str, raw: int, source: str = "single") -> dict:
-        return self.preview([(rule_key, raw)], source=source)
+    # preview_single removed; call preview with single-part list if needed
 
     # Reset per-level (called when level resets) preserving relic state; caller decides if modifiers rebuild.
     def reset_level(self):
         self.turn_score = 0
-        self.current_preview = None
 
     # Provide a finalize helper if future global adjustments return different value.
-    def finalize(self, parts: List[tuple[str,int]], source: str = "final") -> dict:
-        return self.preview(parts, source=source)
+    # finalize removed; use preview directly
 
     # --- Direct dice scoring -------------------------------------------------
     def compute_from_dice(self, dice_values: List[int], source: str = "dice") -> dict:
@@ -175,7 +156,7 @@ class ScoringManager(GameObject):
         except Exception:
             parts = []
         if not parts:
-            return {"parts": [], "total_raw": 0, "selective_effective": 0, "multiplier": 1.0, "final_preview": 0, "score": None}
+            return {"parts": [], "total_raw": 0, "adjusted_total": 0, "score": None}
         return self.preview(parts, source=source)
 
     # Internal dice evaluation wrapper (migration path from Game.rules direct use)
@@ -193,10 +174,10 @@ class ScoringManager(GameObject):
         return None
 
     # --- Internal unified computation helper ------------------------------
-    def _compute_score_dict(self, parts: List[tuple[str,int]], emit_preview_events: bool, source: str) -> dict:
-        """Construct Score, apply selective modifiers, optionally emit preview events.
+    def _compute_score_dict(self, parts: List[tuple[str,int]], emit_preview_events: bool, source: str, goal: object | None = None) -> dict:
+        """Construct Score, apply selective modifiers.
 
-        Returns dict with keys: parts, total_raw, selective_effective, multiplier, final_preview, score.
+        Returns dict with keys: parts, total_raw, adjusted_total, score.
         """
         score_obj = Score()
         for rk, raw in parts:
@@ -207,7 +188,7 @@ class ScoringManager(GameObject):
         adjusted_total = score_obj.total_effective
         # Build a dynamic merged modifier list: events-injected chain + live active relic chains.
         try:
-            context = _ScoreCtx(score_obj)
+            context = _ScoreCtx(score_obj, goal=goal)
             from farkle.scoring.score_modifiers import ScoreModifierChain, ScoreModifier
             merged = ScoreModifierChain()
             # Deduplicate by (class name, scalar attribute values)
@@ -243,27 +224,12 @@ class ScoringManager(GameObject):
             adjusted_total = merged.apply(score_obj.total_raw, context)
         except Exception:
             adjusted_total = score_obj.total_effective
-        result = {
+        return {
             "parts": [{"rule_key": p.rule_key, "raw": p.raw, "adjusted": p.adjusted} for p in score_obj.parts],
             "total_raw": score_obj.total_raw,
-            "selective_effective": adjusted_total,
-            "multiplier": 1.0,
-            "final_preview": adjusted_total,
+            "adjusted_total": adjusted_total,
             "score": score_obj.to_dict(),
         }
-        if emit_preview_events:
-            from farkle.core.game_event import GameEvent as GE, GameEventType as GET
-            try:
-                el = getattr(self.game, 'event_listener', None)
-                if el:
-                    el.publish(GE(GET.SCORE_PREVIEW_REQUEST, payload={
-                        "parts": [{"rule_key": rk, "raw": raw} for rk, raw in parts],
-                        "source": source
-                    }))
-                    el.publish(GE(GET.SCORE_PREVIEW_COMPUTED, payload=result | {"source": source}))
-            except Exception:
-                pass
-        return result
 
     # --- Goal pending projection (no preview events) ---------------------
     def project_goal_pending(self, goal) -> int:
@@ -281,7 +247,7 @@ class ScoringManager(GameObject):
                 return pending_raw
             clone = score_obj.clone()
             parts = [(p.rule_key, p.raw) for p in clone.parts]
-            comp = self._compute_score_dict(parts, emit_preview_events=False, source='goal_pending')
-            return int(comp.get('final_preview', pending_raw))
+            comp = self._compute_score_dict(parts, emit_preview_events=False, source='goal_pending', goal=goal)
+            return int(comp.get('adjusted_total', pending_raw))
         except Exception:
             return int(getattr(goal, 'pending_raw', 0) or 0)

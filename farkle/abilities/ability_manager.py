@@ -49,6 +49,9 @@ class AbilityManager:
             return False
         prev_selecting = ability.selecting
         started = ability.begin(self)
+        # Reset executed_once flag on new activation for TargetedAbility so subsequent charges work
+        if started and isinstance(ability, TargetedAbility):
+            ability.executed_once = False
         # Handle state transitions when entering/exiting selection mode
         if ability.selectable:
             if not prev_selecting and ability.selecting:
@@ -113,10 +116,14 @@ class AbilityManager:
             # Provide UI feedback without auto-executing; right-click will finalize
             try:
                 remaining = max(0, a.targets_needed - len(a.collected_targets))
-                if remaining > 0:
-                    self.game.set_message(f"Selected {len(a.collected_targets)}/{a.targets_needed} dice for {a.name}. Right-click to reroll.")
+                # Allow early finalize with fewer than required (streamlined) but message should reflect optional second target
+                if a.targets_needed > 1 and len(a.collected_targets) == 1:
+                    self.game.set_message(f"Selected 1 die for {a.name}. Optionally select another or right-click to confirm.")
                 else:
-                    self.game.set_message(f"Selected {len(a.collected_targets)}/{a.targets_needed} dice for {a.name}. Right-click to reroll or deselect.")
+                    if remaining > 0:
+                        self.game.set_message(f"Selected {len(a.collected_targets)}/{a.targets_needed} dice for {a.name}. Right-click to reroll or continue selecting.")
+                    else:
+                        self.game.set_message(f"Selected {len(a.collected_targets)}/{a.targets_needed} dice for {a.name}. Right-click to reroll or deselect.")
             except Exception:
                 pass
             return True
@@ -128,66 +135,33 @@ class AbilityManager:
                 else:
                     a.collected_targets.clear()
                     a.collected_targets.append(target_index)
-                # Auto execute for single-target abilities but keep selecting state until explicit finalize call
-                if a.targets_needed == 1 and len(a.collected_targets) == 1 and isinstance(a, TargetedAbility) and not a.executed_once:
-                    executed = a.execute(self, a.collected_targets[0])
-                    if executed:
-                        a.executed_once = True
-                        # Immediately exit selecting state and emit FINISHED so tests expecting it after single target pass
-                        a.selecting = False
-                        try:
-                            self.game.state_manager.exit_selecting_targets()
-                        except Exception:
-                            pass
-                        try:
-                            from farkle.core.game_event import GameEvent, GameEventType
-                            self.game.event_listener.publish(GameEvent(GameEventType.TARGET_SELECTION_FINISHED, payload={"ability": a.id, "targets": list(a.collected_targets)}))
-                        except Exception:
-                            pass
-                        # Track for finalize_selection call compatibility
-                        self._last_auto_target = a
-                        return True
-                else:
-                    try:
-                        if len(a.collected_targets) == 1:
-                            self.game.set_message(f"1 die selected for {a.name}. Right-click to confirm.")
-                        else:
-                            self.game.set_message(f"No die selected for {a.name}.")
-                    except Exception:
-                        pass
-                    return True
+                try:
+                    if len(a.collected_targets) == 1:
+                        self.game.set_message(f"1 die selected for {a.name}. Right-click to confirm.")
+                    else:
+                        self.game.set_message(f"No die selected for {a.name}.")
+                except Exception:
+                    pass
+                return True
             return False
 
     def finalize_selection(self) -> bool:
         """Manually finalize multi-target selection (e.g., right-click submit)."""
         a = self.selecting_ability()
         if not a:
-            # Allow finalize after auto-executed single-target ability (selection already closed)
-            la = getattr(self, '_last_auto_target', None)
-            if isinstance(la, TargetedAbility) and la.executed_once and la.targets_needed == 1 and len(la.collected_targets) == 1:
-                return True
             return False
         if not isinstance(a, TargetedAbility):
             return False
-        # If already executed (single-target auto path) but still selecting, just publish finished event
-        if isinstance(a, TargetedAbility) and a.executed_once and a.targets_needed == 1 and len(a.collected_targets) == 1:
-            return True
         if not a.selecting:
             return False
         if len(a.collected_targets) == 0:
             return False
-        # Require exact target count for multi-target abilities
-        if a.targets_needed > 1 and len(a.collected_targets) != a.targets_needed:
-            try:
-                self.game.set_message(f"Need {a.targets_needed} selected dice (currently {len(a.collected_targets)}).")
-            except Exception:
-                pass
-            return False
+        # Streamlined: allow finalize with fewer than targets_needed (execute on collected set)
         executed = False
-        if a.targets_needed > 1:
-            executed = a.execute(self, list(a.collected_targets))
-        else:
+        if len(a.collected_targets) == 1:
             executed = a.execute(self, a.collected_targets[0])
+        else:
+            executed = a.execute(self, list(a.collected_targets))
         if executed:
             a.selecting = False
             try:
@@ -215,4 +189,7 @@ class AbilityManager:
                         self.game.set_message('Farkle! No scoring dice after reroll.')
             except Exception:
                 pass
+            # Prepare for potential subsequent charge usage: clear collected targets
+            a.collected_targets.clear()
+            a.executed_once = False
         return executed

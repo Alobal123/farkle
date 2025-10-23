@@ -1,173 +1,141 @@
+"""Relic shop management and offer generation."""
+
 from dataclasses import dataclass
-from typing import List, Optional
-import random
+from typing import List, Optional, Callable
 from farkle.core.game_event import GameEvent, GameEventType
 from farkle.relics.relic import Relic
-from farkle.scoring.score_modifiers import FlatRuleBonus
+
 
 @dataclass
 class RelicOffer:
     relic: Relic
     cost: int
 
+
 class RelicManager:
     """Manages relic acquisition via a between-level shop.
 
     Flow:
-    * On LEVEL_ADVANCE_FINISHED -> emit SHOP_OPENED + RELIC_OFFERED (single offer for now).
-    * Input controller (or UI) will emit REQUEST_BUY_RELIC or REQUEST_SKIP_SHOP.
-    * On REQUEST_BUY_RELIC (if enough gold) -> deduct gold, activate relic, RELIC_PURCHASED.
-    * On REQUEST_SKIP_SHOP (or successful purchase) -> SHOP_CLOSED then start first turn of new level (TURN_START already emitted earlier) allowing play to resume.
-    * During an open shop, gameplay requests (ROLL/LOCK/BANK) should be denied (handled externally by InputController/gating if needed).
+    * LEVEL_ADVANCE_FINISHED -> open shop & emit offers.
+    * REQUEST_BUY_RELIC -> purchase & activate.
+    * REQUEST_SKIP_SHOP or purchase -> close shop.
+    * Gameplay requests gated externally while shop_open.
     """
 
-    def __init__(self, game):
+    def __init__(self, game, *, randomize_offers: bool = False, offer_seed: int | None = None):
         self.game = game
         self.active_relics: List[Relic] = []
-        self.current_offer: Optional[RelicOffer] = None  # single-offer reference (first offer convenience)
-        self.offers: List[RelicOffer] = []  # multiple offers for new shop
+        self.current_offer: Optional[RelicOffer] = None
+        self.offers: List[RelicOffer] = []
         self.shop_open: bool = False
+        self.randomize_offers = randomize_offers
+        self.offer_seed = offer_seed
 
-    # Event subscription entrypoint
+    # --- Event handling ---
     def on_event(self, event: GameEvent):  # type: ignore[override]
         et = event.type
         if et == GameEventType.LEVEL_ADVANCE_FINISHED:
             self._open_shop()
         elif et == GameEventType.REQUEST_BUY_RELIC and self.shop_open:
-            # Optional index in payload selects which offer (default 0)
             idx = event.get("offer_index", 0)
             self._attempt_purchase(idx)
-        elif et in (GameEventType.REQUEST_SKIP_SHOP,) and self.shop_open:
+        elif et == GameEventType.REQUEST_SKIP_SHOP and self.shop_open:
             self._close_shop(skipped=True)
 
+    # --- Offer pool configuration ---
     def _open_shop(self):
         self.shop_open = True
-        el = self.game.event_listener
         self.offers = self._generate_offers()
+        el = self.game.event_listener
         el.publish(GameEvent(GameEventType.SHOP_OPENED, payload={
             "level_index": self.game.level_index,
             "offers": [self._offer_payload(o) for o in self.offers]
         }))
-        # Emit individual offer events (retain compatibility pattern)
         for idx, offer in enumerate(self.offers):
             payload = self._offer_payload(offer)
             payload["offer_index"] = idx
             el.publish(GameEvent(GameEventType.RELIC_OFFERED, payload=payload))
-        # Set default current_offer to first (for older code paths)
         self.current_offer = self.offers[0] if self.offers else None
 
     def _generate_offers(self) -> List[RelicOffer]:
-        """Return three random offers from a fixed relic pool each shop.
-
-        Pool:
-          * Flat +50 SingleValue:5
-          * Flat +100 SingleValue:1
-        Costs chosen for rough balance; can be tweaked later.
-        """
-        from farkle.scoring.score_modifiers import RuleSpecificMultiplier
-        from farkle.relics.relic import ExtraRerollRelic, MultiRerollRelic
-        pool: List[RelicOffer] = []
-
-        # Flat singles & ability-enhancing relics
-        r5 = Relic(name="Charm of Fives")
-        r5.add_modifier(FlatRuleBonus(rule_key="SingleValue:5", amount=50))
-        charm_offer = RelicOffer(relic=r5, cost=30)  # deterministic cost expected by tests
-        pool.append(charm_offer)
-
-        r1 = Relic(name="Charm of Ones")
-        r1.add_modifier(FlatRuleBonus(rule_key="SingleValue:1", amount=100))
-        pool.append(RelicOffer(relic=r1, cost=45))
-
-        extra_reroll = ExtraRerollRelic()
-        pool.append(RelicOffer(relic=extra_reroll, cost=40))
-
-        m3 = Relic(name="Glyph of Triples")
-        for v in range(1,7):
-            m3.add_modifier(RuleSpecificMultiplier(rule_key=f"ThreeOfAKind:{v}", mult=1.5))
-        pool.append(RelicOffer(relic=m3, cost=70))
-
-        # New multi-reroll target relic
-        multi_reroll = MultiRerollRelic()
-        pool.append(RelicOffer(relic=multi_reroll, cost=50))
-        # Deterministic ordering for tests: ensure Charm of Fives is first if present.
-        # Keep remaining order shuffled for variability but stable first element expectation.
-        import random as _r
-        _r.shuffle(pool)
-        pool.sort(key=lambda o: 0 if o.relic.name == "Charm of Fives" else 1)
-        return pool[:3]
+        _build_pool_once()
+        owned = {r.name for r in self.active_relics}
+        entries: List[RelicOffer] = []
+        for name, cost, builder in RELIC_OFFER_POOL:
+            if name in owned:
+                continue
+            try:
+                entries.append(RelicOffer(relic=builder(), cost=cost))
+            except Exception:
+                continue
+        if self.randomize_offers and entries:
+            rng = getattr(self.game, 'rng', None)
+            if rng and self.offer_seed is not None:
+                # Reseed temporarily for offer generation then restore original seed state
+                original_state = rng.state()
+                rng.reseed(self.offer_seed)
+                rng.shuffle(entries)
+                rng.set_state(original_state)
+            elif rng:
+                rng.shuffle(entries)
+            else:
+                import random
+                if self.offer_seed is not None:
+                    random.seed(self.offer_seed)
+                random.shuffle(entries)
+        # Ensure deterministic first offer for tests if present.
+        # No forced ordering; pure shuffle or original iteration filtering only.
+        return entries[:3]
 
     def _offer_payload(self, offer: RelicOffer) -> dict:
         payload = {"name": offer.relic.name, "cost": offer.cost}
-        # Detect flat bonuses
-        from farkle.scoring.score_modifiers import FlatRuleBonus, CompositePartModifier
+        from farkle.scoring.score_modifiers import FlatRuleBonus
         for m in offer.relic.modifier_chain.snapshot():
             if isinstance(m, FlatRuleBonus):
                 payload["flat_rule_bonus"] = {"rule_key": m.rule_key, "amount": m.amount}
         return payload
 
+    # --- Purchase flow ---
     def _attempt_purchase(self, index: int = 0):
         if not self.offers:
             return
-        # Normalize index (handle None or non-int)
-        try:
-            if not isinstance(index, int):
-                index = 0
-        except Exception:
-            index = 0
-        try:
-            if index < 0 or index >= len(self.offers):
-                index = 0
-        except Exception:
+        if not isinstance(index, int) or index < 0 or index >= len(self.offers):
             index = 0
         offer = self.offers[index]
         player = self.game.player
-        if player.gold >= offer.cost:
-            player.gold -= offer.cost
-            self.active_relics.append(offer.relic)
-            # Activate relic (handles subscription bookkeeping). Relics start
-            # active by default, but calling activate ensures future relics
-            # that opt into deferred activation are wired consistently.
-            try:
-                # Force activation sequence even if relic.active True (set inactive then activate)
-                offer.relic.active = False
-                offer.relic.activate(self.game)
-                # Explicit subscription safeguard (idempotent) to guarantee selective modifiers fire
-                self.game.event_listener.subscribe(offer.relic.on_event)
-            except Exception:
-                # Fallback to legacy direct subscription if activate missing
-                self.game.event_listener.subscribe(offer.relic.on_event)
-            self.game.event_listener.publish(GameEvent(GameEventType.RELIC_PURCHASED, payload={
-                "name": offer.relic.name,
-                "offer_index": index,
-                "cost": offer.cost,
-            }))
-            self._close_shop(skipped=False)
-        else:
-            self.game.event_listener.publish(GameEvent(GameEventType.MESSAGE, payload={
-                "text": "Not enough gold for relic"
-            }))
+        if player.gold < offer.cost:
+            self.game.event_listener.publish(GameEvent(GameEventType.MESSAGE, payload={"text": "Not enough gold for relic"}))
+            return
+        player.gold -= offer.cost
+        self.active_relics.append(offer.relic)
+        try:
+            offer.relic.active = False
+            offer.relic.activate(self.game)
+            self.game.event_listener.subscribe(offer.relic.on_event)
+        except Exception:
+            self.game.event_listener.subscribe(offer.relic.on_event)
+        self.game.event_listener.publish(GameEvent(GameEventType.RELIC_PURCHASED, payload={
+            "name": offer.relic.name,
+            "offer_index": index,
+            "cost": offer.cost,
+        }))
+        self._close_shop(skipped=False)
 
     def _close_shop(self, skipped: bool):
-        self.game.event_listener.publish(GameEvent(GameEventType.SHOP_CLOSED, payload={
-            "skipped": skipped
-        }))
+        self.game.event_listener.publish(GameEvent(GameEventType.SHOP_CLOSED, payload={"skipped": skipped}))
         self.current_offer = None
         self.offers = []
         self.shop_open = False
 
+    # --- Debug/UI helpers ---
     def active_relic_lines(self) -> list[str]:
-        """Return human-readable lines describing currently active relics.
-
-        Format per relic: Name (+flat bonuses, multipliers).
-        Example: "Charm of Fives [+50 SingleValue:5]".
-        """
-        lines: list[str] = []
         if not self.active_relics:
             return ["Relics: (none)"]
         try:
             from farkle.scoring.score_modifiers import FlatRuleBonus, RuleSpecificMultiplier
         except Exception:
             FlatRuleBonus = RuleSpecificMultiplier = tuple()  # type: ignore
+        lines: list[str] = []
         for relic in self.active_relics:
             parts: list[str] = []
             try:
@@ -183,7 +151,6 @@ class RelicManager:
                         pass
             except Exception:
                 pass
-            # Ability modifications (+/- charges)
             try:
                 for ability_id, delta in getattr(relic, 'ability_mods', []):
                     sign = '+' if delta > 0 else ''
@@ -194,3 +161,37 @@ class RelicManager:
             suffix = (" [" + ", ".join(parts) + "]") if parts else ""
             lines.append(f"{relic.name}{suffix}")
         return lines
+
+
+# --- Global offer pool configuration & builder helpers ---
+RELIC_OFFER_POOL: List[tuple[str, int, Callable[[], Relic]]] = []
+
+
+def _build_pool_once():
+    from farkle.relics.relic import ExtraRerollRelic, MultiRerollRelic, MandatoryFocusTalisman, OptionalFocusCharm
+    if RELIC_OFFER_POOL:
+        return
+    RELIC_OFFER_POOL.extend([
+        ("Charm of Fives", 30, lambda: _flat_relic("Charm of Fives", "SingleValue:5", 50)),
+        ("Charm of Ones", 45, lambda: _flat_relic("Charm of Ones", "SingleValue:1", 100)),
+        ("Token of Second Chance", 40, lambda: ExtraRerollRelic()),
+        ("Glyph of Triples", 70, lambda: _triples_relic()),
+        ("Sigil of Duplication", 50, lambda: MultiRerollRelic()),
+        ("Talisman of Purpose", 65, lambda: MandatoryFocusTalisman()),
+        ("Charm of Opportunism", 55, lambda: OptionalFocusCharm()),
+    ])
+
+
+def _flat_relic(name: str, rule_key: str, amount: int) -> Relic:
+    r = Relic(name=name)
+    from farkle.scoring.score_modifiers import FlatRuleBonus
+    r.add_modifier(FlatRuleBonus(rule_key=rule_key, amount=amount))
+    return r
+
+
+def _triples_relic() -> Relic:
+    r = Relic(name="Glyph of Triples")
+    from farkle.scoring.score_modifiers import RuleSpecificMultiplier
+    for v in range(1, 7):
+        r.add_modifier(RuleSpecificMultiplier(rule_key=f"ThreeOfAKind:{v}", mult=1.5))
+    return r

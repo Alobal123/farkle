@@ -26,8 +26,13 @@ class Relic(GameObject):
 
     # --- Internal helpers -------------------------------------------------
     def _collect_modifier_data(self, mod: ScoreModifier) -> dict:
-        return {k: getattr(mod, k) for k in dir(mod)
-                if not k.startswith('_') and isinstance(getattr(mod, k), (int, float, str))}
+        data = {}
+        for k in ("rule_key", "mult", "amount", "priority"):
+            if hasattr(mod, k):
+                v = getattr(mod, k)
+                if isinstance(v, (int, float, str)):
+                    data[k] = v
+        return data
 
     def _emit_all_modifier_events(self, game, event_type: GameEventType):
         """Emit an event per modifier (added or removed)."""
@@ -127,3 +132,24 @@ class MultiRerollRelic(Relic):
         except Exception:
             pass
         super().on_deactivate(game)
+
+
+class MandatoryFocusTalisman(Relic):
+    """Relic granting +20% score to all parts when applied to a mandatory goal.
+
+    Implemented via GlobalPartsMultiplier wrapped in MandatoryGoalOnly for goal-conditional gating.
+    """
+    def __init__(self):
+        super().__init__(name="Talisman of Purpose")
+        from farkle.scoring.score_modifiers import GlobalPartsMultiplier, MandatoryGoalOnly
+        inner = GlobalPartsMultiplier(mult=1.2)
+        self.add_modifier(MandatoryGoalOnly(inner))
+
+
+class OptionalFocusCharm(Relic):
+    """Relic granting +20% score to all parts when applied to an optional goal only."""
+    def __init__(self):
+        super().__init__(name="Charm of Opportunism")
+        from farkle.scoring.score_modifiers import GlobalPartsMultiplier, OptionalGoalOnly
+        inner = GlobalPartsMultiplier(mult=1.2)
+        self.add_modifier(OptionalGoalOnly(inner))

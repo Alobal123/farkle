@@ -46,6 +46,10 @@ class FailedRescueNextTurnTests(unittest.TestCase):
         try:
             target_index = next(i for i,d in enumerate(self.game.dice) if not d.held)
             self.assertTrue(self.game.ability_manager.attempt_target('die', target_index))
+            # Confirm still selecting before finalize
+            self.assertEqual(self.game.state_manager.get_state().name, 'SELECTING_TARGETS')
+            # Finalize selection (right-click simulation)
+            self.assertTrue(self.game.ability_manager.finalize_selection())
         finally:
             random.randint = original_randint
         # 4. Confirm still FARKLE (failed rescue)

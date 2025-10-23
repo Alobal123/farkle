@@ -39,7 +39,7 @@ All state transitions produce `GameEvent` instances. Selected high-level events:
 |----------|--------|
 | Turn | `TURN_START`, `TURN_ROLL`, `TURN_LOCK_ADDED`, `TURN_END`, `TURN_BANKED`, `TURN_FARKLE` |
 | Dice | `PRE_ROLL`, `DIE_ROLLED`, `POST_ROLL`, `DIE_HELD`, `DIE_SELECTED`, `DIE_DESELECTED` |
-| Scoring | `LOCK`, `SCORE_APPLY_REQUEST`, `SCORE_APPLIED`, `SCORE_PREVIEW_REQUEST`, `SCORE_PREVIEW_COMPUTED`, `SCORE_MODIFIER_ADDED`, `SCORE_MODIFIER_REMOVED` |
+| Scoring | `LOCK`, `SCORE_APPLY_REQUEST`, `SCORE_APPLIED`, `SCORE_MODIFIER_ADDED`, `SCORE_MODIFIER_REMOVED` |
 | Goals | `GOAL_PROGRESS`, `GOAL_FULFILLED` |
 | Level | `LEVEL_ADVANCE_STARTED`, `LEVEL_GENERATED`, `LEVEL_ADVANCE_FINISHED`, `LEVEL_COMPLETE`, `LEVEL_FAILED` |
 | Shop | `SHOP_OPENED`, `RELIC_OFFERED`, `RELIC_PURCHASED`, `SHOP_CLOSED`, `REQUEST_BUY_RELIC`, `REQUEST_SKIP_SHOP` |
@@ -52,18 +52,18 @@ Ordering guarantees (samples):
 * Shop never emits a second `TURN_START`; gameplay resumes in the already-open turn.
 
 ## Scoring & Modifier Pipeline
-Score application distinguishes raw locked points from selectively adjusted parts and a final global multiplier phase.
+Score application distinguishes raw locked points from selectively adjusted parts (global multiplier phase removed in lean scoring).
 
 Phases:
 1. Pending accumulation (`LOCK`): goals track `pending_raw` but do not mutate `remaining`.
 2. Banking triggers each pending goal to emit `SCORE_APPLY_REQUEST`.
-3. ScoringManager builds effective part totals from its modifier chain (selective rule modifiers only; global multipliers removed).
+3. ScoringManager builds effective part totals (`adjusted_total`) from its modifier chain (selective rule modifiers only).
 4. `SCORE_APPLIED` finalizes adjustment; goal reduces `remaining` and emits progress/fulfillment events.
 
 Goal Pending Projection:
-`Goal.projected_pending()` queries `ScoringManager.project_goal_pending(goal)` to show adjusted pending points (e.g., in tooltips or progress bars) without emitting preview events. This replaced the deprecated `Game.compute_goal_pending_final` wrapper, further centralizing scoring concerns.
+`Goal.projected_pending()` queries `ScoringManager.project_goal_pending(goal)` to show adjusted pending points (e.g., in tooltips or progress bars). Preview events were removed; computation is pure and synchronous.
 
-Serialization fields (excerpt): `parts`, `detailed_parts`, `total_raw`, `total_effective`, `final_global_adjusted`, `multiplier`.
+Serialization fields (excerpt, lean): `parts`, `detailed_parts`, `total_raw`, `total_effective`, `final_global_adjusted`.
 
 Risk: A Farkle (`FARKLE`) discards all unbanked pending, preserving tension.
 
@@ -75,6 +75,13 @@ Right-click rules:
 * On selected scoring dice: lock immediately if selection is valid.
 * On empty space: clear selection (roll/farkle states only).
 * During ability targeting: right-click outside valid targets cancels selection.
+
+### Ability Targeting (Streamlined)
+Reroll ability targeting now always requires an explicit right-click confirmation (no auto-execute on first target). If a relic increases target capacity (e.g., allows 2 dice), you may:
+* Select one die and finalize immediately with right-click, or
+* Select a second die before finalizing.
+
+Selection state persists until manual finalize or cancellation; tests rely on `SELECTING_TARGETS` lasting through target collection. Multi-charge scenarios clear previous targets after each execution so subsequent charges can be used without stale state.
 
 ## Tooltip System
 All rich numeric/stat detail moved into delayed hover tooltips to declutter the board.
@@ -118,6 +125,17 @@ Relics subclass `GameObject` and leverage its lifecycle:
 
 Relic string representations for the UI are assembled via `RelicManager.active_relic_lines()` producing human readable summaries (e.g., `Charm of Fives [+50 SingleValue:5]`).
 
+#### Goal-Conditional Relics
+Two relics introduce goal-scoped scoring boosts:
+* `Talisman of Purpose` – +20% to all scoring parts when applying to a mandatory goal.
+* `Charm of Opportunism` – +20% to all scoring parts when applying to a non-mandatory (optional) goal.
+
+Internally they wrap a `GlobalPartsMultiplier(mult=1.2)` with `MandatoryGoalOnly` / `OptionalGoalOnly` predicates. The multiplier adjusts part values within the scoring context; absence of a goal (generic selection preview) leaves them inert.
+
+Shop Integration: Both relics are added to the offer pool with deterministic test-friendly costs (65 and 55 gold respectively). They follow the same activation event pattern, emitting a `SCORE_MODIFIER_ADDED` for their conditional modifier on purchase.
+
+Extensibility: Additional conditional relics can be composed by wrapping any existing modifier (e.g., `RuleSpecificMultiplier`) in a `ConditionalScoreModifier` variant.
+
 ## Architecture Overview
 
 The codebase has been reorganized into domain‑centric packages under `farkle/`:
@@ -156,7 +174,41 @@ Subclass responsibilities when extending `GameObject`:
 Hooks swallow exceptions defensively (tests favor stability over failing fast in hook code); consider adding internal logging if richer diagnostics become important.
 
 ### Selective Modifier Model
-Selective (per‑rule) modifiers are owned centrally by `ScoringManager` and applied during preview and finalization. Implementations (e.g., `FlatRuleBonus`, `RuleSpecificMultiplier`) live in `scoring/score_modifiers.py`. The incremental event pair (`SCORE_MODIFIER_ADDED` / `SCORE_MODIFIER_REMOVED`) lets the manager maintain an authoritative chain. Modifiers never directly mutate player/global state outside this controlled phase.
+Selective (per‑rule) modifiers are owned centrally by `ScoringManager` and applied during preview and finalization. Implementations (e.g., `FlatRuleBonus`, `RuleSpecificMultiplier`) live in `scoring/score_modifiers.py`. The incremental event pair (`SCORE_MODIFIER_ADDED` / `SCORE_MODIFIER_REMOVED`) lets the manager maintain an authoritative chain. Modifiers never directly mutate player/global state outside this controlled phase. Global preview events were removed to simplify the pipeline; consumers call `scoring_manager.preview()` directly and read `adjusted_total`.
+
+#### Goal‑Conditional Modifiers
+The modifier system now supports gating effects by a specific Goal context during scoring application and projection.
+
+`ScoringManager` passes the active `goal` into the modifier context whenever computing:
+* Pending application (`SCORE_APPLY_REQUEST` → `SCORE_APPLIED`)
+* Goal pending projection (`Goal.projected_pending()`)
+* Explicit previews that provide a goal (`scoring_manager.preview(parts, goal=goal)`)
+
+Wrapper classes:
+* `MandatoryGoalOnly(inner)` – applies `inner` modifier only if `goal.mandatory` is True.
+* `OptionalGoalOnly(inner)` – applies `inner` modifier only if `goal.mandatory` is False.
+
+Both derive from `ConditionalScoreModifier`, a generic wrapper that evaluates a predicate against the scoring context prior to invoking the inner modifier. This design lets future conditions be expressed without altering the core chain logic (e.g., fulfill‑ratio thresholds, remaining < half, pending_raw > N).
+
+Example:
+```python
+from farkle.scoring.score_modifiers import RuleSpecificMultiplier, MandatoryGoalOnly
+
+# Double the 'SingleValue:1' rule only when scoring against a mandatory goal.
+mod = MandatoryGoalOnly(RuleSpecificMultiplier('SingleValue:1', mult=2.0))
+game.scoring_manager.modifier_chain.add(mod)
+```
+
+Tests (`test_goal_conditional_modifiers.py`) demonstrate differential application: previews for mandatory vs optional goals yield distinct `adjusted_total` values while sharing raw parts.
+
+Fallback behavior: If a computation has no goal (regular selection preview) conditional modifiers do not apply (predicate receives `goal=None`).
+
+Future extension ideas:
+* `FulfillmentBelow(threshold: float, inner)` – run while `(remaining / target_score) > threshold`.
+* `RemainingLessThan(amount, inner)` – run once goal tightens below a point threshold.
+* Compound predicates via logical operators (AND / OR wrappers) for complex gating.
+
+All wrappers remain pure: they neither mutate goal nor parts outside invoking their inner modifier.
 
 ### Testing Philosophy
 Tests assert event ordering, scoring adjustments, UI visibility, and lifecycle hook semantics. Focus tests exist for: dice roll ordering, locking invariants, modifier application, relic shop gating, tooltip content, and lifecycle (single invocation of `on_activate` / `on_deactivate`).
@@ -166,6 +218,26 @@ Tests assert event ordering, scoring adjustments, UI visibility, and lifecycle h
 * Tests: `pytest -q` (focus tests exist for shop, scoring, events, tooltips, relics, selection states).
 * Lint: Ruff via CI (see `.ruff.toml`) and local `ruff check .`.
 * Determinism: Tests seed scenarios; avoid randomness without explicit seed for reproducibility.
+
+### Global Randomness & Seeding
+The game uses a centralized randomness wrapper `RandomSource` (`farkle/core/random_source.py`) to enable reproducible test sequences and deterministic gameplay when desired.
+
+Instantiate a game with a seed:
+```python
+game = Game(screen, font, clock, rng_seed=123)
+```
+
+Effects of a provided `rng_seed`:
+* Dice initial values and subsequent rolls come from `game.rng`.
+* Relic offer shuffling (`RelicManager`) prefers `game.rng` for deterministic ordering (still keeping Charm of Fives first by rule).
+* Reroll ability uses the seeded RNG only if a seed is set; otherwise it defers to Python's global `random` so legacy tests that monkeypatch `random.randint` continue to work.
+
+API highlights:
+* `randint(a,b)`, `choice(seq)`, `shuffle(list)`, `sample(population,k)`.
+* `reseed(seed)` to swap seeds mid-run (pass `None` for fresh non-deterministic state).
+* `state()` / `set_state()` for snapshot & restore in advanced tests.
+
+Fallback behavior: If `rng_seed=None`, `game.rng` still exists but internal seed is `None`; rerolls and monkeypatched test randomness remain compatible.
 
 ## Contributing
 1. Keep new features event-driven (emit + subscribe) rather than introducing polling flags.

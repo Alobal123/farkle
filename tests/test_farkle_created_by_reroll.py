@@ -41,6 +41,9 @@ class FarkleCreatedByRerollTests(unittest.TestCase):
         random.randint = lambda a,b: 2
         try:
             self.assertTrue(self.game.ability_manager.attempt_target('die', 0))
+            # Selecting state before finalize
+            self.assertEqual(self.game.state_manager.get_state().name, 'SELECTING_TARGETS')
+            self.assertTrue(self.game.ability_manager.finalize_selection())
         finally:
             random.randint = original_randint
         self.assertEqual(self.game.state_manager.get_state().name, 'FARKLE', 'Reroll should have created a new farkle state')

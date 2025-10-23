@@ -156,9 +156,15 @@ class RerollAbility(TargetedAbility):
         d = game.dice[die_index]
         if d.held:
             game.set_message("Cannot reroll held die."); return False
-        import random as _r
         old = d.value
-        d.value = _r.randint(1,6)
+        rng = getattr(game, 'rng', None)
+        # Use deterministic RNG only when explicitly seeded; otherwise defer to global random so
+        # existing tests that monkeypatch random.randint still control reroll outcomes.
+        if rng and getattr(rng, 'seed', None) is not None:
+            d.value = rng.randint(1,6)
+        else:
+            import random as _r
+            d.value = _r.randint(1,6)
         d.selected = False
         d.scoring_eligible = False
         self.consume()

@@ -5,7 +5,8 @@ from typing import Protocol, Iterable, List, Sequence
 
 class ScoreContext(Protocol):
     pending_raw: int
-    # May be extended with more fields later (e.g., goal, player, level_index)
+    # Optional goal reference for goal-conditional modifiers.
+    goal: object | None
 
 class ScoreModifier(ABC):
     """Abstract base for score modifiers.
@@ -209,4 +210,78 @@ class FlatRuleBonus(CompositePartModifier):
         object.__setattr__(self, 'matcher', RuleKeyMatcher(rule_key))
         object.__setattr__(self, 'effect', FlatAddEffect(amount))
         # Semantics: adds 'amount' to every matching part independently (stackable per lock instance).
+
+#############################################
+# Goal-conditional modifier wrappers         #
+#############################################
+
+class ConditionalScoreModifier(ScoreModifier):
+    """Base wrapper that applies an inner modifier only if predicate(context) is True.
+
+    Provides a composable way to gate any existing modifier by goal or other context attributes
+    without changing its internal logic. Keeps purity and test determinism.
+    """
+    priority: int = 60  # run after part-level adjustments by default
+
+    def __init__(self, inner: ScoreModifier, predicate):
+        self.inner = inner
+        # Inherit inner priority but run slightly after to ensure part adjustments exist
+        try:
+            self.priority = int(getattr(inner, 'priority', 60)) + 1
+        except Exception:
+            self.priority = 60
+        self.predicate = predicate
+
+    def apply(self, base: int, context: ScoreContext) -> int:  # pragma: no cover (logic simple)
+        try:
+            if not self.predicate(context):
+                return base
+            return self.inner.apply(base, context)
+        except Exception:
+            return base
+
+
+class MandatoryGoalOnly(ConditionalScoreModifier):
+    """Applies inner modifier only when context.goal is present and goal.mandatory is True."""
+    def __init__(self, inner: ScoreModifier):
+        super().__init__(inner, predicate=lambda ctx: getattr(getattr(ctx, 'goal', None), 'mandatory', False) is True)
+
+
+class OptionalGoalOnly(ConditionalScoreModifier):
+    """Applies inner modifier only when context.goal is present and goal.mandatory is False."""
+    def __init__(self, inner: ScoreModifier):
+        super().__init__(inner, predicate=lambda ctx: getattr(getattr(ctx, 'goal', None), 'mandatory', None) is False)
+
+
+#############################################
+# Global (all-parts) multiplier              #
+#############################################
+
+class GlobalPartsMultiplier(ScoreModifier):
+    """Multiply every part's effective value by a factor.
+
+    Implemented as a dedicated modifier (rather than CompositePartModifier) for efficiency.
+    After application, ScoringManager will recompute total from part adjusted values.
+    """
+    def __init__(self, mult: float, priority: int = 58):
+        self.mult = mult
+        self.priority = priority
+
+    def apply(self, base: int, context: ScoreContext) -> int:  # pragma: no cover simple math
+        if self.mult == 1.0:
+            return base
+        score_obj = getattr(context, 'score_obj', None)
+        if score_obj is None:
+            # Fallback: scale the aggregated base directly
+            return int(base * self.mult)
+        try:
+            for p in score_obj.parts:
+                current = p.adjusted if p.adjusted is not None else p.raw
+                new_val = int(current * self.mult)
+                if new_val != current:
+                    p.adjusted = new_val
+        except Exception:
+            return base
+        # Let chain recompute total from parts later
+        return base
         

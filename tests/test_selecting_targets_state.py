@@ -37,6 +37,9 @@ class SelectingTargetsStateTests(unittest.TestCase):
         # choose first unheld die
         target_index = 0
         abm.attempt_target('die', target_index)
+        # Still selecting until finalize
+        self.assertEqual(self.game.state_manager.get_state().name, 'SELECTING_TARGETS')
+        self.assertTrue(abm.finalize_selection())
         self.assertIn(GameEventType.TARGET_SELECTION_FINISHED, [e.type for e in self.collector.events])
         self.assertEqual(self.game.state_manager.get_state().name, 'ROLLING')
 
