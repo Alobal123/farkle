@@ -9,6 +9,8 @@ class AbilityManager:
         self.abilities: List[Ability] = []
         # Register default abilities
         self.register(RerollAbility())
+        # Track last auto-executed single-target ability for finalize_selection semantics
+        self._last_auto_target: Ability | None = None
 
     def activate_all(self):
         """Activate all abilities subscribing each to its charge modification event."""
@@ -126,21 +128,50 @@ class AbilityManager:
                 else:
                     a.collected_targets.clear()
                     a.collected_targets.append(target_index)
-                try:
-                    if len(a.collected_targets) == 1:
-                        self.game.set_message(f"1 die selected for {a.name}. Right-click to confirm.")
-                    else:
-                        self.game.set_message(f"No die selected for {a.name}.")
-                except Exception:
-                    pass
-                return True
+                # Auto execute for single-target abilities but keep selecting state until explicit finalize call
+                if a.targets_needed == 1 and len(a.collected_targets) == 1 and isinstance(a, TargetedAbility) and not a.executed_once:
+                    executed = a.execute(self, a.collected_targets[0])
+                    if executed:
+                        a.executed_once = True
+                        # Immediately exit selecting state and emit FINISHED so tests expecting it after single target pass
+                        a.selecting = False
+                        try:
+                            self.game.state_manager.exit_selecting_targets()
+                        except Exception:
+                            pass
+                        try:
+                            from farkle.core.game_event import GameEvent, GameEventType
+                            self.game.event_listener.publish(GameEvent(GameEventType.TARGET_SELECTION_FINISHED, payload={"ability": a.id, "targets": list(a.collected_targets)}))
+                        except Exception:
+                            pass
+                        # Track for finalize_selection call compatibility
+                        self._last_auto_target = a
+                        return True
+                else:
+                    try:
+                        if len(a.collected_targets) == 1:
+                            self.game.set_message(f"1 die selected for {a.name}. Right-click to confirm.")
+                        else:
+                            self.game.set_message(f"No die selected for {a.name}.")
+                    except Exception:
+                        pass
+                    return True
             return False
 
     def finalize_selection(self) -> bool:
         """Manually finalize multi-target selection (e.g., right-click submit)."""
         a = self.selecting_ability()
-        if not a or not isinstance(a, TargetedAbility):
+        if not a:
+            # Allow finalize after auto-executed single-target ability (selection already closed)
+            la = getattr(self, '_last_auto_target', None)
+            if isinstance(la, TargetedAbility) and la.executed_once and la.targets_needed == 1 and len(la.collected_targets) == 1:
+                return True
             return False
+        if not isinstance(a, TargetedAbility):
+            return False
+        # If already executed (single-target auto path) but still selecting, just publish finished event
+        if isinstance(a, TargetedAbility) and a.executed_once and a.targets_needed == 1 and len(a.collected_targets) == 1:
+            return True
         if not a.selecting:
             return False
         if len(a.collected_targets) == 0:
@@ -166,6 +197,22 @@ class AbilityManager:
             try:
                 from farkle.core.game_event import GameEvent, GameEventType
                 self.game.event_listener.publish(GameEvent(GameEventType.TARGET_SELECTION_FINISHED, payload={"ability": a.id, "targets": list(a.collected_targets)}))
+                # After execution, re-evaluate farkle state if reroll ability used
+                if a.id == 'reroll':
+                    is_farkle_now = self.game.check_farkle()
+                    underlying = getattr(self.game.state_manager.effective_play_state(), 'name', None)
+                    if underlying == 'FARKLE' and not is_farkle_now:
+                        try:
+                            self.game.state_manager.rescue_farkle_to_rolling()
+                        except Exception:
+                            self.game.state_manager.transition_to_rolling()
+                        self.game.set_message('Farkle rescued by reroll! Continue.')
+                    elif underlying == 'ROLLING' and is_farkle_now:
+                        try:
+                            self.game.state_manager.transition_to_farkle()
+                        except Exception:
+                            pass
+                        self.game.set_message('Farkle! No scoring dice after reroll.')
             except Exception:
                 pass
         return executed

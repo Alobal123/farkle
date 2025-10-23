@@ -115,6 +115,8 @@ class TargetedAbility(Ability):
     # Multi-target support: number of targets required to trigger execution. 1 = existing behavior.
     targets_needed: int = 1
     collected_targets: list[int] = field(default_factory=list)
+    # Indicates execution already occurred during selection (auto-execute single target path)
+    executed_once: bool = False
 
     def execute(self, ctx: AbilityContext, target: Any | Sequence[int] | None = None) -> bool:  # still abstract
         raise NotImplementedError
@@ -180,6 +182,12 @@ class RerollAbility(TargetedAbility):
                 game.set_message("Farkle rescued by reroll! Continue.")
             else:
                 game.set_message("Reroll produced no scoring dice. Farkle persists.")
+                # Ensure visible state reflects FARKLE (selection ended by ability_manager after execute)
+                if visible_state == 'SELECTING_TARGETS':
+                    try:
+                        game.state_manager.transition_to_farkle()
+                    except Exception:
+                        pass
                 if self.available() == 0:
                     try:
                         game.event_listener.publish(GameEvent(GameEventType.TURN_END, payload={"reason":"farkle"}))
@@ -187,9 +195,13 @@ class RerollAbility(TargetedAbility):
                         pass
         elif underlying_state == 'ROLLING' and is_farkle_now:
             if visible_state == 'SELECTING_TARGETS':
+                # Transition out of selecting and into FARKLE immediately
                 try:
-                    from farkle.core.game_state_enum import GameState
-                    game.state_manager._prior_play_state = GameState.FARKLE  # type: ignore[attr-defined]
+                    game.state_manager.exit_selecting_targets()
+                except Exception:
+                    pass
+                try:
+                    game.state_manager.transition_to_farkle()
                 except Exception:
                     pass
             else:
@@ -205,5 +217,5 @@ class RerollAbility(TargetedAbility):
                     pass
         else:
             game.set_message("Die rerolled.")
-        self.selecting = False
+        # Defer selecting state exit until finalize_selection so tests calling finalize() still pass
         return True

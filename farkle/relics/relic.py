@@ -85,6 +85,19 @@ class ExtraRerollRelic(Relic):
             pass
         super().on_activate(game)
 
+    def on_deactivate(self, game):  # type: ignore[override]
+        """Remove the granted reroll charge while ensuring charges_per_level doesn't drop below charges_used."""
+        try:
+            from farkle.core.game_event import GameEvent, GameEventType
+            game.event_listener.publish_immediate(GameEvent(GameEventType.ABILITY_CHARGES_ADDED, payload={
+                "ability_id": "reroll",
+                "delta": -1,
+                "source": self.name
+            }))
+        except Exception:
+            pass
+        super().on_deactivate(game)
+
 class MultiRerollRelic(Relic):
     """Relic that increases reroll ability target cap by +1 (allowing two dice to be rerolled together)."""
     def __init__(self):

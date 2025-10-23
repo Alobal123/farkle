@@ -205,9 +205,42 @@ class ScoringManager(GameObject):
             except Exception:
                 pass
         adjusted_total = score_obj.total_effective
+        # Build a dynamic merged modifier list: events-injected chain + live active relic chains.
         try:
             context = _ScoreCtx(score_obj)
-            adjusted_total = self.modifier_chain.apply(score_obj.total_raw, context)
+            from farkle.scoring.score_modifiers import ScoreModifierChain, ScoreModifier
+            merged = ScoreModifierChain()
+            # Deduplicate by (class name, scalar attribute values)
+            seen: set[tuple[str, tuple]] = set()
+            def _add_mod(m: ScoreModifier):
+                try:
+                    # Collect simple scalar identity snapshot for dedupe
+                    attrs = []
+                    for attr in ('rule_key','mult','amount','priority'):
+                        if hasattr(m, attr):
+                            attrs.append(getattr(m, attr))
+                    ident = (m.__class__.__name__, tuple(attrs))
+                    if ident in seen:
+                        return
+                    seen.add(ident)
+                    merged.add(m)
+                except Exception:
+                    merged.add(m)
+            # Event-populated modifiers
+            for m in self.modifier_chain.snapshot():
+                _add_mod(m)
+            # Live relic modifiers (tests may append relic directly without activation events)
+            try:
+                relic_mgr = getattr(self.game, 'relic_manager', None)
+                if relic_mgr:
+                    for relic in getattr(relic_mgr, 'active_relics', []):
+                        if not getattr(relic, 'active', True):
+                            continue
+                        for m in relic.modifier_chain.snapshot():
+                            _add_mod(m)
+            except Exception:
+                pass
+            adjusted_total = merged.apply(score_obj.total_raw, context)
         except Exception:
             adjusted_total = score_obj.total_effective
         result = {

@@ -16,10 +16,31 @@ class Player(GameObject):
         GameObject.__init__(self, name="Player")
         self.gold = 0
         self.game = None  # set by Game after construction
+        self.active_effects: list = []  # TemporaryEffect instances (blessings/curses)
 
     def add_gold(self, amount: int) -> None:
         if amount > 0:
             self.gold += amount
+
+    def apply_effect(self, effect) -> None:
+        """Apply a temporary effect (blessing/curse) to this player."""
+        if effect in self.active_effects:
+            return
+        effect.player = self
+        self.active_effects.append(effect)
+        if self.game:
+            # Activate will subscribe on_event automatically since effect.active was False
+            effect.activate(self.game)
+
+    def remove_effect(self, effect) -> None:
+        """Remove a temporary effect from this player."""
+        if effect in self.active_effects:
+            self.active_effects.remove(effect)
+            if self.game:
+                try:
+                    effect.deactivate(self.game)
+                except Exception:
+                    pass
 
 
     # Player might react to events later (stats tracking, etc.)
@@ -40,18 +61,9 @@ class Player(GameObject):
             return
         g = self.game
         hud_padding = 10
-        # Minimal HUD (global multiplier removed from gameplay)
-        hud_lines = [
-            f"Turns: {g.level_state.turns_left}",
-            f"Gold: {self.gold}",
-        ]
-        line_surfs = [g.small_font.render(t, True, (250,250,250)) for t in hud_lines]
-        width_needed = max(s.get_width() for s in line_surfs) + hud_padding * 2
-        height_needed = sum(s.get_height() for s in line_surfs) + hud_padding * 2 + 6
-        hud_rect = pygame.Rect(WIDTH - width_needed - 20, 20, width_needed, height_needed)
-        pygame.draw.rect(surface, (40, 55, 70), hud_rect, border_radius=8)
-        pygame.draw.rect(surface, (90, 140, 180), hud_rect, width=2, border_radius=8)
-        y = hud_rect.y + hud_padding
-        for s in line_surfs:
-            surface.blit(s, (hud_rect.x + hud_padding, y))
-            y += s.get_height() + 2
+        # Player no longer directly renders HUD; PlayerHUDSprite handles display.
+        pass
+
+    def handle_click(self, game, pos) -> bool:  # type: ignore[override]
+        """Reserved for future player HUD interactions (StarterEffect removed)."""
+        return False

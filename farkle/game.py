@@ -244,8 +244,22 @@ class Game:
     # --- scoring preview helpers -------------------------------------------------
 
     def compute_preview(self, parts: list[tuple[str,int]], source: str = "selection") -> dict:
-        """Delegated preview to `ScoringManager` (legacy compatibility wrapper)."""
-        return self.scoring_manager.preview(parts, source=source)
+        """Delegated preview to `ScoringManager` (legacy compatibility wrapper).
+
+        Prefer calling `self.scoring_manager.preview` directly; this helper remains
+        for transitional code. If scoring_manager missing, returns trivial structure.
+        """
+        sm = getattr(self, 'scoring_manager', None)
+        if sm:
+            return sm.preview(parts, source=source)
+        total = sum(p[1] for p in parts)
+        return {
+            "parts": [{"rule_key": rk, "raw": raw, "adjusted": raw} for rk, raw in parts],
+            "total_raw": total,
+            "selective_effective": total,
+            "multiplier": 1.0,
+            "final_preview": total
+        }
 
     def reset_dice(self):
         self.dice_container.reset_all()
@@ -403,15 +417,27 @@ class Game:
         raw, _ = self.calculate_score_from_dice()
         if raw <= 0:
             return (0,0,0,1.0)
-        rk = None
+        rule_key = None
         try:
-            rk = self.dice_container.selection_rule_key()
+            rule_key = self.dice_container.selection_rule_key()
         except Exception:
-            rk = None
-        if not rk:
+            rule_key = None
+        if not rule_key:
             return (raw, raw, raw, 1.0)
-        prev = self.compute_preview([(rk, raw)], source="selection")
-        return (raw, int(prev.get('selective_effective', raw)), int(prev.get('final_preview', raw)), float(prev.get('multiplier', 1.0)))
+        # Delegate modifier application & preview assembly to ScoringManager so selective bonuses apply.
+        try:
+            scoring_mgr = getattr(self, 'scoring_manager', None)
+            if scoring_mgr:
+                preview = scoring_mgr.preview([(rule_key, raw)], source="selection")
+                return (
+                    raw,
+                    int(preview.get('selective_effective', raw)),
+                    int(preview.get('final_preview', raw)),
+                    float(preview.get('multiplier', 1.0))
+                )
+        except Exception:
+            pass
+        return (raw, raw, raw, 1.0)
 
 
     def _auto_lock_selection(self, verb: str = "Auto-locked") -> bool:

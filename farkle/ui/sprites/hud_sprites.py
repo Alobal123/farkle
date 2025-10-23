@@ -28,7 +28,26 @@ class PlayerHUDSprite(BaseSprite):
             f"Turns: {g.level_state.turns_left}",
             f"Gold: {p.gold}",
         ]
-        line_surfs = [g.small_font.render(t, True, (250,250,250)) for t in hud_lines]
+        effs = list(getattr(p, 'active_effects', []))
+        if effs:
+            hud_lines.append("Effects:")
+            for e in effs:
+                hud_lines.append(f" - {e.name} ({e.duration})")
+        line_surfs = []
+        from farkle.core.effect_type import EffectType as _ET
+        for t in hud_lines:
+            color = (250,250,250)
+            if t == "Effects:":
+                color = (120,200,255)
+            elif t.startswith(" - "):
+                name_portion = t[3:].split(" (")[0]
+                eff = next((e for e in effs if e.name == name_portion), None)
+                if eff:
+                    if eff.effect_type == _ET.BLESSING:
+                        color = (130,220,130)
+                    else:
+                        color = (220,130,130)
+            line_surfs.append(g.small_font.render(t, True, color))
         from farkle.ui.settings import WIDTH
         width_needed = max(s.get_width() for s in line_surfs) + hud_padding * 2
         height_needed = sum(s.get_height() for s in line_surfs) + hud_padding * 2 + 6
