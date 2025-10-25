@@ -87,18 +87,13 @@ class GodsPanelSprite(BaseSprite):
                 return
         except Exception:
             pass
-        # Determine vertical anchor below goals
-        goals_bottom = 0
-        for goal in g.level_state.goals:
-            r = getattr(goal, '_last_rect', None)
-            if r:
-                goals_bottom = max(goals_bottom, r.bottom)
-        from farkle.ui.settings import HEIGHT
-        y_start = (goals_bottom + 10) if goals_bottom > 0 else (HEIGHT // 2 + 80)
-        x_start = 80
+        
+        from farkle.ui.settings import WIDTH, HEIGHT
+        y_start = 20
+        
         font = g.font
         small_font = getattr(g, 'small_font', font)
-        label_surf = font.render("Gods:", True, (240,240,240))
+        
         # Compute needed width incrementally
         name_surfs = []
         max_name_h = 0
@@ -117,18 +112,21 @@ class GodsPanelSprite(BaseSprite):
         panel_h = max_name_h + 2 + xp_h + 2 + bar_h
         # Compute width
         spacing = 12
-        total_width = label_surf.get_width() + 10
+        total_width = 0
         per_god_rects = []
         for surf in name_surfs:
             total_width += surf.get_width() + spacing
         if name_surfs:
             total_width -= spacing  # last spacing not needed
+        
+        x_start = (WIDTH - total_width) // 2
+
         # Build surface
         self.image = pygame.Surface((total_width, panel_h), pygame.SRCALPHA)
         self.rect = self.image.get_rect(topleft=(x_start, y_start))
         # Draw label
-        self.image.blit(label_surf, (0,0))
-        x = label_surf.get_width() + 10
+        
+        x = 0
         xp_req_cache = []
         for i, (surf, god) in enumerate(zip(name_surfs, gm.worshipped)):
             rect = surf.get_rect(topleft=(x,0))

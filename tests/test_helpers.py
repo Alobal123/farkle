@@ -41,6 +41,19 @@ def ensure_relic_modifiers(game, relics: Iterable):
 
 def _modifier_identity(mod) -> tuple:
     keys = []
+    # Include inner modifier identity if it's a wrapper
+    if hasattr(mod, 'inner'):
+        keys.append(_modifier_identity(mod.inner))
+    
+    # Include predicate source code for conditional modifiers
+    if hasattr(mod, 'predicate'):
+        try:
+            import inspect
+            keys.append(inspect.getsource(mod.predicate))
+        except (TypeError, OSError):
+            # Fallback for built-in or dynamically generated predicates
+            keys.append(str(mod.predicate))
+
     for attr in ('__class__', 'rule_key', 'mult', 'amount', 'priority'):
         if attr == '__class__':
             keys.append(mod.__class__.__name__)

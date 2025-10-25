@@ -107,6 +107,7 @@ class ShopOverlaySprite(BaseSprite):
         from farkle.ui.settings import WIDTH, HEIGHT
         self.image = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
         self.rect = self.image.get_rect(topleft=(0,0))
+        self._offer_sprites = []
         # Visible only when shop_open flag true
         self.visible_predicate = lambda g: getattr(g.relic_manager, 'shop_open', False)
         self.sync_from_logical()
@@ -114,53 +115,80 @@ class ShopOverlaySprite(BaseSprite):
     def sync_from_logical(self):
         g = self.game
         if not getattr(g.relic_manager, 'shop_open', False):
-            self.image.fill((0,0,0,0)); self.dirty = 1; return
+            self.image.fill((0,0,0,0))
+            # Kill sprites when not visible
+            for s in self._offer_sprites:
+                s.kill()
+            self._offer_sprites.clear()
+            self.dirty = 1
+            return
+            
         from farkle.ui.settings import WIDTH, HEIGHT
         self.image.fill((0,0,0,0))
         dim = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
         # Opaque but tinted navy so background isn't flat black
         dim.fill((18,28,40,230))
         self.image.blit(dim, (0,0))
-        pw, ph = 600, 340
+
+        # --- Dynamic Panel Sizing ---
+        offer_card_w, offer_card_h = 200, 180
+        num_offers = len(getattr(g.relic_manager, 'offers', []))
+        spacing = 25
+        panel_pad_x = 50 # Horizontal padding inside the panel
+        panel_pad_y = 150 # Vertical padding for title, gold, and skip button
+        
+        content_w = num_offers * offer_card_w + max(0, num_offers - 1) * spacing
+        pw = content_w + panel_pad_x
+        ph = offer_card_h + panel_pad_y
+        
         panel = pygame.Rect((WIDTH - pw)//2, (HEIGHT - ph)//2, pw, ph)
+        # --- End Dynamic Sizing ---
+
         pygame.draw.rect(self.image, (50,70,95), panel, border_radius=12)
         pygame.draw.rect(self.image, (120,170,210), panel, width=2, border_radius=12)
-        title = g.font.render("Shop", True, (250,250,250)); self.image.blit(title, (panel.x + 20, panel.y + 16))
-        gold_surf = g.font.render(f"Your Gold: {g.player.gold}", True, (230,230,230))
-        self.image.blit(gold_surf, (panel.x + 20, panel.y + 16 + title.get_height() + 6))
+        
         offers = getattr(g.relic_manager, 'offers', [])
-        offer_area_top = panel.y + 90
-        offer_width = (panel.width - 80)//3
-        offer_height = panel.height - 150
+        self._ensure_offer_sprites(offers, panel)
+
+        # --- Click Area Calculation ---
         btn_h = 32
         self._purchase_rects = []
+        offer_area_top = panel.y + 80 # Y position for the top of the offer cards
+
         for idx, offer in enumerate(offers):
-            col_x = panel.x + 20 + idx * (offer_width + 20)
-            box_rect = pygame.Rect(col_x, offer_area_top, offer_width, offer_height)
-            pygame.draw.rect(self.image, (65,90,120), box_rect, border_radius=8)
-            pygame.draw.rect(self.image, (120,170,210), box_rect, width=2, border_radius=8)
-            y = box_rect.y + 12
-            name_surf = g.font.render(offer.relic.name, True, (255,255,255)); self.image.blit(name_surf, (box_rect.x + 10, y)); y += name_surf.get_height() + 6
-            from farkle.scoring.score_modifiers import FlatRuleBonus
-            for m in offer.relic.modifier_chain.snapshot():
-                if isinstance(m, FlatRuleBonus):
-                    fsurf = g.small_font.render(f"+{m.amount} {m.rule_key}", True, (255,200,140))
-                    self.image.blit(fsurf, (box_rect.x + 10, y)); y += fsurf.get_height() + 2
-            csurf = g.small_font.render(f"Cost: {offer.cost}g", True, (210,210,210))
-            self.image.blit(csurf, (box_rect.x + 10, y)); y += csurf.get_height() + 8
+            # This calculation MUST match the positioning in _ensure_offer_sprites
+            col_x = panel.x + (panel_pad_x // 2) + idx * (offer_card_w + spacing)
+            box_rect = pygame.Rect(col_x, offer_area_top, offer_card_w, offer_card_h)
+            
+            # This rect MUST match the button's position inside ShopOfferSprite
             btn_rect = pygame.Rect(box_rect.x + 10, box_rect.bottom - btn_h - 10, box_rect.width - 20, btn_h)
             can_afford = g.player.gold >= offer.cost
-            pygame.draw.rect(self.image, (80,200,110) if can_afford else (60,90,70), btn_rect, border_radius=6)
-            ptxt = g.small_font.render("Purchase", True, (0,0,0) if can_afford else (120,120,120))
-            self.image.blit(ptxt, (btn_rect.centerx - ptxt.get_width()//2, btn_rect.centery - ptxt.get_height()//2))
             self._purchase_rects.append((idx, btn_rect, can_afford))
+
         self._skip_rect = pygame.Rect(panel.centerx - 80, panel.bottom - 50, 160, 40)
         pygame.draw.rect(self.image, (180,80,60), self._skip_rect, border_radius=8)
         stxt = g.font.render("Skip", True, (0,0,0))
         self.image.blit(stxt, (self._skip_rect.centerx - stxt.get_width()//2, self._skip_rect.centery - stxt.get_height()//2))
-        hint = g.small_font.render("Esc/S to skip", True, (220,220,220))
-        self.image.blit(hint, (panel.x + 20, panel.bottom - 30))
         self.dirty = 1
+
+    def _ensure_offer_sprites(self, offers, panel_rect):
+        g = self.game
+        # Kill and clear existing sprites
+        for s in self._offer_sprites:
+            s.kill()
+        self._offer_sprites.clear()
+
+        offer_card_w, offer_card_h = 200, 180
+        spacing = 25
+        panel_pad_x = 50
+        offer_area_top = panel_rect.y + 80
+
+        from farkle.ui.sprites.shop_offer_sprite import ShopOfferSprite
+        for idx, offer in enumerate(offers):
+            col_x = panel_rect.x + (panel_pad_x // 2) + idx * (offer_card_w + spacing)
+            sprite = ShopOfferSprite(offer, g, self.groups())
+            sprite.rect.topleft = (col_x, offer_area_top)
+            self._offer_sprites.append(sprite)
 
     def handle_click(self, game, pos) -> bool:  # type: ignore[override]
         if not getattr(game.relic_manager, 'shop_open', False):

@@ -4,7 +4,8 @@ try:
     import farkle.ui.sprites.die_sprite as die_sprite  # ensures DieSprite definition loaded
     import farkle.ui.sprites.ui_sprites as ui_sprites  # UIButtonSprite
     import farkle.ui.sprites.overlay_sprites as overlay_sprites  # HelpIconSprite, RulesOverlaySprite, ShopOverlaySprite
-    import farkle.ui.sprites.goal_sprites as goal_sprites  # GoalSprite, RelicPanelSprite
+    import farkle.ui.sprites.goal_sprites as goal_sprites  # GoalSprite
+    import farkle.ui.sprites.relic_panel_sprite as relic_panel_sprite # RelicPanelSprite
     import farkle.ui.sprites.hud_sprites as hud_sprites  # PlayerHUDSprite, GodsPanelSprite
     # Sprite modules imported successfully.
 except Exception as _e:
@@ -55,8 +56,23 @@ class Game:
         except Exception:
             self.small_font = font
         self.clock = clock
-        # Use provided level or default prototype (multi-goal capable)
-        self.level = level or Level.single(name="Invocation Rite", target_goal=300, max_turns=2, description="Basic ritual to avert a minor omen.")
+        
+        # Global randomness source (seeded optionally for deterministic tests)
+        # Initialize RNG before level creation so we can pass it
+        try:
+            from farkle.core.random_source import RandomSource
+            self.rng = RandomSource(seed=rng_seed)
+        except Exception:
+            self.rng = None  # fallback; direct random usage will occur until fixed
+        
+        # Use provided level or default prototype (multi-goal capable with petitions)
+        self.level = level or Level.single(
+            name="Invocation Rite", 
+            target_goal=300, 
+            max_turns=2, 
+            description="Basic ritual to avert a minor omen.",
+            rng=self.rng
+        )
         self.level_state = LevelState(self.level)
         self.active_goal_index: int = 0
         self.rules = ScoringRules()
@@ -206,7 +222,8 @@ class Game:
         get wrapped. Relic panel sprite re-created idempotently.
         """
         try:
-            from farkle.ui.sprites.goal_sprites import GoalSprite, RelicPanelSprite
+            from farkle.ui.sprites.goal_sprites import GoalSprite
+            from farkle.ui.sprites.relic_panel_sprite import RelicPanelSprite
             # Wrap goals
             for gl in self.level_state.goals:
                 if not getattr(gl, 'has_sprite', False):
@@ -406,7 +423,7 @@ class Game:
         return self.dice_container.any_scoring_selection()
 
     def selection_is_single_combo(self) -> bool:
-        return self.dice_container.selection_is_single_combo()
+        return self.rules.selection_is_single_combo(self.dice_container.selection_values())
 
     def update_current_selection_score(self):
         if self.selection_is_single_combo():
@@ -415,7 +432,7 @@ class Game:
             self.current_roll_score = 0
 
     # Unified selection preview (migrated from renderer)
-    def selection_preview(self) -> tuple[int,int,int,float]:
+    def selection_preview(self, goal=None) -> tuple[int,int,int,float]:
         if not (self.selection_is_single_combo() and self.any_scoring_selection()):
             return (0,0,0,1.0)
         raw, _ = self.calculate_score_from_dice()
@@ -423,7 +440,7 @@ class Game:
             return (0,0,0,1.0)
         rule_key = None
         try:
-            rule_key = self.dice_container.selection_rule_key()
+            rule_key = self.rules.selection_rule_key(self.dice_container.selection_values())
         except Exception:
             rule_key = None
         if not rule_key:
@@ -433,11 +450,11 @@ class Game:
             scoring_mgr = getattr(self, 'scoring_manager', None)
             if scoring_mgr:
                 # Fetch active goal if available for conditional modifiers
-                goal = None
-                try:
-                    goal = self.level_state.goals[self.active_goal_index]
-                except Exception:
-                    goal = None
+                if goal is None:
+                    try:
+                        goal = self.level_state.goals[self.active_goal_index]
+                    except Exception:
+                        goal = None
                 preview = scoring_mgr.preview([(rule_key, raw)], source="selection", goal=goal)
                 adj = int(preview.get('adjusted_total', raw))
                 return (raw, adj, adj, 1.0)
@@ -461,7 +478,7 @@ class Game:
         # Identify rule_key for this selection (if available)
         rule_key = None
         try:
-            rule_key = self.dice_container.selection_rule_key()
+            rule_key = self.rules.selection_rule_key(self.dice_container.selection_values())
         except Exception:
             rule_key = None
         # Accumulate turn score locally (used for UI enabling) but per-goal pending kept inside Goal
@@ -524,8 +541,8 @@ class Game:
             pass
         self.level_index += 1
         prev_level = self.level
-        # Generate new level
-        self.level = Level.advance(self.level, self.level_index)
+        # Generate new level with progressive petitions
+        self.level = Level.advance(self.level, self.level_index, rng=self.rng)
         self.level_state = LevelState(self.level)
         self.active_goal_index = 0
         for g in self.level_state.goals:
@@ -786,9 +803,9 @@ class Game:
     # Auto progression logic
     def on_event(self, event: GameEvent):  # type: ignore[override]
         et = event.type
-        # Detect all mandatory fulfilled immediately on GOAL_FULFILLED
+        # Detect all disasters fulfilled immediately on GOAL_FULFILLED
         if et == GameEventType.GOAL_FULFILLED:
-            if self.level_state._all_mandatory_fulfilled() and not self.level_state.completed:
+            if self.level_state._all_disasters_fulfilled() and not self.level_state.completed:
                 self.level_state.completed = True
                 # After completion we wait for TURN_END if not already ended; if turn already ended (banked) we advance immediately.
                 if any(e.type == GameEventType.TURN_END for e in getattr(self, '_recent_events', [])):
@@ -840,10 +857,10 @@ class Game:
                         except Exception:
                             pass
             # Failure detection: out of turns and not complete
-            if not self.level_state.completed and self.level_state.turns_left == 0 and not self.level_state._all_mandatory_fulfilled():
+            if not self.level_state.completed and self.level_state.turns_left == 0 and not self.level_state._all_disasters_fulfilled():
                 if not self.level_state.failed:
                     self.level_state.failed = True
-                    unfinished = [self.level.goals[i][0] for i in self.level_state.mandatory_indices if not self.level_state.goals[i].is_fulfilled()]
+                    unfinished = [self.level.goals[i][0] for i in self.level_state.disaster_indices if not self.level_state.goals[i].is_fulfilled()]
                     try:
                         self.event_listener.publish(GameEvent(GameEventType.LEVEL_FAILED, payload={
                             "level_name": self.level.name,
@@ -918,21 +935,6 @@ class Game:
                 pass
         # Begin advancement
         self.create_next_level()
-
-    # --- Testing helpers ----------------------------------------------------
-    def testing_advance_level(self):
-        """Helper for tests: perform a full level advancement sequence and close shop immediately.
-
-        This bypasses needing to emit individual events manually which can skip internal flags.
-        Result: level_index incremented, shop considered closed, PRE_ROLL state with dice hidden.
-        """
-        try:
-            self.create_next_level()
-            # Simulate immediate shop closure (skipped purchase flow)
-            self.event_listener.publish(GameEvent(GameEventType.SHOP_CLOSED, payload={"skipped": True}))
-        except Exception:
-            pass
-    
     # --- Turn initialization -------------------------------------------------
     def begin_turn(self, initial: bool = False, advancing: bool = False, fallback: bool = False, from_shop: bool = False):
         """Centralize start-of-turn state initialization and TURN_START emission.

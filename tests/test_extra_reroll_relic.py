@@ -1,6 +1,6 @@
 import unittest
 from farkle.relics.relic import ExtraRerollRelic
-from farkle.relics.relic_manager import RelicOffer
+from farkle.shop.offer import ShopOffer
 from farkle.core.game_event import GameEvent, GameEventType
 
 class DummyGame:

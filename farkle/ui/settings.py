@@ -1,8 +1,8 @@
 """Central settings and UI constants for Farkle game."""
 import pygame
 
-WIDTH, HEIGHT = 800, 600
-DICE_SIZE = 80
+WIDTH, HEIGHT = 1200, 700
+DICE_SIZE = 105
 MARGIN = 20
 
 BG_COLOR = (22, 38, 46)
@@ -18,10 +18,10 @@ TOOLTIP_TEXT_COLOR = (235, 235, 240)
 TEXT_PRIMARY = (235, 225, 210)
 TEXT_ACCENT = (255, 170, 80)
 TEXT_MUTED = (160, 170, 165)
-GOAL_BG_MANDATORY = (80, 32, 24)
-GOAL_BG_MANDATORY_DONE = (28, 92, 54)
-GOAL_BG_OPTIONAL = (32, 40, 96)
-GOAL_BG_OPTIONAL_DONE = (40, 100, 140)
+GOAL_BG_DISASTER = (80, 32, 24)
+GOAL_BG_DISASTER_DONE = (28, 92, 54)
+GOAL_BG_PETITION = (32, 40, 96)
+GOAL_BG_PETITION_DONE = (40, 100, 140)
 GOAL_BORDER_ACTIVE = (255, 200, 120)
 GOAL_TEXT = (240, 235, 225)
 GOAL_PADDING = 8
@@ -29,8 +29,8 @@ GOAL_WIDTH = 240
 GOAL_LINE_SPACING = 4
 
 # Button rectangles (created once; expect pygame.init before import)
-ROLL_BTN = pygame.Rect(WIDTH//2 - 140, HEIGHT - 100, 120, 50)
-BANK_BTN = pygame.Rect(WIDTH//2 + 20, HEIGHT - 100, 120, 50)
-NEXT_BTN = pygame.Rect(WIDTH//2 - 60, HEIGHT - 160, 120, 50)
+ROLL_BTN = pygame.Rect(WIDTH//2 - 130, HEIGHT - 120, 120, 50)
+BANK_BTN = pygame.Rect(WIDTH//2 + 10, HEIGHT - 120, 120, 50)
+NEXT_BTN = pygame.Rect(WIDTH//2 - 60, HEIGHT - 240, 120, 50)
 # Ability / utility buttons (expandable). Place to left of ROLL.
-REROLL_BTN = pygame.Rect(WIDTH//2 - 340, HEIGHT - 100, 120, 50)
+REROLL_BTN = pygame.Rect(WIDTH//2 - 80, HEIGHT - 70, 160, 40)

@@ -44,7 +44,7 @@ class PendingScoringTests(unittest.TestCase):
         if len(self.game.level_state.goals) == 1:
             # Extend manually (test-only) by appending a new Goal clone
             from farkle.goals.goal import Goal
-            new_goal = Goal(150, name="Temp", mandatory=False, reward_gold=0)
+            new_goal = Goal(150, name="Temp", is_disaster=False, reward_gold=0)
             self.game.level_state.goals.append(new_goal)
             # Also wire into event system
             new_goal.game = self.game  # type: ignore[attr-defined]
@@ -55,7 +55,7 @@ class PendingScoringTests(unittest.TestCase):
                 max_turns=self.game.level.max_turns,
                 description=self.game.level.description,
                 # score_multiplier removed from Level; no field to pass now
-                goals=self.game.level.goals + (("Temp", 150, False, 0),)
+                goals=self.game.level.goals + (("Temp", 150, False, 0, ""),)
             )
         g0, g1 = self.game.level_state.goals[0], self.game.level_state.goals[1]
         # Lock to goal 0

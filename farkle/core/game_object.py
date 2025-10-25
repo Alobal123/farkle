@@ -10,6 +10,7 @@ class GameObject(ABC):
         GameObject._id_seq += 1
         self.id: int = GameObject._id_seq
         self.name = name
+        self.uid = name.lower().replace(" ", "_")
         # If None -> always visible. Else set of GameState values in which to draw.
         self.visible_states = None  # type: ignore[attr-defined]
         # Optional predicate for dynamic gating (lambda game: bool)

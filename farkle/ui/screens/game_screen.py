@@ -47,7 +47,7 @@ class GameScreen(SimpleScreen):
             if dx > jitter_threshold or dy > jitter_threshold:
                 self._hover_anchor_pos = event.pos
                 self._hover_start_ms = _pg.time.get_ticks()
-                # Only clear tooltip if movement is significant (avoid instant hide->show flicker)
+                # Invalidate tooltip on significant movement. The draw loop will re-evaluate.
                 self._current_tooltip = None
             # Pass through to game only for non-tooltip concerns
             return
@@ -74,89 +74,53 @@ class GameScreen(SimpleScreen):
         # Resolve tooltip then ask game to draw
         import pygame as _pg
         try:
-            from farkle.settings import TOOLTIP_DELAY_MS, TOOLTIP_BG_COLOR, TOOLTIP_BORDER_COLOR, WIDTH, HEIGHT
+            from farkle.ui.settings import TOOLTIP_DELAY_MS, TOOLTIP_BG_COLOR, TOOLTIP_BORDER_COLOR, WIDTH, HEIGHT
             elapsed = _pg.time.get_ticks() - self._hover_start_ms
-            # Determine potential tooltip target via game's resolver
+            
             try:
                 from farkle.ui.tooltip import resolve_hover
                 tip = resolve_hover(self.game, self._hover_anchor_pos)
             except Exception:
                 tip = None
-            # If no new tip resolved, attempt to reuse cached one if mouse stays within its expanded rect
-            if not tip and self._cached_tip and self._cached_target_rect:
-                tgt = self._cached_target_rect
-                # Expanded hitbox
-                expanded = tgt.inflate(self._target_margin*2, self._target_margin*2)
-                if expanded.collidepoint(*self._last_mouse_pos):
-                    tip = self._cached_tip
+
+            # If we have a new tip, see if we should show it.
             if tip:
                 required = int(tip.get('delay_ms', TOOLTIP_DELAY_MS))
-                # If we've already shown a tooltip for this anchor, keep it even if elapsed dips below required (elapsed only resets on movement)
-                if elapsed >= required or (self._current_tooltip and self._current_tooltip.get('title') == tip.get('title')):
-                    tip['pos'] = self._hover_anchor_pos
-                    # Reset miss frame counter when actively resolving
-                    self._miss_frames = 0
-                    # If newly visible, record timestamp
-                    if not self._current_tooltip or self._current_tooltip.get('title') != tip.get('title'):
-                        self._visible_since_ms = _pg.time.get_ticks()
-                        # Cache new tooltip
-                        # Cache by identity; if same id keep prior cached start time
-                        new_id = tip.get('id')
-                        if self._cached_tip and self._cached_tip.get('id') == new_id:
-                            # Preserve visible_since_ms
-                            pass
-                        else:
-                            self._visible_since_ms = _pg.time.get_ticks()
-                        self._cached_tip = tip.copy()
-                        tgt_rect = tip.get('target')
-                        if tgt_rect is not None:
-                            try:
-                                self._cached_target_rect = tgt_rect.copy()
-                            except Exception:
-                                self._cached_target_rect = None
+                if elapsed >= required:
                     self._current_tooltip = tip
+                    self._cached_tip = tip.copy()
+                    self._cached_target_rect = tip.get('target')
+                # If a tooltip is already showing, and it's the same one, keep it.
+                elif self._current_tooltip and self._current_tooltip.get('id') == tip.get('id'):
+                    pass
                 else:
-                    # Not yet past delay and nothing showing; keep hidden until threshold
+                    # Not time yet, and not showing this tip.
                     if not self._current_tooltip:
-                        self._miss_frames = 0
-                        self._current_tooltip = None
-            else:
-                # No new tip; retain existing if cursor still inside its target rect
-                if self._current_tooltip and self._current_tooltip.get('target') is not None:
-                    tgt = self._current_tooltip.get('target')
-                    try:
-                        expanded = tgt.inflate(self._target_margin*2, self._target_margin*2) if tgt else None
-                        inside = bool(expanded and hasattr(expanded, 'collidepoint') and expanded.collidepoint(*self._last_mouse_pos))
-                    except Exception:
-                        inside = False
-                    if inside:
-                        # Hard retain; do not increment miss count
-                        pass
-                    else:
-                        # Allow grace frames and minimum visible duration before hiding
-                        now_ms = _pg.time.get_ticks()
-                        visible_elapsed = now_ms - self._visible_since_ms
-                        if visible_elapsed < self._min_visible_ms:
-                            # Force retention until min duration satisfied
-                            pass
-                        else:
-                            if self._miss_frames < self._grace_frames:
-                                self._miss_frames += 1
-                            else:
-                                self._current_tooltip = None
-                                self._miss_frames = 0
-                                self._visible_since_ms = 0
-                                # Clear cache when tooltip fully hides
-                                self._cached_tip = None
-                                self._cached_target_rect = None
+                         self._current_tooltip = None
+
+            # If we don't have a new tip, maybe we can use the cached one.
+            elif self._cached_tip and self._cached_target_rect:
+                expanded = self._cached_target_rect.inflate(self._target_margin*2, self._target_margin*2)
+                if expanded.collidepoint(*self._last_mouse_pos):
+                    # We are still inside the old tooltip's area, keep it alive.
+                    self._current_tooltip = self._cached_tip
                 else:
-                    self._miss_frames = 0
+                    # We have moved out of the cached tooltip area.
+                    self._current_tooltip = None
+                    self._cached_tip = None
+                    self._cached_target_rect = None
+            else:
+                # No new tip, and no cached tip to fall back on.
+                self._current_tooltip = None
+
         except Exception:
             TOOLTIP_BG_COLOR = (20,30,40)
             TOOLTIP_BORDER_COLOR = (140,180,210)
             WIDTH = surface.get_width(); HEIGHT = surface.get_height()
+        
         # Game draw (without internal tooltip logic now)
         self.game.draw()
+        
         # Overlay tooltip panel if present
         if self._current_tooltip:
             try:
@@ -167,7 +131,7 @@ class GameScreen(SimpleScreen):
                 title_surf = font.render(title, True, (230,235,240))
                 line_surfs = [font.render(ln, True, (230,235,240)) for ln in lines]
                 pad = 8; line_spacing = 2
-                max_w = max([title_surf.get_width()] + [s.get_width() for s in line_surfs])
+                max_w = max([title_surf.get_width()] + [s.get_width() for s in line_surfs]) if title_surf.get_width() or any(s.get_width() for s in line_surfs) else 0
                 total_h = title_surf.get_height() + (4 if line_surfs else 0) + sum(s.get_height() + line_spacing for s in line_surfs)
                 w = max_w + pad*2; h = total_h + pad*2
                 mx,my = self._hover_anchor_pos

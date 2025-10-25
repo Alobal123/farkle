@@ -60,7 +60,19 @@ class UIButtonSprite(BaseSprite):
             pygame.draw.rect(self.image, outline_color, self.image.get_rect(), width=2, border_radius=btn.border_radius)
         lbl = btn.label_fn(g) if btn.label_fn else btn.label
         font = g.font
-        surf = font.render(lbl, True, (0,0,0))
+        # Adjust font size to fit button width if necessary
+        max_width = self.image.get_width() - 10  # 5px padding on each side
+        
+        # Start with the default font
+        current_font = font
+        
+        # Check if the text fits, and if not, reduce font size
+        while current_font.size(lbl)[0] > max_width and current_font.get_height() > 10:
+            # Create a new font object with a smaller size
+            new_size = current_font.get_height() - 1
+            current_font = pygame.font.Font(None, new_size)
+
+        surf = current_font.render(lbl, True, (0,0,0))
         self.image.blit(surf, (self.image.get_width()//2 - surf.get_width()//2, self.image.get_height()//2 - surf.get_height()//2))
         self.dirty = 1
 

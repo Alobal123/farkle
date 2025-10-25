@@ -134,11 +134,10 @@ def resolve_hover(game, pos: tuple[int,int]) -> Optional[Dict]:
                     status_parts.append(f"Reward ready: {goal.reward_gold}g")
                 rem_line = f"Remaining: {goal.remaining}" if not goal.is_fulfilled() else "Fulfilled" 
                 lines: List[str] = [rem_line] + status_parts
-                if getattr(game.level, 'description', '') and game.level_state.goals.index(goal) == 0:
-                    lines.append(game.level.description)
-                tag = "Mandatory" if goal.mandatory else "Optional"
+                if goal.flavor:
+                    lines.extend(_wrap(game.small_font, goal.flavor, 240))
                 idx_goal = goals.index(goal)
-                return {"title": f"{goal.name} ({tag})", "lines": lines, "target": rect.copy(), "id": f"goal_{idx_goal}"}
+                return {"title": goal.name, "lines": lines, "target": rect.copy(), "id": f"goal_{idx_goal}"}
     except Exception:
         pass
     # 3. Dice (only during rolling/selecting states). Do NOT early-return None if die not eligible; allow buttons below to resolve.
@@ -196,7 +195,17 @@ def resolve_hover(game, pos: tuple[int,int]) -> Optional[Dict]:
             if getattr(obj, 'name', None) == 'RelicPanel':
                 rrect = getattr(obj, '_last_rect', None)
                 if rrect and rrect.collidepoint(mx,my):
-                    # Use renderer helper to list active relics
+                    # Check individual relic items
+                    for relic, item_rect in getattr(obj, 'relic_items', []):
+                        if item_rect.collidepoint(mx, my):
+                            return {
+                                "title": relic.name,
+                                "lines": [relic.description],
+                                "target": item_rect.copy(),
+                                "id": f"relic_{relic.id}"
+                            }
+                    
+                    # Fallback to generic panel tooltip if no specific item is hovered
                     try:
                         rm = getattr(game, 'relic_manager', None)
                         lines = rm.active_relic_lines() if rm else ["Relics: (manager missing)"]

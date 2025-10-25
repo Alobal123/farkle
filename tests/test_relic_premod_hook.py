@@ -1,28 +1,38 @@
-import pygame, unittest
+import unittest
+import pygame
 from farkle.game import Game
-from farkle.ui.settings import WIDTH, HEIGHT
-from farkle.core.game_event import GameEvent, GameEventType
 from farkle.relics.relic import Relic
+from farkle.scoring.scoring_manager import ScoreContext
+from farkle.scoring.score_modifiers import ScoreModifier
 from farkle.scoring.score_types import ScorePart
 
-from farkle.scoring.score_modifiers import FlatRuleBonus
+class PreScoreHook(ScoreModifier):
+    def __init__(self, hook_function):
+        self.hook_function = hook_function
+        self.priority = 10 # Run early
+
+    def apply(self, base: int, context: ScoreContext) -> int:
+        score_obj = getattr(context, 'score_obj', None)
+        if score_obj:
+            new_parts = self.hook_function(context)
+            if new_parts:
+                score_obj.parts.extend(new_parts)
+        return base
 
 class HookRelic(Relic):
-    """Relic used to validate centralized modifier chain without legacy pre-mod hook.
-
-    Adds a FlatRuleBonus (+25) to SingleValue:5 via SCORE_MODIFIER_ADDED on activation.
-    """
     def __init__(self):
-        super().__init__(name='Hooky')
-        self.add_modifier(FlatRuleBonus(rule_key='SingleValue:5', amount=25))
+        super().__init__(id="hooky", name='Hooky', cost=0, description="A test relic")
+        self.add_modifier(PreScoreHook(self.hook_function))
+
+    def hook_function(self, context: ScoreContext) -> list[ScorePart]:
+        # Always add a 100-point bonus part
+        return [ScorePart(rule_key="HookBonus", raw=100, adjusted=100)]
 
 class RelicPreModHookTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         pygame.init()
-        flags = 0
-        if hasattr(pygame, 'HIDDEN'): flags |= pygame.HIDDEN
-        cls.screen = pygame.display.set_mode((WIDTH, HEIGHT), flags)
+        cls.screen = pygame.display.set_mode((1, 1), pygame.HIDDEN)
         cls.font = pygame.font.Font(None, 24)
         cls.clock = pygame.time.Clock()
 
@@ -30,35 +40,20 @@ class RelicPreModHookTests(unittest.TestCase):
         self.game = Game(self.screen, self.font, self.clock)
         # Inject our hook relic directly
         hr = HookRelic()
-        # Force activation sequence to emit SCORE_MODIFIER_ADDED
-        hr.active = False
-        hr.activate(self.game)
         self.game.relic_manager.active_relics.append(hr)
+        hr.activate(self.game)
 
     def test_hook_adds_part(self):
-        # Simulate a score application with pending_raw 50 for SingleValue:5
-        parts = [{'rule_key': 'SingleValue:5', 'raw': 50, 'adjusted': None}]
-        payload = {'goal': self.game.level_state.goals[0], 'pending_raw': 50, 'score': {'detailed_parts': parts, 'parts': parts}}
-        captured = []
-        def cap(ev):
-            if ev.type == GameEventType.SCORE_APPLIED:
-                captured.append(ev)
-        self.game.event_listener.subscribe(cap)
-        # Publish apply request (chain will adjust part via ScoringManager)
-        self.game.event_listener.publish(GameEvent(GameEventType.SCORE_APPLY_REQUEST, payload=payload))
-        self.assertTrue(captured, 'Expected SCORE_APPLIED event')
-        applied = captured[-1].payload
-        # Adjusted should reflect raw 50 + flat bonus 25 = 75
-        self.assertEqual(applied.get('pending_raw'), 75)
-        self.assertEqual(applied.get('adjusted'), 75)
-        score = applied.get('score', {})
-        detailed = score.get('parts', []) or score.get('detailed_parts', [])
-        # SingleValue:5 part should show adjusted 75
-        sv5 = next((p for p in detailed if p.get('rule_key') == 'SingleValue:5'), None)
-        self.assertIsNotNone(sv5)
-        if sv5 is not None:
-            self.assertIn('adjusted', sv5)
-            self.assertEqual(sv5.get('adjusted'), 75)
+        # Score a single 1 (100 raw)
+        self.game.dice[0].value = 1
+        for i in range(1, 6): self.game.dice[i].value = 2
+        self.game.mark_scoring_dice()
+        self.game.dice[0].selected = True
+        
+        # Preview should include the hook's bonus
+        raw, selective, final, mult = self.game.selection_preview()
+        self.assertEqual(raw, 100)
+        self.assertEqual(selective, 200) # 100 from die + 100 from hook
 
 if __name__ == '__main__':
     unittest.main()

@@ -1,11 +1,11 @@
 import pytest
 import pygame
-from farkle.relics.relic import OptionalFocusCharm
+from farkle.relics.relic import PetitionGoalScoreBonusRelic
 from tests.test_helpers import ensure_relic_modifiers
 from farkle.game import Game
 
 @pytest.mark.parametrize("dice_values,raw_expected,adjusted_expected", [([1], 100, 120)])
-def test_optional_focus_charm_affects_selection_preview(dice_values, raw_expected, adjusted_expected):
+def test_petition_focus_charm_affects_selection_preview(dice_values, raw_expected, adjusted_expected):
     # Create game instance via existing demo-level factory (simplify: use Game directly)
     # Initialize pygame font system (safe for tests)
     try:
@@ -19,18 +19,18 @@ def test_optional_focus_charm_affects_selection_preview(dice_values, raw_expecte
             return 0
     clock = DummyClock()
     g = Game(screen, font, clock)
-    # Ensure we have at least one optional goal; convert first goal to optional for test if needed.
+    # Ensure we have at least one petition goal; convert first goal to petition for test if needed.
     try:
         goals = g.level_state.goals
         if goals:
             # Force active goal index 0
             g.active_goal_index = 0
-            goals[0].mandatory = False  # mark optional
+            goals[0].is_disaster = False  # mark as petition
     except Exception:
         pytest.skip("Game level_state goals not available")
 
-    # Purchase the optional focus charm analog: add its modifier directly
-    relic = OptionalFocusCharm()
+    # Purchase the petition focus charm analog: add its modifier directly
+    relic = PetitionGoalScoreBonusRelic()
     ensure_relic_modifiers(g, [relic])
     # Now perform a dice roll setup: inject dice values manually
     # Replace dice values and scoring selection state
@@ -52,7 +52,7 @@ def test_optional_focus_charm_affects_selection_preview(dice_values, raw_expecte
     # Ensure selection constitutes exactly one scoring combo (matched rule key)
     rk = None
     try:
-        rk = container.selection_rule_key()
+        rk = g.rules.selection_rule_key(container.selection_values())
     except Exception:
         rk = None
     assert rk is not None, "Selection did not produce a single rule key"

@@ -1,18 +1,23 @@
 import pygame
 from farkle.core.game_object import GameObject
 from farkle.core.game_event import GameEvent, GameEventType
+from typing import TYPE_CHECKING, Optional
+
+if TYPE_CHECKING:
+    from farkle.game import Game
 
 class Goal(GameObject):
-    def __init__(self, target_score: int, name: str = "", mandatory: bool = True, reward_gold: int = 0):
+    def __init__(self, target_score: int, name: str = "", is_disaster: bool = True, reward_gold: int = 0, flavor: str = ""):
         super().__init__(name or "Goal")
         self.target_score = target_score
         self.remaining = target_score
         self.name = name or "Goal"
-        self.mandatory = mandatory
+        self.is_disaster = is_disaster
+        self.flavor = flavor
         # Reward system (future-proof for other reward types). For now only gold coins.
         self.reward_gold = reward_gold
         self.reward_claimed = False
-        self.game = None  # back reference assigned when subscribed
+        self.game: Optional["Game"] = None  # back reference assigned when subscribed
         # Pending raw points accumulated this turn (before multiplier & banking)
         self.pending_raw: int = 0
         # Unified Score object (lazy created when first needed)
@@ -69,7 +74,7 @@ class Goal(GameObject):
         return lines
 
     def build_lines(self, font: pygame.font.Font, box_width: int, remaining_text: str, desc: str | None, padding: int, line_spacing: int) -> list[str]:
-        tag = "M" if self.mandatory else "O"
+        tag = "D" if self.is_disaster else "P"
         combined = f"{self.name} [{tag}]\n{remaining_text}"
         if desc:
             combined += f"\n{desc}"
@@ -164,7 +169,7 @@ class Goal(GameObject):
                             "goal": self,
                             "reward_gold": self.reward_gold
                         }))
-                        if self.game.level_state._all_mandatory_fulfilled():
+                        if self.game.level_state._all_disasters_fulfilled():
                             self.game.level_state.completed = True
                 # Clear pending after application
                 self.pending_raw = 0
@@ -223,7 +228,7 @@ class Goal(GameObject):
         except Exception:
             preview_add = 0
         # Build lines: only name/tag (description removed; now shown only via hover tooltip)
-        tag = "M" if self.mandatory else "O"
+        tag = "D" if self.is_disaster else "P"
         header = f"{self.name} [{tag}]"
         content = header
         lines_out: list[str] = []
@@ -238,13 +243,13 @@ class Goal(GameObject):
         self._last_rect = box_rect
         self._last_lines = lines_out
         from farkle.ui.settings import (
-            GOAL_BG_MANDATORY, GOAL_BG_MANDATORY_DONE, GOAL_BG_OPTIONAL, GOAL_BG_OPTIONAL_DONE,
+            GOAL_BG_DISASTER, GOAL_BG_DISASTER_DONE, GOAL_BG_PETITION, GOAL_BG_PETITION_DONE,
             GOAL_BORDER_ACTIVE, GOAL_TEXT
         )
-        if self.mandatory:
-            bg = GOAL_BG_MANDATORY_DONE if self.is_fulfilled() else GOAL_BG_MANDATORY
+        if self.is_disaster:
+            bg = GOAL_BG_DISASTER_DONE if self.is_fulfilled() else GOAL_BG_DISASTER
         else:
-            bg = GOAL_BG_OPTIONAL_DONE if self.is_fulfilled() else GOAL_BG_OPTIONAL
+            bg = GOAL_BG_PETITION_DONE if self.is_fulfilled() else GOAL_BG_PETITION
         pygame.draw.rect(surface, bg, box_rect, border_radius=10)
         if g.active_goal_index == idx:
             pygame.draw.rect(surface, GOAL_BORDER_ACTIVE, box_rect, width=3, border_radius=10)

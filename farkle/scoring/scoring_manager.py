@@ -200,6 +200,9 @@ class ScoringManager(GameObject):
                     for attr in ('rule_key','mult','amount','priority'):
                         if hasattr(m, attr):
                             attrs.append(getattr(m, attr))
+                    # For ConditionalScoreModifier, include predicate function to distinguish instances
+                    if hasattr(m, 'predicate'):
+                        attrs.append(id(getattr(m, 'predicate')))
                     ident = (m.__class__.__name__, tuple(attrs))
                     if ident in seen:
                         return

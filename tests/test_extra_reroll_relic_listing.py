@@ -1,6 +1,7 @@
 import unittest
 from farkle.relics.relic import ExtraRerollRelic
-from farkle.relics.relic_manager import RelicManager, RelicOffer
+from farkle.relics.relic_manager import RelicManager
+from farkle.shop.offer import ShopOffer
 
 class DummyGame:
     def __init__(self):
@@ -15,7 +16,7 @@ class DummyGame:
 class ExtraRerollRelicListingTests(unittest.TestCase):
     def test_listing_shows_reroll_charge(self):
         game = DummyGame()
-        rm = RelicManager(game)
+        rm = RelicManager(game, randomize_offers=False)
         relic = ExtraRerollRelic()
         relic.active = False
         relic.activate(game)

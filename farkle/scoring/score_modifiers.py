@@ -263,9 +263,10 @@ class GlobalPartsMultiplier(ScoreModifier):
     Implemented as a dedicated modifier (rather than CompositePartModifier) for efficiency.
     After application, ScoringManager will recompute total from part adjusted values.
     """
-    def __init__(self, mult: float, priority: int = 58):
+    def __init__(self, mult: float, priority: int = 58, description: str | None = None):
         self.mult = mult
         self.priority = priority
+        self.description = description
 
     def apply(self, base: int, context: ScoreContext) -> int:  # pragma: no cover simple math
         if self.mult == 1.0:
@@ -284,4 +285,4 @@ class GlobalPartsMultiplier(ScoreModifier):
             return base
         # Let chain recompute total from parts later
         return base
-        
+

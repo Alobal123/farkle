@@ -15,9 +15,23 @@ class SelectionPreviewCharmFivesTests(unittest.TestCase):
 
     def _prepare_game_with_charm(self):
         g = Game(self.screen, self.font, self.clock)
-        g.player.gold = 500
-        g.event_listener.publish(GameEvent(GameEventType.LEVEL_ADVANCE_FINISHED, payload={"level_index":1}))
-        g.event_listener.publish(GameEvent(GameEventType.REQUEST_BUY_RELIC))
+        
+        # Directly create and activate the "Charm of Fives" relic
+        from farkle.relics.relic import Relic
+        from farkle.scoring.score_modifiers import FlatRuleBonus
+        
+        charm_of_fives = Relic(
+            id="charm_of_fives",
+            name="Charm of Fives",
+            cost=30,
+            description="Get a flat bonus of 50 points for scoring with single 5s.",
+            modifiers=[FlatRuleBonus(rule_key="SingleValue:5", amount=50)]
+        )
+        
+        # Add the relic to the manager and activate it
+        g.relic_manager.active_relics.append(charm_of_fives)
+        charm_of_fives.activate(g)
+        
         return g
 
     def _force_single_five_selection(self, g):

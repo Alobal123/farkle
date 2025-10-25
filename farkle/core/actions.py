@@ -99,11 +99,11 @@ def handle_bank(game) -> bool:
     except Exception:
         pass
     if game.level_state.completed:
-        game.set_message("Rite complete! All mandatory goals appeased.")
+        game.set_message("Rite complete! All disasters appeased.")
     else:
-        remaining = [game.level.goals[i][0] for i in game.level_state.mandatory_indices if not game.level_state.goals[i].is_fulfilled()]
+        remaining = [game.level.goals[i][0] for i in game.level_state.disaster_indices if not game.level_state.goals[i].is_fulfilled()]
         rem_text = ", ".join(remaining) if remaining else "None"
-        game.set_message(f"Turn banked. Remaining mandatories: {rem_text}")
+        game.set_message(f"Turn banked. Remaining disasters: {rem_text}")
     return True
 
 def handle_next_turn(game) -> bool:

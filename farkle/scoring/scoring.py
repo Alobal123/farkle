@@ -201,3 +201,32 @@ class ScoringRules:
             if score > 0 and indices:
                 matches.append((rule, score, indices))
         return matches
+
+    def selection_is_single_combo(self, dice: List[int]) -> bool:
+        if not dice:
+            return False
+        matches = self.evaluate_matches(dice)
+        if not matches:
+            return False
+        full_cover = [m for m in matches if len(m[2]) == len(dice)]
+        if not full_cover:
+            return False
+        max_size = max(m[0].combo_size for m in full_cover if hasattr(m[0], "combo_size"))
+        best = [m for m in full_cover if getattr(m[0], "combo_size", 0) == max_size]
+        return len(best) == 1 and best[0][0].combo_size == len(dice)
+
+    def selection_rule_key(self, dice: List[int]) -> str | None:
+        if not dice:
+            return None
+        matches = self.evaluate_matches(dice)
+        if not matches:
+            return None
+        full_cover = [m for m in matches if len(m[2]) == len(dice)]
+        if not full_cover:
+            return None
+        max_size = max(m[0].combo_size for m in full_cover if hasattr(m[0], "combo_size"))
+        best = [m for m in full_cover if getattr(m[0], "combo_size", 0) == max_size]
+        if len(best) == 1 and best[0][0].combo_size == len(dice):
+            rule = best[0][0]
+            return getattr(rule, 'rule_key', rule.__class__.__name__)
+        return None

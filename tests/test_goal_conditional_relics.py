@@ -2,7 +2,7 @@ import pytest
 
 from farkle.scoring.scoring_manager import ScoringManager
 from farkle.goals.goal import Goal
-from farkle.relics.relic import MandatoryFocusTalisman, OptionalFocusCharm
+from farkle.relics.relic import DisasterGoalScoreBonusRelic, PetitionGoalScoreBonusRelic
 from farkle.scoring.score_modifiers import FlatRuleBonus
 from farkle.core.game_object import GameObject
 
@@ -59,31 +59,31 @@ def build_parts(scoring_mgr, dice):
     return [(p['rule_key'], p['raw']) for p in comp['parts']], comp
 
 
-def test_mandatory_focus_talisman_only_on_mandatory_goal(scoring_mgr):
-    relic = MandatoryFocusTalisman()
+def test_disaster_focus_talisman_only_on_disaster_goal(scoring_mgr):
+    relic = DisasterGoalScoreBonusRelic()
     # Activate by adding modifier chain directly (simulate purchase)
     scoring_mgr.modifier_chain.add(relic.modifier_chain.snapshot()[0])
-    mandatory_goal = Goal(target_score=1000, name="M", mandatory=True)
-    optional_goal = Goal(target_score=1000, name="O", mandatory=False)
+    disaster_goal = Goal(target_score=1000, name="D", is_disaster=True)
+    petition_goal = Goal(target_score=1000, name="P", is_disaster=False)
     parts, comp = build_parts(scoring_mgr, [1,5])  # raw 150
     base_raw = comp['total_raw']
     assert base_raw == 150
-    prev_mandatory = scoring_mgr.preview(parts, goal=mandatory_goal)
-    prev_optional = scoring_mgr.preview(parts, goal=optional_goal)
-    # 20% boost applied only to mandatory goal: 150 *1.2 = 180
-    assert prev_mandatory['adjusted_total'] == 180
-    assert prev_optional['adjusted_total'] == 150
+    prev_disaster = scoring_mgr.preview(parts, goal=disaster_goal)
+    prev_petition = scoring_mgr.preview(parts, goal=petition_goal)
+    # 20% boost applied only to disaster goal: 150 *1.2 = 180
+    assert prev_disaster['adjusted_total'] == 180
+    assert prev_petition['adjusted_total'] == 150
 
 
-def test_optional_focus_charm_only_on_optional_goal(scoring_mgr):
-    relic = OptionalFocusCharm()
+def test_petition_focus_charm_only_on_petition_goal(scoring_mgr):
+    relic = PetitionGoalScoreBonusRelic()
     scoring_mgr.modifier_chain.add(relic.modifier_chain.snapshot()[0])
-    mandatory_goal = Goal(target_score=1000, name="M", mandatory=True)
-    optional_goal = Goal(target_score=1000, name="O", mandatory=False)
+    disaster_goal = Goal(target_score=1000, name="D", is_disaster=True)
+    petition_goal = Goal(target_score=1000, name="P", is_disaster=False)
     parts, comp = build_parts(scoring_mgr, [1,1,5])  # raw 250
     base_raw = comp['total_raw']
     assert base_raw == 250
-    prev_optional = scoring_mgr.preview(parts, goal=optional_goal)
-    prev_mandatory = scoring_mgr.preview(parts, goal=mandatory_goal)
-    assert prev_optional['adjusted_total'] == 300  # 250 *1.2
-    assert prev_mandatory['adjusted_total'] == 250
+    prev_petition = scoring_mgr.preview(parts, goal=petition_goal)
+    prev_disaster = scoring_mgr.preview(parts, goal=disaster_goal)
+    assert prev_petition['adjusted_total'] == 300  # 250 *1.2
+    assert prev_disaster['adjusted_total'] == 250

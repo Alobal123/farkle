@@ -1,7 +1,7 @@
 from typing import List
 from farkle.dice.die import Die
 from farkle.core.game_event import GameEvent, GameEventType
-from farkle.ui.settings import HEIGHT, DICE_SIZE, MARGIN
+from farkle.ui.settings import WIDTH, HEIGHT, DICE_SIZE, MARGIN
 from farkle.ui.sprites.die_sprite import DieSprite  # new sprite bridge
 
 
@@ -23,13 +23,16 @@ class DiceContainer:
             # Remove previous dice sprites from layered group
             for spr in list(renderer.sprite_groups['dice']):
                 spr.kill()
+        # Dynamically calculate total width and starting x-position
+        total_width = self.count * DICE_SIZE + (self.count - 1) * MARGIN
+        start_x = (WIDTH - total_width) // 2
         for i in range(self.count):
             rng = getattr(self.game, 'rng', None)
             initial_val = rng.randint(1,6) if rng else __import__('random').randint(1,6)
             d = Die(
                 initial_val,
-                100 + i * (DICE_SIZE + MARGIN),
-                HEIGHT // 2 - DICE_SIZE // 2,
+                start_x + i * (DICE_SIZE + MARGIN),
+                HEIGHT - 360,
             )
             # Attach game reference for sprite gating & highlight logic
             try:
@@ -101,9 +104,10 @@ class DiceContainer:
         rule_key = None
         raw_score = 0
         try:
-            if self.game.selection_is_single_combo() and self.game.any_scoring_selection():
+            selected_values = self.selection_values()
+            if self.game.rules.selection_is_single_combo(selected_values) and self.any_scoring_selection():
                 raw_score, _ = self.calculate_selected_score()
-                rule_key = self.selection_rule_key()
+                rule_key = self.game.rules.selection_rule_key(selected_values)
         except Exception:
             rule_key = None; raw_score = 0
         for d in self.dice:
@@ -121,34 +125,3 @@ class DiceContainer:
             return 0, []
         total, indices, _ = self.game.rules.evaluate(values)
         return total, indices
-
-    def selection_is_single_combo(self) -> bool:
-        selected_values = self.selection_values()
-        if not selected_values:
-            return False
-        matches = self.game.rules.evaluate_matches(selected_values)
-        if not matches:
-            return False
-        full_cover = [m for m in matches if len(m[2]) == len(selected_values)]
-        if not full_cover:
-            return False
-        max_size = max(m[0].combo_size for m in full_cover if hasattr(m[0], "combo_size"))
-        best = [m for m in full_cover if getattr(m[0], "combo_size", 0) == max_size]
-        return len(best) == 1 and best[0][0].combo_size == len(selected_values)
-
-    def selection_rule_key(self) -> str | None:
-        selected_values = self.selection_values()
-        if not selected_values:
-            return None
-        matches = self.game.rules.evaluate_matches(selected_values)
-        if not matches:
-            return None
-        full_cover = [m for m in matches if len(m[2]) == len(selected_values)]
-        if not full_cover:
-            return None
-        max_size = max(m[0].combo_size for m in full_cover if hasattr(m[0], "combo_size"))
-        best = [m for m in full_cover if getattr(m[0], "combo_size", 0) == max_size]
-        if len(best) == 1 and best[0][0].combo_size == len(selected_values):
-            rule = best[0][0]
-            return getattr(rule, 'rule_key', rule.__class__.__name__)
-        return None

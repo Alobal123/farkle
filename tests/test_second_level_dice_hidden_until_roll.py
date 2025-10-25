@@ -15,8 +15,10 @@ class TestSecondLevelDiceHiddenUntilRoll(unittest.TestCase):
 
     def setUp(self):
         self.game = Game(self.screen, self.font, self.clock)
-        # Use helper to advance level and close shop
-        self.game.testing_advance_level()
+        # Advance to level 2 via proper event flow
+        self.game.create_next_level()
+        # Close shop to complete advancement
+        self.game.event_listener.publish(GameEvent(GameEventType.SHOP_CLOSED, payload={"skipped": True}))
         # Now we should be at level_index 2 and in PRE_ROLL with dice hidden
         self.assertEqual(self.game.level_index, 2)
         self.assertEqual(self.game.state_manager.get_state(), self.game.state_manager.state.PRE_ROLL)

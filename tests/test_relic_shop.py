@@ -14,7 +14,7 @@ class RelicShopTests(unittest.TestCase):
         cls.clock = pygame.time.Clock()
 
     def setUp(self):
-        self.game = Game(self.screen, self.font, self.clock)
+        self.game = Game(self.screen, self.font, self.clock, rng_seed=1)
         # Give player enough gold for purchase
         self.game.player.gold = 500
         # Simulate level completion to trigger advancement and shop
@@ -23,8 +23,14 @@ class RelicShopTests(unittest.TestCase):
         self.assertTrue(self.game.relic_manager.shop_open, "Shop should be open after level advance finished")
 
     def test_purchase_applies_selective_effects(self):
-        # Request buy relic
-        self.game.event_listener.publish(GameEvent(GameEventType.REQUEST_BUY_RELIC))
+        # Find the "Charm of Fives" offer and purchase it.
+        charm_offer = next((o for o in self.game.relic_manager.offers if o.name == "Charm of Fives"), None)
+        self.assertIsNotNone(charm_offer, f"Charm of Fives should be offered in the shop. Offers: {[o.name for o in self.game.relic_manager.offers]}")
+        
+        if charm_offer:
+            offer_index = self.game.relic_manager.offers.index(charm_offer)
+            self.game.event_listener.publish(GameEvent(GameEventType.REQUEST_BUY_RELIC, payload={'offer_index': offer_index}))
+
         self.assertFalse(self.game.relic_manager.shop_open, "Shop should close after purchase")
         # Flat five bonus relic path (level 1 Charm of Fives)
         # Simulate scoring one single five -> expect +50 flat added (50 raw -> 100 adjusted)

@@ -158,6 +158,7 @@ class RelicPanel(GameObject):
         self.visible_states = {GameState.PRE_ROLL, GameState.ROLLING, GameState.FARKLE, GameState.BANKED}
         # Non-interactive
         self.interactable_states = set()
+        self.relic_items: list[tuple[Any, pygame.Rect]] = []
 
     def draw(self, surface):  # type: ignore[override]
         return  # sprite handles visual

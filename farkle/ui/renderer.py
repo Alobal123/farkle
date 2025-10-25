@@ -109,7 +109,7 @@ class GameRenderer:
                     new_height = 56
                     new_x = left - padding
                     if new_x < 10: new_x = 10
-                    new_y = bottom + 12
+                    new_y = bottom + 22
                     from farkle.ui.settings import HEIGHT as _H
                     if new_y + new_height + 10 > _H:
                         new_y = _H - new_height - 10
@@ -130,7 +130,7 @@ class GameRenderer:
                         new_x = left - padding
                         if new_x < 10: new_x = 10
                         # Next button sits directly below dice row
-                        base_y = bottom + 12
+                        base_y = bottom + 22
                         from farkle.ui.settings import HEIGHT as _H
                         if base_y + new_height + 10 > _H:
                             base_y = _H - new_height - 10
@@ -169,7 +169,7 @@ class GameRenderer:
         # Goal drawing handled by GoalSprite instances.
         # Gods panel is drawn via a GameObject added to ui_misc
         if not shop_open:
-            screen.blit(g.font.render(f"Level {g.level_index}", True, (180, 220, 255)), (80, 30))
+            screen.blit(g.font.render(f"Level {g.level_index}", True, (180, 220, 255)), (10, 10))
         # Legacy goal draw removed if sprites exist; if any goal lacks sprite fallback to old approach
         # Fallback goal draw removed; all goals expected to have sprites.
         # Note: display flipping is performed in App.run() (single flip per frame). Renderer does not flip.

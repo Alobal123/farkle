@@ -35,16 +35,54 @@ class GoalSprite(BaseSprite):
             idx = goals.index(goal)
         except ValueError:
             return
-        total_goals = len(goals)
+        
+        # New layout: disasters in center, petitions stacked on sides
+        is_disaster = goal.is_disaster
+        
+        disaster_goals = [g for g in goals if g.is_disaster]
+        petition_goals = [g for g in goals if not g.is_disaster]
+        
+        # --- Sizing ---
         spacing = 16
-        left_x = 80
-        right_margin = 40
-        available_width = WIDTH - left_x - right_margin - (spacing * (total_goals - 1))
-        per_box_width = min(GOAL_WIDTH, int(available_width / total_goals))
-        per_box_width = max(140, per_box_width)
-        used_width = per_box_width * total_goals + spacing * (total_goals - 1)
-        start_x = left_x + (available_width - used_width) // 2 if used_width < available_width else left_x
-        x = start_x + idx * (per_box_width + spacing)
+        disaster_width = int(GOAL_WIDTH * 1.8)
+        petition_width = GOAL_WIDTH
+
+        disaster_height = 140
+        petition_height = 100
+        
+        # --- Positioning ---
+        top_offset = 140 # Move goals down to make space for relic panel
+        if is_disaster:
+            per_box_width = disaster_width
+            x = (WIDTH - per_box_width) // 2
+            panel_y = top_offset 
+        else:
+            per_box_width = petition_width
+            left_goals = petition_goals[::2]
+            right_goals = petition_goals[1::2]
+            
+            disaster_y_start = top_offset
+            disaster_center_y = disaster_y_start + (disaster_height / 2)
+            
+            top_petition_y = disaster_center_y - petition_height
+            
+            little_gap = 10
+            bottom_petition_y = disaster_center_y + little_gap
+
+            try:
+                if goal in left_goals:
+                    idx_in_col = left_goals.index(goal)
+                    x = (WIDTH // 2) - disaster_width // 2 - spacing - per_box_width
+                    panel_y = top_petition_y if idx_in_col == 0 else bottom_petition_y
+                elif goal in right_goals:
+                    idx_in_col = right_goals.index(goal)
+                    x = (WIDTH // 2) + disaster_width // 2 + spacing
+                    panel_y = top_petition_y if idx_in_col == 0 else bottom_petition_y
+                else:
+                    x, panel_y = -1000, -1000 # Should not happen
+            except ValueError:
+                x, panel_y = -1000, -1000
+        
         base_remaining = goal.get_remaining()
         pending_raw = getattr(goal, 'pending_raw', 0)
         applied = goal.target_score - base_remaining
@@ -62,40 +100,68 @@ class GoalSprite(BaseSprite):
                     preview_add = int(preview_tuple[2])
         except Exception:
             preview_add = 0
-        tag = "M" if goal.mandatory else "O"
-        header = f"{goal.name} [{tag}]"
+        
+        # Remove [M]/[O] tags - just use the goal name
+        header = goal.name
         lines_out: list[str] = []
         for raw_line in header.split("\n"):
             wrapped = goal.wrap_text(g.small_font, raw_line, per_box_width - 2 * GOAL_PADDING)
             lines_out.extend(wrapped)
-        bar_reserved_height = 20
-        box_height = GOAL_PADDING * 2 + len(lines_out) * (g.small_font.get_height() + GOAL_LINE_SPACING) - GOAL_LINE_SPACING + bar_reserved_height
-        panel_y = 90
+        reward_reserved_height = 20 if goal.reward_gold > 0 else 0
+        bar_reserved_height = 18
+        
+        # Use same font size for all goals in single-line layout
+        font_for_height = g.small_font
+        line_height = font_for_height.get_height() + GOAL_LINE_SPACING
+        
+        # Adjust box height for disaster goal
+        if is_disaster:
+            box_height = disaster_height
+        else:
+            box_height = petition_height
+        
         # Rebuild surface
         self.image = pygame.Surface((per_box_width, box_height), pygame.SRCALPHA)
         self.rect = self.image.get_rect(topleft=(x, panel_y))
         goal._last_rect = self.rect
         goal._last_lines = lines_out
         from farkle.ui.settings import (
-            GOAL_BG_MANDATORY, GOAL_BG_MANDATORY_DONE, GOAL_BG_OPTIONAL, GOAL_BG_OPTIONAL_DONE,
+            GOAL_BG_DISASTER, GOAL_BG_DISASTER_DONE, GOAL_BG_PETITION, GOAL_BG_PETITION_DONE,
             GOAL_BORDER_ACTIVE, GOAL_TEXT
         )
-        if goal.mandatory:
-            bg = GOAL_BG_MANDATORY_DONE if goal.is_fulfilled() else GOAL_BG_MANDATORY
+        if goal.is_disaster:
+            bg = GOAL_BG_DISASTER_DONE if goal.is_fulfilled() else GOAL_BG_DISASTER
         else:
-            bg = GOAL_BG_OPTIONAL_DONE if goal.is_fulfilled() else GOAL_BG_OPTIONAL
+            bg = GOAL_BG_PETITION_DONE if goal.is_fulfilled() else GOAL_BG_PETITION
         pygame.draw.rect(self.image, bg, self.image.get_rect(), border_radius=10)
         if g.active_goal_index == idx:
             pygame.draw.rect(self.image, GOAL_BORDER_ACTIVE, self.image.get_rect(), width=3, border_radius=10)
-        y_line = GOAL_PADDING
+        
+        # --- Content Rendering ---
+        text_font = g.font if is_disaster else g.small_font
+        
+        # Calculate total height of all content for vertical centering
+        total_text_height = sum(text_font.get_height() for ln in lines_out) + (len(lines_out) - 1) * GOAL_LINE_SPACING
+        content_spacing = 8 # Space between text, bar, and reward
+        total_content_height = total_text_height + content_spacing + bar_reserved_height + content_spacing + reward_reserved_height
+        
+        # Start rendering from a vertically centered position
+        y_pos = (box_height - total_content_height) // 2
+
+        # 1. Render Title Text
         for ln in lines_out:
-            self.image.blit(g.small_font.render(ln, True, GOAL_TEXT), (GOAL_PADDING, y_line))
-            y_line += g.small_font.get_height() + GOAL_LINE_SPACING
-        # Progress bar
+            surf = text_font.render(ln, True, GOAL_TEXT)
+            x_pos = (self.image.get_width() - surf.get_width()) // 2
+            self.image.blit(surf, (x_pos, y_pos))
+            y_pos += text_font.get_height() + GOAL_LINE_SPACING
+        
+        y_pos += content_spacing
+
+        # 2. Render Progress Bar
         bar_margin = 6
         bar_height = 14
         bar_x = bar_margin
-        bar_y = self.image.get_height() - bar_margin - bar_height
+        bar_y = y_pos
         bar_width = self.image.get_width() - bar_margin * 2
         track_color = (50, 55, 60)
         pygame.draw.rect(self.image, track_color, pygame.Rect(bar_x, bar_y, bar_width, bar_height), border_radius=4)
@@ -130,58 +196,21 @@ class GoalSprite(BaseSprite):
             summary += f"+{projected_pending}"
         if preview_add:
             summary += f"+{preview_add}"
-        self.image.blit(g.small_font.render(summary, True, (230,230,228)), (bar_x + 4, bar_y - 1))
+        summary_surf = g.small_font.render(summary, True, (230,230,228))
+        summary_x = (self.image.get_width() - summary_surf.get_width()) // 2
+        self.image.blit(summary_surf, (summary_x, bar_y - 1))
+
+        y_pos += bar_height + content_spacing
+
+        # 3. Render Reward Text
+        if goal.reward_gold > 0:
+            reward_text = f"Gold {goal.reward_gold}"
+            reward_surf = g.small_font.render(reward_text, True, GOAL_TEXT)
+            reward_x = (self.image.get_width() - reward_surf.get_width()) // 2
+            reward_y = y_pos
+            self.image.blit(reward_surf, (reward_x, reward_y))
+
         self.dirty = 1
 
-class RelicPanelSprite(BaseSprite):
-    def __init__(self, panel, game, *groups):
-        super().__init__(Layer.UI, panel, *groups)
-        self.panel = panel
-        self.game = game
-        self.image = pygame.Surface((1,1), pygame.SRCALPHA)
-        self.rect = self.image.get_rect()
-        self.sync_from_logical()
 
-    def sync_from_logical(self):
-        g = self.game
-        panel = self.panel
-        # Hide during shop or if no relic manager
-        if not g or getattr(g, 'relic_manager', None) is None or getattr(g.relic_manager, 'shop_open', False):
-            self.image.fill((0,0,0,0))
-            self.dirty = 1
-            return
-        rm = getattr(g, 'relic_manager', None)
-        relics = list(getattr(rm, 'active_relics', [])) if rm else []
-        if not relics:
-            self.image.fill((0,0,0,0))
-            self.dirty = 1
-            return
-        # Human-readable concise lines: just relic names (omit effect details)
-        lines = [r.name for r in relics]
-        small_font = g.small_font
-        rpad = 6
-        r_line_surfs = [small_font.render(ln, True, (225,230,235)) for ln in lines]
-        from farkle.ui.settings import WIDTH, HEIGHT
-        width = max(s.get_width() for s in r_line_surfs) + rpad*2
-        height = sum(s.get_height() for s in r_line_surfs) + rpad*2 + 4
-        # Position: flush right, vertically centered-ish below level header
-        x = WIDTH - width - 12
-        top_margin = 80  # below goals/hud
-        y = top_margin
-        # Constrain if too tall
-        if y + height > HEIGHT - 20:
-            height = HEIGHT - 20 - y
-        self.image = pygame.Surface((width, height), pygame.SRCALPHA)
-        self.rect = self.image.get_rect(topleft=(x,y))
-        pygame.draw.rect(self.image, (30,45,58), self.image.get_rect(), border_radius=6)
-        pygame.draw.rect(self.image, (95,140,175), self.image.get_rect(), width=1, border_radius=6)
-        cur_y = rpad
-        for rs in r_line_surfs:
-            if cur_y + rs.get_height() + rpad > self.image.get_height():
-                break
-            self.image.blit(rs, (rpad, cur_y))
-            cur_y += rs.get_height() + 2
-        panel._last_rect = self.rect
-        self.dirty = 1
-
-__all__ = ["GoalSprite", "RelicPanelSprite"]
+__all__ = ["GoalSprite"]

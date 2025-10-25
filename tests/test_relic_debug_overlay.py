@@ -15,11 +15,23 @@ class RelicDebugOverlayTests(unittest.TestCase):
 
     def setUp(self):
         self.game = Game(self.screen, self.font, self.clock)
-        # Ensure gold and open shop
-        self.game.player.gold = 500
-        self.game.event_listener.publish(GameEvent(GameEventType.LEVEL_ADVANCE_FINISHED, payload={"level_index":1}))
-        # Buy first offer (Charm of Fives guaranteed at level 1)
-        self.game.event_listener.publish(GameEvent(GameEventType.REQUEST_BUY_RELIC))
+        
+        # Directly create and activate the "Charm of Fives" relic
+        from farkle.relics.relic import Relic
+        from farkle.scoring.score_modifiers import FlatRuleBonus
+        
+        charm_of_fives = Relic(
+            id="charm_of_fives",
+            name="Charm of Fives",
+            cost=30,
+            description="Get a flat bonus of 50 points for scoring with single 5s.",
+            modifiers=[FlatRuleBonus(rule_key="SingleValue:5", amount=50)]
+        )
+        
+        # Add the relic to the manager and activate it
+        self.game.relic_manager.active_relics.append(charm_of_fives)
+        charm_of_fives.activate(self.game)
+        
         # Force a draw call to build HUD & relic list (not strictly needed for debug lines method)
         self.game.renderer.draw()
 

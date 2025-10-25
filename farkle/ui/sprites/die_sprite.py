@@ -1,9 +1,16 @@
 import pygame
 from farkle.ui.sprites.sprite_base import BaseSprite, Layer
-from farkle.dice.die import DICE_SIZE, PIP_POSITIONS
+from farkle.dice.die import PIP_POSITIONS
+from farkle.ui.settings import DICE_SIZE
 
 # Local cache reused with same semantics as die._die_surface_cache but sprite-specific (could unify later)
 _die_sprite_cache: dict[tuple[int,bool,bool,bool], pygame.Surface] = {}
+_last_dice_size = 0
+
+def _clear_die_cache():
+    global _last_dice_size
+    _die_sprite_cache.clear()
+    _last_dice_size = DICE_SIZE
 
 class DieSprite(BaseSprite):
     """Visual sprite for a logical Die.
@@ -38,6 +45,10 @@ class DieSprite(BaseSprite):
         self.sync_from_logical()
 
     def sync_from_logical(self):  # override
+        global _last_dice_size
+        if DICE_SIZE != _last_dice_size:
+            _clear_die_cache()
+        
         d = self.die
         key = (d.value, d.held, d.selected, d.scoring_eligible)
         cached = _die_sprite_cache.get(key)
@@ -54,7 +65,8 @@ class DieSprite(BaseSprite):
             if not d.held and not d.scoring_eligible:
                 surf.set_alpha(130)
             for px, py in PIP_POSITIONS[d.value]:
-                pygame.draw.circle(surf, (0,0,0), (px * DICE_SIZE, py * DICE_SIZE), 7)
+                pip_radius = int(DICE_SIZE * 0.07) # Pips are 7% of die size
+                pygame.draw.circle(surf, (0,0,0), (px * DICE_SIZE, py * DICE_SIZE), pip_radius)
             _die_sprite_cache[key] = surf
             cached = surf
         self.image = cached

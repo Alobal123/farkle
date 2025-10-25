@@ -7,7 +7,7 @@ from farkle.core.game_event import GameEvent, GameEventType
 def complete_level_via_events(game: Game):
     # Simulate fulfilling all mandatory goals by emitting GOAL_FULFILLED for each mandatory goal name.
     # This leverages existing game logic which marks completion when all mandatory fulfilled then waits for TURN_END.
-    for idx in game.level_state.mandatory_indices:
+    for idx in game.level_state.disaster_indices:
         goal = game.level_state.goals[idx]
         if not goal.is_fulfilled():
             # Manually mark goal fulfilled using its API if available; else set internal state and emit event

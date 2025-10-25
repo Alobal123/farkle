@@ -2,7 +2,7 @@ import unittest, pygame
 from farkle.game import Game
 from farkle.ui.settings import WIDTH, HEIGHT
 from farkle.core.game_event import GameEvent, GameEventType
-from farkle.relics.relic import ExtraRerollRelic, MultiRerollRelic
+from farkle.relics.relic import ExtraRerollRelic, IncreaseMaxRerollRelic
 
 class RerollMultiChargeOptionalSecondTargetTests(unittest.TestCase):
     @classmethod
@@ -56,7 +56,7 @@ class RerollMultiChargeOptionalSecondTargetTests(unittest.TestCase):
 
     def test_optional_second_target(self):
         # Grant multi-target relic (allows +1 target) and extra charge to ensure availability
-        self._activate_relic(MultiRerollRelic())
+        self._activate_relic(IncreaseMaxRerollRelic())
         self._activate_relic(ExtraRerollRelic())
         abm = self.game.ability_manager
         reroll = abm.get('reroll')

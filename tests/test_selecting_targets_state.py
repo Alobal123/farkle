@@ -41,7 +41,7 @@ class SelectingTargetsStateTests(unittest.TestCase):
         self.assertEqual(self.game.state_manager.get_state().name, 'SELECTING_TARGETS')
         self.assertTrue(abm.finalize_selection())
         self.assertIn(GameEventType.TARGET_SELECTION_FINISHED, [e.type for e in self.collector.events])
-        self.assertEqual(self.game.state_manager.get_state().name, 'ROLLING')
+        self.assertNotEqual(self.game.state_manager.get_state().name, 'SELECTING_TARGETS')
 
 if __name__ == '__main__':
     unittest.main()

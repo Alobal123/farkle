@@ -1,7 +1,6 @@
 import pygame
 from farkle.core.game_object import GameObject
-
-DICE_SIZE = 80
+from farkle.ui.settings import DICE_SIZE
 
 # Precomputed pip layout (fractional positions within die square)
 PIP_POSITIONS = {
