@@ -1,123 +1,554 @@
 {
-  "categories": [
-    {
-      "id": "agriculture",
-      "name": "Agriculture & Harvest",
-  "goals": [
-        {"id": 1, "title": "Pray for Good Crop", "flavor": "A humble olive farmer bows low, his palms still stained with earth. The rains came late, and his trees bear little fruit. He prays that the gods turn their gaze kindly upon his orchard before hunger sets in."},
-        {"id": 2, "title": "Pray for Rain", "flavor": "A shepherd from the uplands arrives, his lips cracked with thirst. The wells are drying and his flocks stumble in the dust. He begs for rain, even if it comes with thunder and flood."},
-        {"id": 3, "title": "Pray Against Locusts", "flavor": "A farmer brings a jar filled with ruined grain. He says the skies darken each evening with locusts, devouring everything green. He pleads for a cleansing wind to drive them away."},
-        {"id": 4, "title": "Pray for the Vineyard", "flavor": "An aging vintner speaks softly, smelling faintly of sour grapes. His vines wither under a strange blight. He offers his best amphora and asks for the strength of the earth to return."},
-        {"id": 5, "title": "Pray for the Herd", "flavor": "A goatherd kneels, holding a bell from his lost flock. Wolves came down from the hills at night. He prays the gods watch over what few animals remain."},
-        {"id": 6, "title": "Pray for Fertile Fields", "flavor": "A young couple from the river valley comes together, hands clasped. Their field was once rich, now it yields nothing but weeds. They ask the gods to restore life to the soil."},
-        {"id": 7, "title": "Pray for the Beehives", "flavor": "A beekeeper bows, face swollen from stings. The bees have gone mad, abandoning their hives. He begs for calm and the return of sweet honey."}
-      ]
+    "nature": {
+        "farmer": [
+            {
+                "title": "Rain",
+                "text": "A farmer kneels before the altar, his hands rough with work. He asks for rain to soften the soil and feed his crops.",
+                "reward": ""
+            },
+            {
+                "title": "Good Harvest",
+                "text": "A farmer sets a small bundle of wheat before the shrine. He prays for the coming season to be kind and the grain to grow tall.",
+                "reward": ""
+            },
+            {
+                "title": "Healthy Livestock",
+                "text": "A shepherd bows low. He says the goats have grown sick and asks the gods to spare what remains of his herd.",
+                "reward": ""
+            }
+        ],
+        "merchant": [
+            {
+                "title": "Calm Seas",
+                "text": "A merchant offers a small clay vessel of oil. He asks for steady winds and calm waters so his ships may sail safely.",
+                "reward": ""
+            },
+            {
+                "title": "Safe Roads",
+                "text": "A trader adjusts his cloak nervously. He says bandits stalk the roads and prays for protection on his next journey.",
+                "reward": ""
+            },
+            {
+                "title": "Healthy Workers",
+                "text": "A shopkeeper bows and prays that his apprentices stay strong through the long summer heat.",
+                "reward": ""
+            }
+        ],
+        "nobleman": [
+            {
+                "title": "Heir’s Health",
+                "text": "A nobleman stands tall but speaks softly. His son is sick, and he prays for his recovery before the family line is broken.",
+                "reward": ""
+            },
+            {
+                "title": "Estate Prosperity",
+                "text": "A noblewoman offers fine wine. She prays that her estate’s fields bear fruit and her servants stay loyal.",
+                "reward": ""
+            },
+            {
+                "title": "Long Life",
+                "text": "An aging patrician lights incense. He asks the gods for more years to guide his household and see his grandchildren grown.",
+                "reward": ""
+            }
+        ],
+        "foreigner": [
+            {
+                "title": "Acceptance",
+                "text": "A traveler bows deeply. He prays that the local gods welcome him, though he is far from home and speaks their names poorly.",
+                "reward": ""
+            },
+            {
+                "title": "Fertile Land",
+                "text": "A settler from distant shores offers foreign grain. He asks the gods to let it take root in this new soil.",
+                "reward": ""
+            },
+            {
+                "title": "Safe Lodging",
+                "text": "A foreign craftsman prays for a place to rest and that no sickness find him in a strange land.",
+                "reward": ""
+            }
+        ],
+        "beggar": [
+            {
+                "title": "Daily Bread",
+                "text": "A thin man kneels quietly. He asks only that he not go hungry another night.",
+                "reward": ""
+            },
+            {
+                "title": "Shelter",
+                "text": "A woman with tattered clothes whispers a prayer for a roof to sleep under before the next storm.",
+                "reward": ""
+            },
+            {
+                "title": "Kind Weather",
+                "text": "An old beggar lifts his face to the sky. He prays that the coming winter be mild on those without homes.",
+                "reward": ""
+            }
+        ],
+        "priest": [
+            {
+                "title": "Purification",
+                "text": "A young priest brings a cracked jug of holy water. He prays for strength to cleanse the temple before the next festival.",
+                "reward": ""
+            },
+            {
+                "title": "Sacred Spring",
+                "text": "An oracle says the sacred well runs low. She prays the gods renew it so the rites may continue.",
+                "reward": ""
+            },
+            {
+                "title": "Temple’s Blessing",
+                "text": "An old priest bows. He asks for favor on the temple and those who serve within its walls.",
+                "reward": ""
+            }
+        ],
+        "soldier": [
+            {
+                "title": "Healing",
+                "text": "A soldier stands with his arm in a sling. He asks the gods to heal his wounds so he may return to duty.",
+                "reward": ""
+            },
+            {
+                "title": "Strength",
+                "text": "A hoplite with bandaged legs prays quietly for renewed strength and clear sight for the next march.",
+                "reward": ""
+            },
+            {
+                "title": "Safe Return",
+                "text": "A young guard bows and asks to come home alive once his watch along the border ends.",
+                "reward": ""
+            }
+        ],
+        "artist": [
+            {
+                "title": "Inspiration",
+                "text": "A playwright speaks humbly. He says his thoughts have grown dull and asks for the Muses to stir his mind again.",
+                "reward": ""
+            },
+            {
+                "title": "Clear Voice",
+                "text": "A singer offers a honey cake. She prays her voice holds true for the coming festival performance.",
+                "reward": ""
+            },
+            {
+                "title": "Good Audience",
+                "text": "An actor bows before the statue. He asks that the crowd listen kindly and the play end with applause.",
+                "reward": ""
+            }
+        ]
     },
-    {
-      "id": "war",
-      "name": "War, Conflict & Protection",
-  "goals": [
-        {"id": 8, "title": "Pray for Victory", "flavor": "A soldier’s wife leaves a lock of her hair on the altar. Her husband fights beyond the mountains. She prays his sword strike true and his shield never fail."},
-        {"id": 9, "title": "Pray for Safe Return", "flavor": "An old mother brings a handful of ashes from the hearth. Her sons have not written in months. She prays for news — good or bad — to reach her door."},
-        {"id": 10, "title": "Pray for Peace", "flavor": "Two traders argue outside the temple steps, each accusing the other’s city of greed. They finally kneel together, asking the gods to still the drums of war before ruin claims all."},
-        {"id": 11, "title": "Pray for Protection from Raiders", "flavor": "A farmer from the borderlands shows scars on his arm. His village was burned once before. He prays the gods guard their walls this harvest."},
-        {"id": 12, "title": "Pray for Courage", "flavor": "A young conscript trembles as he speaks. He is to march tomorrow, though his heart quails. He begs for courage enough to face the spears without shame."},
-        {"id": 13, "title": "Pray for the Fallen", "flavor": "A widow sets down a soldier’s broken helmet. She asks the gods to guide his spirit to the Fields of Glory and not let him wander among shades."}
-      ]
+    "commerce": {
+        "farmer": [
+            {
+                "title": "Fair Trade",
+                "text": "A farmer brings olives and prays that the merchants in town pay an honest price this season.",
+                "reward": ""
+            },
+            {
+                "title": "New Tools",
+                "text": "A farmer with cracked hands asks for the means to replace his broken plow.",
+                "reward": ""
+            },
+            {
+                "title": "Market Luck",
+                "text": "A farmer smiles shyly. He prays that his produce finds buyers before it spoils.",
+                "reward": ""
+            }
+        ],
+        "merchant": [
+            {
+                "title": "Prosperity",
+                "text": "A merchant sets down a pouch of coins. He asks that his business thrive and his partners deal fairly.",
+                "reward": ""
+            },
+            {
+                "title": "Trade Route Safety",
+                "text": "A trader prays for safe passage for his caravans through rough mountain roads.",
+                "reward": ""
+            },
+            {
+                "title": "Honest Partners",
+                "text": "A spice dealer prays that his partners remain true and his name stay clean in the marketplace.",
+                "reward": ""
+            }
+        ],
+        "nobleman": [
+            {
+                "title": "Favor at Court",
+                "text": "A nobleman prays to speak wisely at the council and win the ears of those in power.",
+                "reward": ""
+            },
+            {
+                "title": "Art Patronage",
+                "text": "A noblewoman leaves silver coins. She asks that her commissioned sculptor finish his work with divine inspiration.",
+                "reward": ""
+            },
+            {
+                "title": "Estate Wealth",
+                "text": "A patrician prays that his lands yield enough to host grand feasts and uphold his family’s name.",
+                "reward": ""
+            }
+        ],
+        "foreigner": [
+            {
+                "title": "Fair Dealings",
+                "text": "A trader from distant lands prays that locals treat him fairly in business despite his accent.",
+                "reward": ""
+            },
+            {
+                "title": "Cultural Exchange",
+                "text": "A scholar from afar prays that his teachings be accepted and understood in this city.",
+                "reward": ""
+            },
+            {
+                "title": "Good Reputation",
+                "text": "A foreign merchant asks the gods that no lies be spoken about his goods or craft.",
+                "reward": ""
+            }
+        ],
+        "beggar": [
+            {
+                "title": "Work",
+                "text": "A poor man prays for someone to offer him honest labor, even if only for a day.",
+                "reward": ""
+            },
+            {
+                "title": "Tools",
+                "text": "A destitute potter asks for simple tools so he can work again and not beg.",
+                "reward": ""
+            },
+            {
+                "title": "Learning",
+                "text": "A young beggar prays to be taken as an apprentice in any craft that will keep him fed.",
+                "reward": ""
+            }
+        ],
+        "priest": [
+            {
+                "title": "Festival Order",
+                "text": "A temple priest prays that the upcoming festival go smoothly and all offerings be accepted.",
+                "reward": ""
+            },
+            {
+                "title": "Donations",
+                "text": "A priest asks the gods to move the hearts of citizens to give generously to the temple fund.",
+                "reward": ""
+            },
+            {
+                "title": "Craftsmen’s Blessing",
+                "text": "An oracle prays that local artisans find skill and harmony in their work for the temple.",
+                "reward": ""
+            }
+        ],
+        "soldier": [
+            {
+                "title": "Smith’s Fire",
+                "text": "A soldier brings a dull sword. He prays the city’s smiths work well so blades hold strong.",
+                "reward": ""
+            },
+            {
+                "title": "Sturdy Armor",
+                "text": "A hoplite kneels, praying for armor that will not fail in battle.",
+                "reward": ""
+            },
+            {
+                "title": "Fair Pay",
+                "text": "A soldier bows and prays that his wages be paid in full when the campaign ends.",
+                "reward": ""
+            }
+        ],
+        "artist": [
+            {
+                "title": "Inspiration",
+                "text": "An artist prays that new ideas come to him before the next festival.",
+                "reward": ""
+            },
+            {
+                "title": "Generous Patrons",
+                "text": "A poet prays that wealthy citizens notice his talent and commission his work.",
+                "reward": ""
+            },
+            {
+                "title": "Skilled Hands",
+                "text": "A painter bows and asks for steady hands to complete his mural before the deadline.",
+                "reward": ""
+            }
+        ]
     },
-    {
-      "id": "health",
-      "name": "Health, Life & Healing",
-  "goals": [
-        {"id": 14, "title": "Pray for Healing", "flavor": "A mother’s eyes are red from sleepless nights. Her child coughs blood into linen rags. She offers the child’s toy and prays for a cure no physician has found."},
-        {"id": 15, "title": "Pray for Relief from Plague", "flavor": "A weary messenger dares not step close. In his city, a sickness has emptied the streets. He pleads for mercy before the pestilence spreads further."},
-        {"id": 16, "title": "Pray for Safe Birth", "flavor": "A pregnant woman clutches a charm of bone and twine. She whispers that two children before were stillborn. She prays that this one draws breath and lives to see the dawn."},
-        {"id": 17, "title": "Pray for the Midwife", "flavor": "The village midwife herself kneels, hands trembling. Too many births have gone wrong lately. She begs for steady hands and favor in her work."},
-        {"id": 18, "title": "Pray for the Blind", "flavor": "A beggar guided by his daughter touches the cold temple stones. He asks not for sight restored, but for the girl’s kindness to never fade."},
-        {"id": 19, "title": "Pray for the Lame", "flavor": "A man hobbles forward on a broken staff. He says his injury is punishment from the gods. He prays for forgiveness, or at least for the pain to ease."},
-        {"id": 20, "title": "Pray for Long Life", "flavor": "An old matron lays a garland of withered flowers. She has outlived her husband and sons. She prays for just one more summer to tend their graves."}
-      ]
+    "warfare": {
+        "farmer": [
+            {
+                "title": "Peaceful Borders",
+                "text": "A farmer near the frontier prays that the soldiers keep the enemy far from his fields.",
+                "reward": ""
+            },
+            {
+                "title": "Untouched Harvest",
+                "text": "A man holding a sickle prays that no army trample his crops this season.",
+                "reward": ""
+            },
+            {
+                "title": "Safety of Family",
+                "text": "A farmer asks the gods to protect his wife and children if war comes too near.",
+                "reward": ""
+            }
+        ],
+        "merchant": [
+            {
+                "title": "Safe Convoy",
+                "text": "A merchant bows. He asks the gods to guard his wagons as they pass through war-torn roads.",
+                "reward": ""
+            },
+            {
+                "title": "Loyal Guards",
+                "text": "A trader prays his hired guards stand firm if ambushed on the trade route.",
+                "reward": ""
+            },
+            {
+                "title": "Market Stability",
+                "text": "A merchant prays that war not ruin the markets or drive away his customers.",
+                "reward": ""
+            }
+        ],
+        "nobleman": [
+            {
+                "title": "Victory",
+                "text": "A noble general prays that his army prevail and his family’s name be honored in victory.",
+                "reward": ""
+            },
+            {
+                "title": "Courage of Men",
+                "text": "A commander offers a bronze helm. He asks for bravery among his soldiers when the fighting begins.",
+                "reward": ""
+            },
+            {
+                "title": "Strategic Wisdom",
+                "text": "A noble prays for a clear mind to outthink his enemies and save his city.",
+                "reward": ""
+            }
+        ],
+        "foreigner": [
+            {
+                "title": "Redemption",
+                "text": "A foreign warrior prays for a chance to prove his loyalty after fleeing a lost homeland.",
+                "reward": ""
+            },
+            {
+                "title": "Peace Treaty",
+                "text": "A diplomat from another city prays that talks go well and bloodshed can be avoided.",
+                "reward": ""
+            },
+            {
+                "title": "Survival",
+                "text": "A mercenary from afar prays that he live to see another dawn, no matter who wins.",
+                "reward": ""
+            }
+        ],
+        "beggar": [
+            {
+                "title": "For the Fallen",
+                "text": "A beggar lays wilted flowers on the steps. He prays that his brother’s spirit find rest.",
+                "reward": ""
+            },
+            {
+                "title": "End of War",
+                "text": "A poor widow prays that no more sons be taken for fighting.",
+                "reward": ""
+            },
+            {
+                "title": "Protection",
+                "text": "A beggar from a ruined village asks that the city walls hold strong.",
+                "reward": ""
+            }
+        ],
+        "priest": [
+            {
+                "title": "War Omens",
+                "text": "An oracle’s voice shakes. She asks the gods to reveal whether the coming war will favor their city.",
+                "reward": ""
+            },
+            {
+                "title": "Blessing of Arms",
+                "text": "A priest prays over offerings of iron. He asks the gods to bless every spear and shield.",
+                "reward": ""
+            },
+            {
+                "title": "Peaceful End",
+                "text": "A temple elder prays that when war ends, mercy follows quickly.",
+                "reward": ""
+            }
+        ],
+        "soldier": [
+            {
+                "title": "Courage",
+                "text": "A young soldier prays for the strength not to flee when the horns sound.",
+                "reward": ""
+            },
+            {
+                "title": "Victory",
+                "text": "A hoplite kneels and asks the gods to let him strike true and stand unharmed.",
+                "reward": ""
+            },
+            {
+                "title": "Return Home",
+                "text": "A weary veteran prays only to see his family again once the campaign ends.",
+                "reward": ""
+            }
+        ],
+        "artist": [
+            {
+                "title": "Epic Ending",
+                "text": "A playwright prays for words to finish his tragedy about the war just fought.",
+                "reward": ""
+            },
+            {
+                "title": "War Memorial",
+                "text": "A sculptor prays that his monument to the fallen stands tall for generations.",
+                "reward": ""
+            },
+            {
+                "title": "Battle Hymn",
+                "text": "A musician asks for strength to compose a song that honors both bravery and loss.",
+                "reward": ""
+            }
+        ]
     },
-    {
-      "id": "wealth",
-      "name": "Wealth, Craft & Livelihood",
-  "goals": [
-        {"id": 21, "title": "Pray for Trade Winds", "flavor": "A sailor places a copper coin on the altar. His ship lies waiting for wind in the harbor. He prays for breath from the west to fill his sails."},
-        {"id": 22, "title": "Pray for Prosperity", "flavor": "A merchant bows deeply, his robe heavy with embroidered gold. His caravans have gone missing on the road. He prays their return, and swears to donate a tenth of their worth."},
-        {"id": 23, "title": "Pray for a Good Market", "flavor": "A young potter brings his unsold wares. He says people no longer buy his jars, claiming a curse upon his kiln. He prays for his craft to be favored again."},
-        {"id": 24, "title": "Pray for the Fishermen", "flavor": "A group of fishermen come together, smelling of salt and fear. The sea has turned strange — fish vanish, nets come up empty. They ask the sea god’s pardon for some unknown offense."},
-        {"id": 25, "title": "Pray for Honest Weight", "flavor": "A shopkeeper offers his bronze scale. He fears his rivals cheat their customers. He prays for fairness — or that their deceit be found out."},
-        {"id": 26, "title": "Pray for the Shepherd", "flavor": "A shepherd girl speaks shyly. She says lightning struck near her flock, and now the animals refuse to graze. She prays to calm their hearts, and her own."},
-        {"id": 27, "title": "Pray for Tools", "flavor": "A blacksmith lays a cracked hammer on the altar. His forge fire burns low, and every blade he makes turns brittle. He prays that the flame spirit forgive his neglect."}
-      ]
-    },
-    {
-      "id": "justice",
-      "name": "Justice, Sin & Forgiveness",
-  "goals": [
-        {"id": 28, "title": "Pray for Justice", "flavor": "A widow kneels with her husband’s signet ring. The magistrate dismissed her case for lack of witnesses. She prays for truth to find its voice."},
-        {"id": 29, "title": "Pray for Forgiveness", "flavor": "A tax collector arrives late, his face hidden beneath a hood. He spills coins at the altar, whispering that they were taken unjustly. He begs the gods to judge him lightly."},
-        {"id": 30, "title": "Pray for Mercy", "flavor": "A thief caught by the guards stands before you in chains. He says he stole bread only for his starving sister. He prays for mercy, not for himself but for her."},
-        {"id": 31, "title": "Pray for Truth", "flavor": "A woman accused of witchcraft pleads her innocence. She offers the gods her own hair, saying: let truth be known, whether it condemns or saves her."},
-        {"id": 32, "title": "Pray for Retribution", "flavor": "A father’s eyes burn with grief. His daughter was taken by slavers, and no one dares pursue. He prays for vengeance, even if it damns his soul."},
-        {"id": 33, "title": "Pray for Judgment", "flavor": "An old judge enters silently. He confesses to condemning the innocent for bribes. Now the faces of the dead haunt his dreams. He prays for release — or punishment."}
-      ]
-    },
-    {
-      "id": "love",
-      "name": "Love, Family & Relationships",
-  "goals": [
-        {"id": 34, "title": "Pray for Union", "flavor": "Two young lovers come secretly after sunset. Their families forbid their marriage. They pray for the courage to defy blood and tradition."},
-        {"id": 35, "title": "Pray for Fidelity", "flavor": "A wife leaves a ring of woven reeds. She says her husband travels often and returns colder each time. She prays that his heart stay bound to hers."},
-        {"id": 36, "title": "Pray for Child", "flavor": "A barren couple kneels together, eyes downcast. They have prayed in every shrine but yours. They offer a dove and a promise: if a child is born, they will name it after your god."},
-        {"id": 37, "title": "Pray for Family Peace", "flavor": "A merchant’s household is torn by quarrel. Brothers fight over inheritance before the father is cold in his tomb. He prays for harmony before blood is spilled."},
-        {"id": 38, "title": "Pray for Lost Love", "flavor": "A young man places a single flower on the altar. The woman he loves has married another. He prays to forget her face, though he knows he never will."}
-      ]
-    },
-    {
-      "id": "death",
-      "name": "Death, Spirits & Afterlife",
-  "goals": [
-        {"id": 39, "title": "Pray for the Dead", "flavor": "A gravedigger bows with dust still clinging to his hands. He buries the nameless poor, and dreams of them calling his name. He prays they rest, and leave him in peace."},
-        {"id": 40, "title": "Pray for the Unburied", "flavor": "A traveler brings word of corpses left on the battlefield. He fears their souls wander in torment. He prays for the gods of passage to open their gates."},
-        {"id": 41, "title": "Pray for Peaceful Passing", "flavor": "An elder sits quietly before the altar, eyes closed. “My time is near,” he says. “Let death come gently, not as thief but as friend.”"},
-        {"id": 42, "title": "Pray Against Haunting", "flavor": "A widow speaks of strange sounds and cold breath at night. She fears her husband’s spirit lingers, angry at her remarriage. She prays for his forgiveness — or his departure."},
-        {"id": 43, "title": "Pray for the Midday Shade", "flavor": "A shepherd says the noonday sun has voices that whisper his name. He fears he’s being called to the underworld too soon. He prays to silence them."}
-      ]
-    },
-    {
-      "id": "faith",
-      "name": "Faith, Omens & The Gods",
-  "goals": [
-        {"id": 44, "title": "Pray for Guidance", "flavor": "A youth enters trembling, uncertain which trade to pursue. He asks the gods to mark his path, lest he waste his life chasing shadows."},
-        {"id": 45, "title": "Pray to Lift a Curse", "flavor": "A woman carries a cracked idol. Her household has known only misfortune since her husband mocked the priest. She prays to appease the offended spirit."},
-        {"id": 46, "title": "Pray for Favor", "flavor": "A nobleman offers a white ram. He wants his name sung in temples across the land. He prays for divine favor to match his ambition."},
-        {"id": 47, "title": "Pray for a Sign", "flavor": "A hermit returns from the mountains claiming to have seen omens — black birds circling the sun. He prays for understanding before madness takes him."},
-        {"id": 48, "title": "Pray for the Temple", "flavor": "An acolyte of your own order kneels. The temple roof leaks, offerings have grown meager. He prays for renewed faith among the people."},
-        {"id": 49, "title": "Pray for Strength of Faith", "flavor": "A young novice admits doubt has crept into his heart. He fears the gods no longer hear him. He prays not for proof, but for the will to keep believing."},
-        {"id": 50, "title": "Pray Against Heresy", "flavor": "A stern priest from another town arrives, accusing his flock of following false idols. He prays for power to cleanse his parish — and for the courage to do what must be done."}
-      ]
-    },
-    {
-      "id": "mystic",
-      "name": "Strange, Mystical & Supernatural",
-      "petitions": [
-        {"id": 51, "title": "Pray for Protection from Nightmares", "flavor": "A boy claims a pale woman visits his dreams each night, whispering secrets in a dead tongue. He prays for sleep without voices."},
-        {"id": 52, "title": "Pray for Deliverance from Spirits", "flavor": "A fisherman says something followed him from the sea — shapes in the fog, whispering his name. He prays for banishment of the unseen."},
-        {"id": 53, "title": "Pray for Rain of Fire", "flavor": "An old prophet raves in the square, claiming only fire will cleanse the world. He prays for the skies to burn. The crowd murmurs in fear."},
-        {"id": 54, "title": "Pray for the Moon’s Return", "flavor": "An astrologer kneels in panic. The moon has vanished behind an endless cloud, and tides no longer obey. He prays for the celestial order to be restored."},
-        {"id": 55, "title": "Pray for the Talking Statue", "flavor": "A merchant’s son swears the statue in his courtyard spoke last night. He prays to know whether it was miracle or curse."},
-        {"id": 56, "title": "Pray for the Serpent Beneath", "flavor": "A miner speaks of rumblings deep under the hills. He says a serpent god stirs in its sleep. He prays for the earth to remain sealed."},
-        {"id": 57, "title": "Pray for the Return of Light", "flavor": "A traveler from the north claims the sun failed to rise for three days. He prays for dawn to come again, before the world forgets what warmth feels like."}
-      ]
+    "spirit": {
+        "farmer": [
+            {
+                "title": "Love’s Return",
+                "text": "A farmer prays his wife, gone to her family, will forgive his anger and return home.",
+                "reward": ""
+            },
+            {
+                "title": "Peace for Ancestors",
+                "text": "A man lights a small fire. He prays that his father’s spirit rest easily beneath the earth.",
+                "reward": ""
+            },
+            {
+                "title": "Hope",
+                "text": "A farmer bows and asks the gods not to forget the humble, even when the fields are bare.",
+                "reward": ""
+            }
+        ],
+        "merchant": [
+            {
+                "title": "Reconciliation",
+                "text": "A merchant prays for peace with his brother after years of bitter dispute over inheritance.",
+                "reward": ""
+            },
+            {
+                "title": "Good Marriage",
+                "text": "A trader prays that his daughter’s wedding bring happiness and not misfortune.",
+                "reward": ""
+            },
+            {
+                "title": "Safe Passage of Soul",
+                "text": "A wealthy man prays for his mother’s soul to find her way to the afterlife.",
+                "reward": ""
+            }
+        ],
+        "nobleman": [
+            {
+                "title": "Eternal Name",
+                "text": "A nobleman prays that his deeds be remembered long after death.",
+                "reward": ""
+            },
+            {
+                "title": "Faithful Love",
+                "text": "A widow of noble birth prays that her husband’s spirit watches over her kindly.",
+                "reward": ""
+            },
+            {
+                "title": "Ancestral Favor",
+                "text": "A noble family offers wine. They pray their ancestors bless their descendants with unity.",
+                "reward": ""
+            }
+        ],
+        "foreigner": [
+            {
+                "title": "Unknown Gods",
+                "text": "A traveler prays to any who will listen. He hopes the local gods accept his offering.",
+                "reward": ""
+            },
+            {
+                "title": "Memory of Home",
+                "text": "A foreigner lights incense for those buried far away, asking that distance not divide their souls.",
+                "reward": ""
+            },
+            {
+                "title": "Shared Faith",
+                "text": "A traveler prays that the people here understand that all gods hear the same hearts.",
+                "reward": ""
+            }
+        ],
+        "beggar": [
+            {
+                "title": "Mercy",
+                "text": "A beggar kneels and whispers, asking the gods for kindness in life or death.",
+                "reward": ""
+            },
+            {
+                "title": "Rest for the Lost",
+                "text": "A blind beggar prays for those who died forgotten to be remembered once more.",
+                "reward": ""
+            },
+            {
+                "title": "Small Joys",
+                "text": "A poor woman prays for someone to smile at her in the street, just once more.",
+                "reward": ""
+            }
+        ],
+        "priest": [
+            {
+                "title": "Guidance",
+                "text": "An oracle prays that her visions show truth and not the tricks of restless spirits.",
+                "reward": ""
+            },
+            {
+                "title": "Rite of Passage",
+                "text": "A priest prays that the souls of the newly dead reach the afterlife without delay.",
+                "reward": ""
+            },
+            {
+                "title": "Divine Favor",
+                "text": "A temple elder prays for a sign that the gods still walk among their people.",
+                "reward": ""
+            }
+        ],
+        "soldier": [
+            {
+                "title": "Fallen Comrade",
+                "text": "A soldier lays his helmet down. He prays that his friend’s soul find peace in the afterlife.",
+                "reward": ""
+            },
+            {
+                "title": "Redemption",
+                "text": "A mercenary prays for forgiveness for the lives he has taken.",
+                "reward": ""
+            },
+            {
+                "title": "Homecoming",
+                "text": "A soldier prays that when his time comes, his body is returned to his family for proper burial.",
+                "reward": ""
+            }
+        ],
+        "artist": [
+            {
+                "title": "Beloved Muse",
+                "text": "A sculptor prays before a statue of his late wife, asking for her guidance in his art.",
+                "reward": ""
+            },
+            {
+                "title": "True Love",
+                "text": "A young poet prays that his affection be returned and not mocked.",
+                "reward": ""
+            },
+            {
+                "title": "Beauty Remembered",
+                "text": "An old painter prays that the gods let his work preserve the faces of those he loved.",
+                "reward": ""
+            }
+        ]
     }
-  ],
-  "schema": {
-    "category": {
-      "fields": ["id", "name", "goals"],
-      "notes": "Categories group thematic goals; id is slug used for optional goal tagging."},
-    "goal": {
-      "fields": ["id", "title", "flavor"],
-      "notes": "Each goal object originates from a petition narrative; used for optional goal templates."}
-  }
 }

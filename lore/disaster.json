@@ -1,80 +1,90 @@
 {
-  "categories": [
-    {
-      "id": "agriculture_collapse",
-      "name": "Agriculture & Famine",
-      "goals": [
-        {"id": 1, "title": "Blight of the Grain", "flavor": "Fields once green now stand in gray silence. A spreading rot climbs each stalk, and granaries begin to stink of decay. If unhalted, hunger will carve the city hollow."},
-        {"id": 2, "title": "Locust Tempest", "flavor": "At dusk the sky churns like living smoke. Swarms descend, stripping leaf and bark alike. Panic spreads as seed reserves dwindle and livestock weaken."},
-        {"id": 3, "title": "River Drought", "flavor": "The riverbed cracks under a sun that will not yield. Irrigation channels lie dusty, fishermen trade nets for prayer. Without water the city’s pulse falters."}
-      ]
-    },
-    {
-      "id": "warfare_siege",
-      "name": "Warfare & Siege",
-      "goals": [
-        {"id": 10, "title": "Encircling Army", "flavor": "Foreign banners sprout on every horizon. Supply lines are cut and fear breeds rumor inside the walls. A drawn-out siege threatens famine and revolt."},
-        {"id": 11, "title": "Saboteur Network", "flavor": "Night after night small fires blossom in storehouses. Tools vanish, guard rosters forged. An unseen hand erodes the city from within."},
-        {"id": 12, "title": "Border Skirmishes", "flavor": "Outlying farms report raids; roads grow unsafe. Trade caravans delay departures and militia stretch thin. Unchecked, raids will escalate to full invasion."}
-      ]
-    },
-    {
-      "id": "plague_pestilence",
-      "name": "Disease & Pestilence",
-      "goals": [
-        {"id": 20, "title": "Red Lung Plague", "flavor": "Coughs echo through alleys, crimson flecks staining cloth. Clinics overflow while healers ration dwindling herbs. Left unchecked, the city’s workforce and hope will both collapse."},
-        {"id": 21, "title": "Well Rot", "flavor": "A slick film coats public wells; water tastes of metal and mold. Illness spreads in waves of fever and delirium. Purity must be restored or thirst will claim more lives than disease."},
-        {"id": 22, "title": "Infant Mortality Surge", "flavor": "Cradles lie empty in mourning households. Midwives weep at patterns they cannot break. The future generation flickers, threatening long-term decline."}
-      ]
-    },
-    {
-      "id": "wealth_collapse",
-      "name": "Economic Collapse",
-      "goals": [
-        {"id": 30, "title": "Market Panic", "flavor": "Coin stalls as traders hoard goods. Prices spiral; bartering replaces contracts. If stability isn’t restored, famine and unrest will follow."},
-        {"id": 31, "title": "Guild Strike", "flavor": "Craft guilds lock workshops, demanding concessions. Construction halts; repairs backlog. Infrastructure decay accelerates under political strain."},
-        {"id": 32, "title": "Caravan Disappearances", "flavor": "Supply caravans vanish along trade arteries. Rumors of organized brigands or arcane storms spread. Resource scarcity looms."}
-      ]
-    },
-    {
-      "id": "justice_corruption",
-      "name": "Corruption & Law Breakdown",
-      "goals": [
-        {"id": 40, "title": "Bribed Magistrates", "flavor": "Court rulings skew toward the wealthy; evidence disappears. Commoners stage vigils outside shuttered halls. Legitimacy fractures; vigilantism stirs."},
-        {"id": 41, "title": "Cult Infiltration", "flavor": "A clandestine cult embeds agents in record archives and guard posts. Edicts warp subtly; missing persons reports rise. Faith and order both erode."},
-        {"id": 42, "title": "Rioting District", "flavor": "A working-class district erupts nightly: smashed stalls, torch-lit marches. Authorities hesitate, fearing escalation. Commerce and safety plummet."}
-      ]
-    },
-    {
-      "id": "spiritual_omens",
-      "name": "Faith & Omens",
-      "goals": [
-        {"id": 50, "title": "Temple Desecration", "flavor": "Central shrine defaced; sacred relic cracked. Pilgrims turn away, donations crash. If sanctity isn’t restored, broader despair may ignite other crises."},
-        {"id": 51, "title": "Prophetic Panic", "flavor": "A cascade of contradictory prophecies floods the streets: flame, flood, eclipse. Citizens freeze in indecision. Order frays under metaphysical dread."},
-        {"id": 52, "title": "Silent Altars", "flavor": "Priests report unanswered rituals; incense gutters without breeze. Rumors of divine abandonment spread. Devotion metrics plummet."}
-      ]
-    },
-    {
-      "id": "environment_cataclysm",
-      "name": "Environmental Cataclysm",
-      "goals": [
-        {"id": 60, "title": "Great Flood", "flavor": "Black clouds stack like fortress walls. The river swells overnight, overtopping levees. Districts vanish beneath churning water; disease risk spikes."},
-        {"id": 61, "title": "Earth Tremor Chain", "flavor": "Minor quakes rattle crockery, escalating to fractures in paved roads. Engineers fear a major rupture that could shatter aqueducts and granaries."},
-        {"id": 62, "title": "Ashfall Veil", "flavor": "Distant mountain belches a gray plume. Fine ash drifts over rooftops, clogging cisterns and lungs. Daylight dims; crop photos decline."}
-      ]
-    },
-    {
-      "id": "arcane_anomalies",
-      "name": "Arcane & Unnatural",
-      "goals": [
-        {"id": 70, "title": "Whispering Fog", "flavor": "A sentient mist coils through streets at night. Those who wander within emerge disoriented, some never return. Navigation and commerce stall."},
-        {"id": 71, "title": "Time Fractures", "flavor": "Clock towers desynchronize; some workshops report hours vanishing. Crop cycles misalign and contract deadlines collapse into confusion."},
-        {"id": 72, "title": "Subterranean Serpent Stirring", "flavor": "Low rumbles pulse beneath foundations. Scholars argue a colossal serpent spirit turns in uneasy dreams. Cracks spider through lower cisterns."}
-      ]
-    }
-  ],
-  "schema": {
-    "category": {"fields": ["id", "name", "goals"], "notes": "Categories group disaster seeds."},
-    "goal": {"fields": ["id", "title", "flavor"], "notes": "Each goal represents a disaster scenario used for disaster goal generation."}
-  }
+    "nature": [
+        {
+            "title": "Failed Harvest",
+            "text": "The fields yield little this year. The earth has turned stubborn, and even the priests say the gods have turned their eyes away."
+        },
+        {
+            "title": "Drought",
+            "text": "No rain has fallen for many moons. Wells run dry, and cattle collapse in the dust. Farmers whisper that Poseidon is angry."
+        },
+        {
+            "title": "Earthquake",
+            "text": "The ground shakes without warning, toppling walls and statues. Some say it is the anger of the earth itself, others that the gods quarrel below."
+        },
+        {
+            "title": "Pestilence of Fields",
+            "text": "Locusts descend upon the crops, devouring everything green. Offerings are burned day and night, but the swarm only grows."
+        },
+        {
+            "title": "Flood",
+            "text": "Heavy rains have broken the riverbanks. Homes and granaries lie drowned beneath the muddy waters. Fishermen claim the river spirits are restless."
+        }
+    ],
+    "warfare": [
+        {
+            "title": "Border Raids",
+            "text": "Bands of armed men from a rival city cross the border. Villages burn before the army can rally."
+        },
+        {
+            "title": "Rebellion",
+            "text": "Discontent stirs within the city. Workers and slaves refuse their duties, claiming the gods favor no longer rests on the rulers."
+        },
+        {
+            "title": "Siege",
+            "text": "Enemy banners appear on the horizon. The city gates are sealed, and food begins to run short as the siege tightens."
+        },
+        {
+            "title": "Deserters",
+            "text": "Soldiers have begun to slip away from the camp at night. Fear and hunger have done what the enemy could not."
+        },
+        {
+            "title": "Mercenary Betrayal",
+            "text": "Hired warriors have turned their spears for better pay. The city’s trust in foreign swords proves costly."
+        }
+    ],
+    "spirit": [
+        {
+            "title": "Curse of the Dead",
+            "text": "Tombs have been disturbed, and the nights grow uneasy. Some say the dead now walk among the living, seeking what was taken from them."
+        },
+        {
+            "title": "Blasphemy",
+            "text": "A sacred image has been defiled. The priests warn that unless the statue is cleansed, no offering will reach the gods."
+        },
+        {
+            "title": "Mad Oracle",
+            "text": "The city’s oracle speaks only nonsense. Her visions have turned to screams, and pilgrims flee in fear."
+        },
+        {
+            "title": "Divine Silence",
+            "text": "The usual omens have ceased—no birds cry, no flames flicker. The priests worry that the gods have withdrawn their favor entirely."
+        },
+        {
+            "title": "False Prophet",
+            "text": "A man claims to speak with the voice of Apollo. Crowds gather to hear him, but the temple denounces his words as lies."
+        }
+    ],
+    "commerce": [
+        {
+            "title": "Market Fire",
+            "text": "Flames swept through the market stalls in the night. The air still smells of burnt oil and coin, and trade has halted."
+        },
+        {
+            "title": "Trade Embargo",
+            "text": "A neighboring city has closed its ports to your merchants. Goods rot on ships while diplomats argue at the harbor gates."
+        },
+        {
+            "title": "Coin Forgery",
+            "text": "Fake silver has appeared in the markets. Trust fades quickly, and honest trade suffers with it."
+        },
+        {
+            "title": "Craftsmen’s Strike",
+            "text": "The artisans have laid down their tools, demanding higher pay and better offerings at their guild shrine."
+        },
+        {
+            "title": "Plague of Rats",
+            "text": "Warehouses are overrun with vermin. Grain is spoiled, and merchants fear disease spreading through the docks."
+        }
+    ]
 }

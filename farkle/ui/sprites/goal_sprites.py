@@ -125,14 +125,11 @@ class GoalSprite(BaseSprite):
         self.rect = self.image.get_rect(topleft=(x, panel_y))
         goal._last_rect = self.rect
         goal._last_lines = lines_out
-        from farkle.ui.settings import (
-            GOAL_BG_DISASTER, GOAL_BG_DISASTER_DONE, GOAL_BG_PETITION, GOAL_BG_PETITION_DONE,
-            GOAL_BORDER_ACTIVE, GOAL_TEXT
-        )
-        if goal.is_disaster:
-            bg = GOAL_BG_DISASTER_DONE if goal.is_fulfilled() else GOAL_BG_DISASTER
-        else:
-            bg = GOAL_BG_PETITION_DONE if goal.is_fulfilled() else GOAL_BG_PETITION
+        from farkle.ui.settings import GOAL_BORDER_ACTIVE, GOAL_TEXT
+        
+        # Use category-based colors
+        bg, border = goal.get_category_colors(goal.category, goal.is_fulfilled())
+        
         pygame.draw.rect(self.image, bg, self.image.get_rect(), border_radius=10)
         if g.active_goal_index == idx:
             pygame.draw.rect(self.image, GOAL_BORDER_ACTIVE, self.image.get_rect(), width=3, border_radius=10)

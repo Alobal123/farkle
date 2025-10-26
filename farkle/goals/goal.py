@@ -7,13 +7,14 @@ if TYPE_CHECKING:
     from farkle.game import Game
 
 class Goal(GameObject):
-    def __init__(self, target_score: int, name: str = "", is_disaster: bool = True, reward_gold: int = 0, flavor: str = ""):
+    def __init__(self, target_score: int, name: str = "", is_disaster: bool = True, reward_gold: int = 0, flavor: str = "", category: str = ""):
         super().__init__(name or "Goal")
         self.target_score = target_score
         self.remaining = target_score
         self.name = name or "Goal"
         self.is_disaster = is_disaster
         self.flavor = flavor
+        self.category = category  # Category for color coding: nature, warfare, spirit, commerce
         # Reward system (future-proof for other reward types). For now only gold coins.
         self.reward_gold = reward_gold
         self.reward_claimed = False
@@ -56,6 +57,37 @@ class Goal(GameObject):
         return int(getattr(self, 'pending_raw', 0) or 0)
 
     # Rendering helpers (decoupled from Game specifics but reusable)
+    @staticmethod
+    def get_category_colors(category: str, is_fulfilled: bool) -> tuple[tuple[int, int, int], tuple[int, int, int]]:
+        """Return (background_color, border_color) for a given category.
+        
+        Categories: nature, warfare, spirit, commerce
+        Returns darker/desaturated colors when fulfilled.
+        """
+        # Base colors for each category (vibrant when active)
+        category_colors = {
+            'nature': ((60, 120, 60), (80, 160, 80)),      # Green
+            'warfare': ((140, 50, 50), (180, 70, 70)),     # Red
+            'spirit': ((90, 70, 140), (120, 100, 180)),    # Purple
+            'commerce': ((160, 120, 40), (200, 150, 60)),  # Gold/Yellow
+        }
+        
+        # Fulfilled (done) colors - darker and desaturated
+        category_colors_done = {
+            'nature': ((40, 70, 40), (50, 90, 50)),
+            'warfare': ((80, 35, 35), (100, 50, 50)),
+            'spirit': ((50, 40, 80), (70, 60, 110)),
+            'commerce': ((90, 70, 30), (120, 95, 45)),
+        }
+        
+        # Get colors based on category, default to neutral gray if unknown
+        if is_fulfilled:
+            bg, border = category_colors_done.get(category, ((60, 65, 70), (80, 85, 90)))
+        else:
+            bg, border = category_colors.get(category, ((80, 85, 90), (100, 105, 110)))
+        
+        return bg, border
+
     @staticmethod
     def wrap_text(font: pygame.font.Font, text: str, max_width: int) -> list[str]:
         words = text.split()
@@ -242,14 +274,11 @@ class Goal(GameObject):
         box_rect = pygame.Rect(x, panel_y, per_box_width, box_height)
         self._last_rect = box_rect
         self._last_lines = lines_out
-        from farkle.ui.settings import (
-            GOAL_BG_DISASTER, GOAL_BG_DISASTER_DONE, GOAL_BG_PETITION, GOAL_BG_PETITION_DONE,
-            GOAL_BORDER_ACTIVE, GOAL_TEXT
-        )
-        if self.is_disaster:
-            bg = GOAL_BG_DISASTER_DONE if self.is_fulfilled() else GOAL_BG_DISASTER
-        else:
-            bg = GOAL_BG_PETITION_DONE if self.is_fulfilled() else GOAL_BG_PETITION
+        from farkle.ui.settings import GOAL_BORDER_ACTIVE, GOAL_TEXT
+        
+        # Use category-based colors
+        bg, border = self.get_category_colors(self.category, self.is_fulfilled())
+        
         pygame.draw.rect(surface, bg, box_rect, border_radius=10)
         if g.active_goal_index == idx:
             pygame.draw.rect(surface, GOAL_BORDER_ACTIVE, box_rect, width=3, border_radius=10)

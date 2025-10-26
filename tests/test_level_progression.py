@@ -11,9 +11,9 @@ level1 = Level.single("Invocation Rite", 300, 2, "First rite", rng=rng)
 print(f"\n=== Level 1: {level1.name} ===")
 print(f"Max turns: {level1.max_turns}")
 print(f"Goals ({len(level1.goals)}):")
-for i, (name, target, mandatory, reward, flavor) in enumerate(level1.goals):
+for i, (name, target, mandatory, reward, flavor, category) in enumerate(level1.goals):
     goal_type = "MANDATORY" if mandatory else "optional"
-    print(f"  {i+1}. [{goal_type}] {name}: {target} points, {reward} gold reward")
+    print(f"  {i+1}. [{goal_type}] {name}: {target} points, {reward} gold reward (category: {category})")
 
 # Advance through several levels to show progression
 current_level = level1
@@ -23,13 +23,13 @@ for level_idx in range(2, 9):
     print(f"Max turns: {current_level.max_turns}")
     
     # Count optional vs mandatory
-    mandatory_count = sum(1 for _, _, m, _, _ in current_level.goals if m)
-    optional_count = sum(1 for _, _, m, _, _ in current_level.goals if not m)
+    mandatory_count = sum(1 for _, _, m, _, _, _ in current_level.goals if m)
+    optional_count = sum(1 for _, _, m, _, _, _ in current_level.goals if not m)
     
     print(f"Goals ({len(current_level.goals)} total: {mandatory_count} mandatory, {optional_count} optional):")
-    for i, (name, target, mandatory, reward, flavor) in enumerate(current_level.goals):
+    for i, (name, target, mandatory, reward, flavor, category) in enumerate(current_level.goals):
         goal_type = "MANDATORY" if mandatory else "optional"
-        print(f"  {i+1}. [{goal_type}] {name}: {target} points, {reward} gold reward")
+        print(f"  {i+1}. [{goal_type}] {name}: {target} points, {reward} gold reward (category: {category})")
 
 print("\n=== Progression Summary ===")
 print("Expected optional goal counts:")

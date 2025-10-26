@@ -7,9 +7,9 @@ _PETITION_CACHE: List[Dict[str, Any]] | None = None
 _DISASTER_CACHE: List[Dict[str, Any]] | None = None
 
 def load_petitions() -> List[Dict[str, Any]]:
-    """Load all petition goals from petitions.json.
+    """Load all petition goals from petitions2.json.
     
-    Returns a flat list of petition dicts with keys: id, title, flavor, category.
+    Returns a flat list of petition dicts with keys: title, text, category, persona.
     Cached after first load.
     """
     global _PETITION_CACHE
@@ -19,25 +19,23 @@ def load_petitions() -> List[Dict[str, Any]]:
     # Find the Lore directory relative to this file
     current_dir = os.path.dirname(os.path.abspath(__file__))
     repo_root = os.path.dirname(os.path.dirname(current_dir))
-    lore_path = os.path.join(repo_root, 'Lore', 'petitions.json')
+    lore_path = os.path.join(repo_root, 'lore', 'petitions.json')
     
     try:
         with open(lore_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
         
-        # Flatten categories into a single list of petitions
+        # Flatten the nested structure into a single list of petitions
         petitions = []
-        for category in data.get('categories', []):
-            category_id = category.get('id', '')
-            category_name = category.get('name', '')
-            for goal in category.get('goals', []):
-                petitions.append({
-                    'id': goal.get('id'),
-                    'title': goal.get('title', ''),
-                    'flavor': goal.get('flavor', ''),
-                    'category': category_id,
-                    'category_name': category_name
-                })
+        for category, personas in data.items():
+            for persona, petition_list in personas.items():
+                for petition in petition_list:
+                    petitions.append({
+                        'title': petition.get('title', ''),
+                        'text': petition.get('text', ''),
+                        'category': category,
+                        'persona': persona
+                    })
         
         _PETITION_CACHE = petitions
         return petitions
@@ -48,11 +46,8 @@ def load_petitions() -> List[Dict[str, Any]]:
         return []
 
 def get_petition_by_id(petition_id: int) -> Dict[str, Any] | None:
-    """Get a specific petition by its ID."""
-    petitions = load_petitions()
-    for p in petitions:
-        if p.get('id') == petition_id:
-            return p
+    """Get a specific petition by its ID (deprecated - new format doesn't have IDs)."""
+    # This function is deprecated with petitions2.json
     return None
 
 def get_petitions_by_category(category: str) -> List[Dict[str, Any]]:
@@ -60,10 +55,15 @@ def get_petitions_by_category(category: str) -> List[Dict[str, Any]]:
     petitions = load_petitions()
     return [p for p in petitions if p.get('category') == category]
 
+def get_petitions_by_persona(persona: str) -> List[Dict[str, Any]]:
+    """Get all petitions from a specific persona type."""
+    petitions = load_petitions()
+    return [p for p in petitions if p.get('persona') == persona]
+
 def load_disasters() -> List[Dict[str, Any]]:
     """Load all disaster goals from disaster.json.
     
-    Returns a flat list of disaster dicts with keys: id, title, flavor, category.
+    Returns a flat list of disaster dicts with keys: title, text, category.
     Cached after first load.
     """
     global _DISASTER_CACHE
@@ -72,23 +72,20 @@ def load_disasters() -> List[Dict[str, Any]]:
     
     current_dir = os.path.dirname(os.path.abspath(__file__))
     repo_root = os.path.dirname(os.path.dirname(current_dir))
-    lore_path = os.path.join(repo_root, 'Lore', 'disaster.json')
+    lore_path = os.path.join(repo_root, 'lore', 'disaster.json')
     
     try:
         with open(lore_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
         
+        # Flatten the nested structure into a single list of disasters
         disasters = []
-        for category in data.get('categories', []):
-            category_id = category.get('id', '')
-            category_name = category.get('name', '')
-            for goal in category.get('goals', []):
+        for category, disaster_list in data.items():
+            for disaster in disaster_list:
                 disasters.append({
-                    'id': goal.get('id'),
-                    'title': goal.get('title', ''),
-                    'flavor': goal.get('flavor', ''),
-                    'category': category_id,
-                    'category_name': category_name
+                    'title': disaster.get('title', ''),
+                    'text': disaster.get('text', ''),
+                    'category': category
                 })
         
         _DISASTER_CACHE = disasters
@@ -97,3 +94,8 @@ def load_disasters() -> List[Dict[str, Any]]:
         print(f"Warning: Could not load disaster.json: {e}")
         _DISASTER_CACHE = []
         return []
+
+def get_disasters_by_category(category: str) -> List[Dict[str, Any]]:
+    """Get all disasters from a specific category."""
+    disasters = load_disasters()
+    return [d for d in disasters if d.get('category') == category]
