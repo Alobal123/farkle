@@ -130,8 +130,29 @@ def resolve_hover(game, pos: tuple[int,int]) -> Optional[Dict]:
                     status_parts.append(f"Pending: +{projected}")
                 if preview_add:
                     status_parts.append(f"Preview: +{preview_add}")
-                if goal.reward_gold and goal.is_fulfilled() and not goal.reward_claimed:
-                    status_parts.append(f"Reward ready: {goal.reward_gold}g")
+                # Show rewards (gold, income, or blessing)
+                if goal.is_fulfilled() and not goal.reward_claimed:
+                    if goal.reward_gold:
+                        status_parts.append(f"Reward ready: {goal.reward_gold}g")
+                    if goal.reward_income:
+                        status_parts.append(f"Reward ready: +{goal.reward_income} income")
+                    if goal.reward_blessing:
+                        # Map blessing types to friendly descriptions
+                        blessing_desc = {
+                            "double_score": "Divine Fortune (2x all scores, 1 turn)"
+                        }.get(goal.reward_blessing, goal.reward_blessing)
+                        status_parts.append(f"Reward ready: {blessing_desc}")
+                elif not goal.is_fulfilled():
+                    # Show what the reward will be when fulfilled
+                    if goal.reward_gold:
+                        status_parts.append(f"Reward: {goal.reward_gold}g")
+                    if goal.reward_income:
+                        status_parts.append(f"Reward: +{goal.reward_income} income")
+                    if goal.reward_blessing:
+                        blessing_desc = {
+                            "double_score": "Divine Fortune (2x all scores, 1 turn)"
+                        }.get(goal.reward_blessing, goal.reward_blessing)
+                        status_parts.append(f"Reward: {blessing_desc}")
                 rem_line = f"Remaining: {goal.remaining}" if not goal.is_fulfilled() else "Fulfilled" 
                 lines: List[str] = [rem_line] + status_parts
                 if goal.flavor:
@@ -214,7 +235,36 @@ def resolve_hover(game, pos: tuple[int,int]) -> Optional[Dict]:
                     return {"title": "Active Relics", "lines": lines, "target": rrect.copy(), "id": "relic_panel"}
     except Exception:
         pass
-    # 6. Help icon
+    # 6. Player HUD (active effects)
+    try:
+        from farkle.ui.sprites.hud_sprites import PlayerHUDSprite
+        ui_group = getattr(game.renderer, 'sprite_groups', {}).get('ui', [])
+        for sprite in ui_group:
+            if isinstance(sprite, PlayerHUDSprite):
+                if hasattr(sprite, 'rect') and sprite.rect.collidepoint(mx, my):
+                    # Build tooltip with active effects details
+                    player = getattr(game, 'player', None)
+                    if player:
+                        effects = list(getattr(player, 'active_effects', []))
+                        if effects:
+                            lines = []
+                            for eff in effects:
+                                eff_type = getattr(eff, 'effect_type', 'UNKNOWN')
+                                duration = getattr(eff, 'duration', 0)
+                                name = getattr(eff, 'name', 'Unknown Effect')
+                                # Add description for known effects
+                                if name == "Divine Fortune":
+                                    lines.append(f"{name} (Blessing)")
+                                    lines.append("  Doubles all scores")
+                                else:
+                                    lines.append(f"{name} ({eff_type})")
+                                lines.append(f"  Active for {duration} turn{'s' if duration != 1 else ''}")
+                            return {"title": "Active Effects", "lines": lines, "target": sprite.rect.copy(), "id": "player_hud_effects"}
+                        else:
+                            return {"title": "Player Status", "lines": ["No active effects"], "target": sprite.rect.copy(), "id": "player_hud"}
+    except Exception:
+        pass
+    # 7. Help icon
     try:
         for obj in getattr(game, 'ui_misc', []):
             if getattr(obj, 'name', None) == 'HelpIcon' and getattr(obj, 'rect', None) and obj.rect.collidepoint(mx,my):

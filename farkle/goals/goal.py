@@ -7,7 +7,7 @@ if TYPE_CHECKING:
     from farkle.game import Game
 
 class Goal(GameObject):
-    def __init__(self, target_score: int, name: str = "", is_disaster: bool = True, reward_gold: int = 0, flavor: str = "", category: str = "", persona: str = "", reward_income: int = 0):
+    def __init__(self, target_score: int, name: str = "", is_disaster: bool = True, reward_gold: int = 0, flavor: str = "", category: str = "", persona: str = "", reward_income: int = 0, reward_blessing: str = ""):
         super().__init__(name or "Goal")
         self.target_score = target_score
         self.remaining = target_score
@@ -16,9 +16,10 @@ class Goal(GameObject):
         self.flavor = flavor
         self.category = category  # Category for color coding: nature, warfare, spirit, commerce
         self.persona = persona  # Persona for reward type: farmer, merchant, nobleman, etc.
-        # Reward system (supports both gold and income rewards)
+        # Reward system (supports gold, income, and blessing rewards)
         self.reward_gold = reward_gold
         self.reward_income = reward_income
+        self.reward_blessing = reward_blessing  # Type of blessing to grant (e.g., "double_score")
         self.reward_claimed = False
         self.game: Optional["Game"] = None  # back reference assigned when subscribed
         # Pending raw points accumulated this turn (before multiplier & banking)
@@ -36,16 +37,16 @@ class Goal(GameObject):
     def is_fulfilled(self) -> bool:
         return self.remaining == 0
 
-    def claim_reward(self) -> tuple[int, int]:
-        """Return (gold_reward, income_reward) if goal is fulfilled and not yet claimed; mark claimed.
+    def claim_reward(self) -> tuple[int, int, str]:
+        """Return (gold_reward, income_reward, blessing_type) if goal is fulfilled and not yet claimed; mark claimed.
         
         Returns:
-            tuple[int, int]: (gold_amount, income_amount)
+            tuple[int, int, str]: (gold_amount, income_amount, blessing_type)
         """
-        if self.is_fulfilled() and not self.reward_claimed and (self.reward_gold > 0 or self.reward_income > 0):
+        if self.is_fulfilled() and not self.reward_claimed and (self.reward_gold > 0 or self.reward_income > 0 or self.reward_blessing):
             self.reward_claimed = True
-            return (self.reward_gold, self.reward_income)
-        return (0, 0)
+            return (self.reward_gold, self.reward_income, self.reward_blessing)
+        return (0, 0, "")
 
     def get_remaining(self) -> int:
         return self.remaining
@@ -202,11 +203,9 @@ class Goal(GameObject):
                         "remaining": self.remaining
                     }))
                     if self.is_fulfilled():
-                        self.game.event_listener.publish(GE(GET.GOAL_FULFILLED, payload={
-                            "goal_name": self.name,
-                            "goal": self,
-                            "reward_gold": self.reward_gold
-                        }))
+                        # Mark as fulfilled but don't publish event yet
+                        # Store that we need to publish after TURN_END
+                        self._fulfilled_this_turn = True
                         if self.game.level_state._all_disasters_fulfilled():
                             self.game.level_state.completed = True
                 # Clear pending after application
@@ -222,6 +221,16 @@ class Goal(GameObject):
             if reason in ("farkle", "farkle_forfeit"):
                 self.pending_raw = 0
                 self._pending_score = None
+            
+            # Publish deferred GOAL_FULFILLED events after turn ends
+            if getattr(self, '_fulfilled_this_turn', False):
+                from farkle.core.game_event import GameEvent as GE, GameEventType as GET
+                self.game.event_listener.publish(GE(GET.GOAL_FULFILLED, payload={
+                    "goal_name": self.name,
+                    "goal": self,
+                    "reward_gold": self.reward_gold
+                }))
+                self._fulfilled_this_turn = False
         # Other events (progress, fulfilled) currently ignored for animation hooks.
 
     def draw(self, surface):  # type: ignore[override]

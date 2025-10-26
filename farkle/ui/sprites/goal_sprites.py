@@ -107,7 +107,7 @@ class GoalSprite(BaseSprite):
         for raw_line in header.split("\n"):
             wrapped = goal.wrap_text(g.small_font, raw_line, per_box_width - 2 * GOAL_PADDING)
             lines_out.extend(wrapped)
-        reward_reserved_height = 20 if (goal.reward_gold > 0 or goal.reward_income > 0) else 0
+        reward_reserved_height = 20 if (goal.reward_gold > 0 or goal.reward_income > 0 or goal.reward_blessing) else 0
         bar_reserved_height = 18
         
         # Use same font size for all goals in single-line layout
@@ -208,6 +208,16 @@ class GoalSprite(BaseSprite):
             self.image.blit(reward_surf, (reward_x, reward_y))
         elif goal.reward_income > 0:
             reward_text = f"+{goal.reward_income} Income"
+            reward_surf = g.small_font.render(reward_text, True, GOAL_TEXT)
+            reward_x = (self.image.get_width() - reward_surf.get_width()) // 2
+            reward_y = y_pos
+            self.image.blit(reward_surf, (reward_x, reward_y))
+        elif goal.reward_blessing:
+            # Map blessing types to short display names
+            blessing_display = {
+                "double_score": "Divine Fortune"
+            }.get(goal.reward_blessing, goal.reward_blessing)
+            reward_text = blessing_display
             reward_surf = g.small_font.render(reward_text, True, GOAL_TEXT)
             reward_x = (self.image.get_width() - reward_surf.get_width()) // 2
             reward_y = y_pos

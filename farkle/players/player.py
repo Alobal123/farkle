@@ -60,7 +60,7 @@ class Player(GameObject):
         elif event.type == GameEventType.GOAL_FULFILLED:
             goal = event.get("goal")
             if goal and hasattr(goal, 'claim_reward'):
-                gold_gained, income_gained = goal.claim_reward()
+                gold_gained, income_gained, blessing_type = goal.claim_reward()
                 if gold_gained > 0:
                     self.add_gold(gold_gained)
                     if self.game:
@@ -76,7 +76,26 @@ class Player(GameObject):
                             "goal_name": goal.name,  # type: ignore[attr-defined]
                             "new_total": self.temple_income
                         }))
+                if blessing_type:
+                    # Apply blessing based on type
+                    self._apply_blessing(blessing_type)
 
+    def _apply_blessing(self, blessing_type: str) -> None:
+        """Apply a blessing to the player based on type."""
+        if not self.game:
+            return
+        
+        try:
+            if blessing_type == "double_score":
+                from farkle.blessings import DoubleScoreBlessing
+                # Duration=1 means it lasts for the next turn
+                # (decrements on TURN_START, so granted mid-turn = active for entire next turn)
+                blessing = DoubleScoreBlessing(duration=1)
+                self.active_effects.append(blessing)
+                blessing.player = self
+                blessing.activate(self.game)
+        except Exception:
+            pass
 
     def draw(self, surface):  # type: ignore[override]
         if not self.game:

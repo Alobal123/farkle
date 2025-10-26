@@ -74,57 +74,75 @@ class TemporaryEffectTests(unittest.TestCase):
         self.assertEqual(curse.effect_type, EffectType.CURSE)
 
     def test_effect_duration_decreases_on_turn_end_banked(self):
-        """Duration decrements once when a banked turn ends."""
+        """Duration decrements on TURN_START, not TURN_END."""
         blessing = TestBlessing(duration=3)
         self.game.player.apply_effect(blessing)
-        # Simulate end of turn (banked)
+        blessing._skip_next_decrement = False  # Reset skip flag for testing
+        # TURN_END no longer decrements
         self.game.event_listener.publish(GameEvent(GameEventType.TURN_END, payload={'reason': 'banked'}))
+        self.assertEqual(blessing.duration, 3)
+        # TURN_START decrements
+        self.game.event_listener.publish(GameEvent(GameEventType.TURN_START, payload={}))
         self.assertEqual(blessing.duration, 2)
         self.assertIn(blessing, self.game.player.active_effects)
 
     def test_effect_duration_decreases_on_farkle_turn_end(self):
-        """Decrements on TURN_END(farkle)."""
+        """Decrements on TURN_START (no longer on TURN_END)."""
         curse = TestCurse(duration=2)
         self.game.player.apply_effect(curse)
+        curse._skip_next_decrement = False  # Reset skip flag for testing
+        # TURN_END no longer decrements
         self.game.event_listener.publish(GameEvent(GameEventType.TURN_END, payload={'reason': 'farkle'}))
+        self.assertEqual(curse.duration, 2)
+        # TURN_START decrements
+        self.game.event_listener.publish(GameEvent(GameEventType.TURN_START, payload={}))
         self.assertEqual(curse.duration, 1)
         self.assertIn(curse, self.game.player.active_effects)
 
     def test_effect_auto_deactivates_at_zero_duration_on_turn_end(self):
-        """Effect at duration 1 expires after a single qualifying TURN_END."""
+        """Effect at duration 1 expires after TURN_START."""
         blessing = TestBlessing(duration=1)
         self.game.player.apply_effect(blessing)
+        blessing._skip_next_decrement = False  # Reset skip flag for testing
         self.assertIn(blessing, self.game.player.active_effects)
-        self.game.event_listener.publish(GameEvent(GameEventType.TURN_END, payload={'reason': 'banked'}))
+        # TURN_START decrements and removes at duration 0
+        self.game.event_listener.publish(GameEvent(GameEventType.TURN_START, payload={}))
         self.assertEqual(blessing.duration, 0)
         self.assertTrue(blessing.deactivated)
         self.assertNotIn(blessing, self.game.player.active_effects)
 
     def test_multiple_effects_decrement_once_per_turn_end(self):
-        """Effects decrement once per completed turn; TURN_START resets guard."""
+        """Effects decrement once per TURN_START."""
         blessing = TestBlessing(duration=3)
         curse = TestCurse(duration=2)
         self.game.player.apply_effect(blessing)
         self.game.player.apply_effect(curse)
-        # First completed turn (banked)
-        self.game.event_listener.publish(GameEvent(GameEventType.TURN_END, payload={'reason': 'banked'}))
-        self.assertEqual((blessing.duration, curse.duration), (2,1))
-        # New turn start resets guard
-        self.game.event_listener.publish(GameEvent(GameEventType.TURN_START, payload={'turns_left': 5}))
-        # Second completed turn (farkle)
-        self.game.event_listener.publish(GameEvent(GameEventType.TURN_END, payload={'reason': 'farkle'}))
-        self.assertEqual((blessing.duration, curse.duration), (1,0))
+        # Reset skip flags for testing
+        blessing._skip_next_decrement = False
+        curse._skip_next_decrement = False
+        # First TURN_START decrements both
+        self.game.event_listener.publish(GameEvent(GameEventType.TURN_START, payload={}))
+        self.assertEqual((blessing.duration, curse.duration), (2, 1))
+        # Second TURN_START decrements both
+        blessing._decremented_this_turn = False  # Reset guard
+        curse._decremented_this_turn = False
+        self.game.event_listener.publish(GameEvent(GameEventType.TURN_START, payload={}))
+        self.assertEqual((blessing.duration, curse.duration), (1, 0))
         self.assertTrue(curse.deactivated)
         self.assertIn(blessing, self.game.player.active_effects)
 
     def test_goal_fulfilled_no_longer_decrements(self):
-        """GOAL_FULFILLED should not decrement under new semantics."""
+        """GOAL_FULFILLED should not decrement (never did, now TURN_START does)."""
         blessing = TestBlessing(duration=2)
         self.game.player.apply_effect(blessing)
+        blessing._skip_next_decrement = False  # Reset skip flag for testing
         self.game.event_listener.publish(GameEvent(GameEventType.GOAL_FULFILLED, payload={'goal_name': 'TestGoal'}))
         self.assertEqual(blessing.duration, 2)
-        # Ending turn now decrements
+        # TURN_END doesn't decrement either now
         self.game.event_listener.publish(GameEvent(GameEventType.TURN_END, payload={'reason': 'banked'}))
+        self.assertEqual(blessing.duration, 2)
+        # TURN_START does decrement
+        self.game.event_listener.publish(GameEvent(GameEventType.TURN_START, payload={}))
         self.assertEqual(blessing.duration, 1)
 
     def test_manual_effect_removal(self):
@@ -140,10 +158,14 @@ class TemporaryEffectTests(unittest.TestCase):
         self.assertTrue(blessing.deactivated)
 
     def test_level_complete_turn_end_decrements(self):
-        """TURN_END(level_complete) now decrements (included in whitelist)."""
+        """TURN_END no longer decrements; only TURN_START does."""
         blessing = TestBlessing(duration=2)
         self.game.player.apply_effect(blessing)
+        blessing._skip_next_decrement = False  # Reset skip flag for testing
         self.game.event_listener.publish(GameEvent(GameEventType.TURN_END, payload={'reason': 'level_complete'}))
+        self.assertEqual(blessing.duration, 2)
+        # TURN_START decrements
+        self.game.event_listener.publish(GameEvent(GameEventType.TURN_START, payload={}))
         self.assertEqual(blessing.duration, 1)
 
     # Starter effect removed from initialization; presence test deleted.

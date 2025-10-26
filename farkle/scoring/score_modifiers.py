@@ -115,6 +115,14 @@ class RuleKeyMatcher:
             return []
         return [p for p in getattr(score_obj, 'parts', []) if p.rule_key == self.rule_key]
 
+@dataclass
+class AllPartsMatcher:
+    """Matcher that selects all score parts."""
+    def select(self, score_obj) -> List:
+        if not score_obj:
+            return []
+        return list(getattr(score_obj, 'parts', []))
+
 
 class PartEffect(Protocol):  # pragma: no cover - interface type
     def apply(self, parts: List, context: ScoreContext) -> int: ...  # returns total delta to base

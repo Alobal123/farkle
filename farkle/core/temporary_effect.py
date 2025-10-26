@@ -33,25 +33,29 @@ class TemporaryEffect(GameObject):
         # Track whether we've already decremented for the current turn segment (a "consumable roll")
         # Reset when a new turn starts or after we consume a decrement via BANK / FARKLE / GOAL_FULFILLED without a roll.
         self._decremented_this_turn = False
+        # Track if we should skip the next TURN_START decrement (for effects granted mid-turn)
+        self._skip_next_decrement = True  # Skip first TURN_START after activation
         
     def draw(self, surface):  # type: ignore[override]
         """Effects do not render directly (may show in player HUD)."""
         pass
     
     def on_event(self, event: GameEvent):  # type: ignore[override]
-        """Respond to game events; decrement only on qualified TURN_END reasons."""
+        """Respond to game events; decrement at the start of each turn."""
         et = event.type
-        # Reset per-turn guard at start of new turn (for completeness)
+        # Decrement duration at the START of each turn (not at end)
+        # This way a blessing granted mid-turn lasts for the entire next turn
         if et == GameEventType.TURN_START:
-            self._decremented_this_turn = False
-            return
-        if et == GameEventType.TURN_END:
-            reason = (event.get('reason') or '').lower()
-            if reason in {"banked", "farkle", "farkle_forfeit", "level_complete"} and not self._decremented_this_turn:
+            # Skip first TURN_START after activation (for effects granted mid-turn)
+            if self._skip_next_decrement:
+                self._skip_next_decrement = False
+                return
+            if not self._decremented_this_turn:
                 self._consume_one(force=True)
+            return
 
     def _consume_one(self, force: bool = False):
-        # After new semantics, force flag just ensures per-turn guard engaged.
+        # Decrement duration and remove if expired
         self._decremented_this_turn = True
         self.duration -= 1
         if self.duration <= 0 and self.player and self.player.game:
