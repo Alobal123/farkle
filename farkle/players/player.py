@@ -10,11 +10,13 @@ from farkle.ui.settings import WIDTH
 @dataclass
 class Player(GameObject):
     gold: int = 0
+    temple_income: int = 0  # Gold awarded at the start of each level
     game: Any | None = None  # runtime-injected game; typed loosely for flexibility
 
     def __init__(self):
         GameObject.__init__(self, name="Player")
         self.gold = 0
+        self.temple_income = 30  # Starting temple income
         self.game = None  # set by Game after construction
         self.active_effects: list = []  # TemporaryEffect instances (blessings/curses)
 
@@ -45,15 +47,35 @@ class Player(GameObject):
 
     # Player might react to events later (stats tracking, etc.)
     def on_event(self, event: GameEvent) -> None:  # type: ignore[override]
-        if event.type == GameEventType.GOAL_FULFILLED:
+        if event.type == GameEventType.LEVEL_GENERATED:
+            # Award temple income at the start of each level
+            if self.temple_income > 0:
+                self.add_gold(self.temple_income)
+                if self.game:
+                    from farkle.core.game_event import GameEvent as GE, GameEventType as GET
+                    self.game.event_listener.publish(GE(GET.GOLD_GAINED, payload={
+                        "amount": self.temple_income, 
+                        "source": "temple_income"
+                    }))
+        elif event.type == GameEventType.GOAL_FULFILLED:
             goal = event.get("goal")
             if goal and hasattr(goal, 'claim_reward'):
-                gained = goal.claim_reward()
-                if gained:
-                    self.add_gold(gained)
+                gold_gained, income_gained = goal.claim_reward()
+                if gold_gained > 0:
+                    self.add_gold(gold_gained)
                     if self.game:
                         from farkle.core.game_event import GameEvent as GE, GameEventType as GET
-                        self.game.event_listener.publish(GE(GET.GOLD_GAINED, payload={"amount": gained, "goal_name": goal.name}))  # type: ignore[attr-defined]
+                        self.game.event_listener.publish(GE(GET.GOLD_GAINED, payload={"amount": gold_gained, "goal_name": goal.name}))  # type: ignore[attr-defined]
+                if income_gained > 0:
+                    self.temple_income += income_gained
+                    # Publish INCOME_GAINED event for UI feedback
+                    if self.game:
+                        from farkle.core.game_event import GameEvent as GE, GameEventType as GET
+                        self.game.event_listener.publish(GE(GET.INCOME_GAINED, payload={
+                            "amount": income_gained, 
+                            "goal_name": goal.name,  # type: ignore[attr-defined]
+                            "new_total": self.temple_income
+                        }))
 
 
     def draw(self, surface):  # type: ignore[override]

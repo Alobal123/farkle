@@ -28,6 +28,7 @@ class AutoNextTurnAfterBankTests(unittest.TestCase):
         return [e.type for e in self.collector.events]
 
     def test_auto_next_turn_after_bank_incomplete_level(self):
+        """After banking, turn should auto-advance if level not complete."""
         # Roll to enter ROLLING state
         self.game.event_listener.publish(GameEvent(GameEventType.REQUEST_ROLL))
         # Create a scoring selection to allow banking: mark first die scoring + lock via right-click
@@ -43,9 +44,11 @@ class AutoNextTurnAfterBankTests(unittest.TestCase):
         self.assertIn(GameEventType.BANK, self._types())
         self.assertIn(GameEventType.TURN_BANKED, self._types())
         self.assertIn(GameEventType.TURN_END, self._types())
-        # After TURN_END(bank), next turn should have begun automatically (PRE_ROLL + TURN_START)
-        self.assertEqual(self.game.state_manager.get_state().name, 'PRE_ROLL', 'Should auto enter PRE_ROLL after banking')
-        self.assertIn(GameEventType.TURN_START, self._types())
+        # After banking, should auto-advance to next turn (PRE_ROLL state)
+        self.assertEqual(self.game.state_manager.get_state().name, 'PRE_ROLL', 'Should auto-advance to PRE_ROLL after banking')
+        # TURN_START should have been emitted for the new turn
+        turn_starts = [t for t in self._types() if t == GameEventType.TURN_START]
+        self.assertGreaterEqual(len(turn_starts), 1, 'Should have at least one TURN_START event after auto-advance')
 
 if __name__ == '__main__':
     unittest.main()

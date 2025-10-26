@@ -27,6 +27,7 @@ class PlayerHUDSprite(BaseSprite):
         hud_lines = [
             f"Turns: {g.level_state.turns_left}",
             f"Gold: {p.gold}",
+            f"Income: {p.temple_income}",
         ]
         effs = list(getattr(p, 'active_effects', []))
         if effs:

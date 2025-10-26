@@ -18,7 +18,7 @@ class Level:
     name: str
     max_turns: int
     description: str = ""
-    goals: Tuple[Tuple[str, int, bool, int, str, str], ...] = ()  # sequence of (goal_name, target, is_disaster, reward_gold, flavor_text, category)
+    goals: Tuple[Tuple[str, int, bool, int, int, str, str, str], ...] = ()  # sequence of (goal_name, target, is_disaster, reward_gold, reward_income, flavor_text, category, persona)
 
     @staticmethod
     def single(name: str, target_goal: int, max_turns: int, description: str = "", reward_gold: int = 50, rng: 'RandomSource | random.Random | None' = None):
@@ -38,23 +38,39 @@ class Level:
         disasters = load_disasters()
         if disasters:
             disaster = rng.choice(disasters)
-            goals_list.append((disaster['title'], target_goal, True, reward_gold, disaster.get('text', ''), disaster.get('category', '')))
+            # Disasters have no reward - they just advance to the next level
+            goals_list.append((disaster['title'], target_goal, True, 0, 0, disaster.get('text', ''), disaster.get('category', ''), ''))
         else:
             # Fallback to original behavior
-            goals_list.append((name, target_goal, True, reward_gold, description, ''))
+            goals_list.append((name, target_goal, True, 0, 0, description, '', ''))
         
         # Add 2 petitions for the first level
         petitions = load_petitions()
         if petitions:
-            # Select 2 random petitions
-            selected = rng.sample(petitions, min(2, len(petitions)))
-            for i, petition in enumerate(selected):
-                opt_name = petition['title']
-                opt_target = 150 + 25 * i  # Progressive targets
-                opt_reward = 25 + 5 * i
-                opt_flavor = petition.get('text', '')  # Use 'text' field from petitions2.json
-                opt_category = petition.get('category', '')
-                goals_list.append((opt_name, opt_target, False, opt_reward, opt_flavor, opt_category))
+            # Filter to only petitions with rewards (merchant or nobleman)
+            petitions_with_rewards = [p for p in petitions if p.get('persona') in ('merchant', 'nobleman')]
+            
+            if petitions_with_rewards:
+                # Select 2 random petitions from those with rewards
+                selected = rng.sample(petitions_with_rewards, min(2, len(petitions_with_rewards)))
+                for i, petition in enumerate(selected):
+                    opt_name = petition['title']
+                    opt_target = 150 + 25 * i  # Progressive targets
+                    opt_flavor = petition.get('text', '')
+                    opt_category = petition.get('category', '')
+                    opt_persona = petition.get('persona', '')
+                    
+                    # Set rewards based on persona
+                    opt_reward_gold = 0
+                    opt_reward_income = 0
+                    if opt_persona == 'merchant':
+                        # Merchants give gold (scaled with level progression)
+                        opt_reward_gold = 25 + 5 * i
+                    elif opt_persona == 'nobleman':
+                        # Noblemen increase income by 5 (not scaled)
+                        opt_reward_income = 5
+                    
+                    goals_list.append((opt_name, opt_target, False, opt_reward_gold, opt_reward_income, opt_flavor, opt_category, opt_persona))
         
         return Level(name=name, max_turns=max_turns, description=description,
                      goals=tuple(goals_list))
@@ -86,16 +102,16 @@ class Level:
         if disasters:
             # Find the old disaster's target to calculate the new one
             old_disaster_target = 0
-            for _, target, is_disaster, _, _, _ in prev.goals:
+            for _, target, is_disaster, _, _, _, _, _ in prev.goals:
                 if is_disaster:
                     old_disaster_target = target
                     break
             
             new_target = old_disaster_target + base_increase + 50 * next_index
-            new_reward = 50 + 10 * next_index
             
             disaster = rng.choice(disasters)
-            new_goals.append((disaster['title'], new_target, True, new_reward, disaster.get('text', ''), disaster.get('category', '')))
+            # Disasters have no reward - they just advance to the next level
+            new_goals.append((disaster['title'], new_target, True, 0, 0, disaster.get('text', ''), disaster.get('category', ''), ''))
         
         # Calculate how many petitions this level should have
         # Formula: min(2 + ((next_index - 1) // 2), 4)
@@ -104,15 +120,30 @@ class Level:
         # Generate new petitions
         petitions = load_petitions()
         if petitions:
-            # Select random petitions (avoiding duplicates)
-            selected = rng.sample(petitions, min(petition_count, len(petitions)))
-            for i, petition in enumerate(selected):
-                opt_name = petition['title']
-                opt_target = 150 + 25 * next_index + 10 * i
-                opt_reward = 25 + 5 * next_index + 2 * i
-                opt_flavor = petition.get('text', '')  # Use 'text' field from petitions2.json
-                opt_category = petition.get('category', '')
-                new_goals.append((opt_name, opt_target, False, opt_reward, opt_flavor, opt_category))
+            # Filter to only petitions with rewards (merchant or nobleman)
+            petitions_with_rewards = [p for p in petitions if p.get('persona') in ('merchant', 'nobleman')]
+            
+            if petitions_with_rewards:
+                # Select random petitions (avoiding duplicates)
+                selected = rng.sample(petitions_with_rewards, min(petition_count, len(petitions_with_rewards)))
+                for i, petition in enumerate(selected):
+                    opt_name = petition['title']
+                    opt_target = 150 + 25 * next_index + 10 * i
+                    opt_flavor = petition.get('text', '')
+                    opt_category = petition.get('category', '')
+                    opt_persona = petition.get('persona', '')
+                    
+                    # Set rewards based on persona
+                    opt_reward_gold = 0
+                    opt_reward_income = 0
+                    if opt_persona == 'merchant':
+                        # Merchants give gold (scaled with level progression)
+                        opt_reward_gold = 25 + 5 * next_index + 2 * i
+                    elif opt_persona == 'nobleman':
+                        # Noblemen increase income by 5 (not scaled)
+                        opt_reward_income = 5
+                    
+                    new_goals.append((opt_name, opt_target, False, opt_reward_gold, opt_reward_income, opt_flavor, opt_category, opt_persona))
         
         # Add extra turns every 3 levels
         extra_turns = 1 if (next_index % 3 == 0) else 0
@@ -135,12 +166,14 @@ class LevelState:
     failed: bool = False
 
     def __post_init__(self):
-        self.goals = [Goal(target, name=_n, is_disaster=_m, reward_gold=_rg, flavor=_f, category=_c) for (_n, target, _m, _rg, _f, _c) in self.level.goals]
-        self.disaster_indices = [i for i, (_n, _t, m, _rg, _f, _c) in enumerate(self.level.goals) if m]
+        self.goals = [Goal(target, name=_n, is_disaster=_m, reward_gold=_rg, reward_income=_ri, flavor=_f, category=_c, persona=_p) 
+                      for (_n, target, _m, _rg, _ri, _f, _c, _p) in self.level.goals]
+        self.disaster_indices = [i for i, (_n, _t, m, _rg, _ri, _f, _c, _p) in enumerate(self.level.goals) if m]
         self.turns_left = self.level.max_turns
 
     def reset(self):
-        self.goals = [Goal(target, name=_n, is_disaster=_m, reward_gold=_rg, flavor=_f, category=_c) for (_n, target, _m, _rg, _f, _c) in self.level.goals]
+        self.goals = [Goal(target, name=_n, is_disaster=_m, reward_gold=_rg, reward_income=_ri, flavor=_f, category=_c, persona=_p) 
+                      for (_n, target, _m, _rg, _ri, _f, _c, _p) in self.level.goals]
         self.turns_left = self.level.max_turns
         self.completed = False
         self.failed = False

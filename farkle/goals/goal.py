@@ -7,7 +7,7 @@ if TYPE_CHECKING:
     from farkle.game import Game
 
 class Goal(GameObject):
-    def __init__(self, target_score: int, name: str = "", is_disaster: bool = True, reward_gold: int = 0, flavor: str = "", category: str = ""):
+    def __init__(self, target_score: int, name: str = "", is_disaster: bool = True, reward_gold: int = 0, flavor: str = "", category: str = "", persona: str = "", reward_income: int = 0):
         super().__init__(name or "Goal")
         self.target_score = target_score
         self.remaining = target_score
@@ -15,8 +15,10 @@ class Goal(GameObject):
         self.is_disaster = is_disaster
         self.flavor = flavor
         self.category = category  # Category for color coding: nature, warfare, spirit, commerce
-        # Reward system (future-proof for other reward types). For now only gold coins.
+        self.persona = persona  # Persona for reward type: farmer, merchant, nobleman, etc.
+        # Reward system (supports both gold and income rewards)
         self.reward_gold = reward_gold
+        self.reward_income = reward_income
         self.reward_claimed = False
         self.game: Optional["Game"] = None  # back reference assigned when subscribed
         # Pending raw points accumulated this turn (before multiplier & banking)
@@ -34,12 +36,16 @@ class Goal(GameObject):
     def is_fulfilled(self) -> bool:
         return self.remaining == 0
 
-    def claim_reward(self) -> int:
-        """Return gold reward if goal is fulfilled and not yet claimed; mark claimed."""
-        if self.is_fulfilled() and not self.reward_claimed and self.reward_gold > 0:
+    def claim_reward(self) -> tuple[int, int]:
+        """Return (gold_reward, income_reward) if goal is fulfilled and not yet claimed; mark claimed.
+        
+        Returns:
+            tuple[int, int]: (gold_amount, income_amount)
+        """
+        if self.is_fulfilled() and not self.reward_claimed and (self.reward_gold > 0 or self.reward_income > 0):
             self.reward_claimed = True
-            return self.reward_gold
-        return 0
+            return (self.reward_gold, self.reward_income)
+        return (0, 0)
 
     def get_remaining(self) -> int:
         return self.remaining

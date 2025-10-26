@@ -206,6 +206,17 @@ class Game:
             self.gods.set_worshipped([God("Zeus"), God("Athena"), God("Hermes")])
         except Exception:
             pass
+        # Emit LEVEL_GENERATED for the initial level (so temple income is awarded on first level)
+        try:
+            self.event_listener.publish(GameEvent(GameEventType.LEVEL_GENERATED, payload={
+                "prev_level": None,
+                "new_level": self.level.name,
+                "level_index": self.level_index,
+                "goals": [gl.name for gl in self.level_state.goals],
+                "max_turns": self.level.max_turns
+            }))
+        except Exception:
+            pass
         # Emit initial TURN_START for the very first turn
         try:
             self.begin_turn(initial=True)
@@ -843,7 +854,7 @@ class Game:
                 # Now that scoring application cycle finished, clear per-turn tallies
                 self.turn_score = 0
                 self.current_roll_score = 0
-                # Auto-begin next turn if level not completed and turns remain (prevents BANKED stall)
+                # Auto-begin next turn if level not completed and turns remain
                 if (not self.level_state.completed
                     and self.level_state.turns_left > 0
                     and self.state_manager.get_state() == self.state_manager.state.BANKED):

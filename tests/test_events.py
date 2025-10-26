@@ -24,12 +24,24 @@ class EventTests(unittest.TestCase):
 
     def setUp(self):
         self.game = Game(self.screen, self.font, self.clock)
-        # Make first goal easy
-        self.game.level_state.goals[0].remaining = 100
+        # Find a petition goal (not disaster) since disasters have no rewards
+        petition_goals = [g for g in self.game.level_state.goals if not g.is_disaster and g.reward_gold > 0]
+        if petition_goals:
+            # Make the first petition goal easy and set as active
+            petition_goals[0].remaining = 100
+            self.game.active_goal_index = self.game.level_state.goals.index(petition_goals[0])
+        else:
+            # Fallback: make first goal easy
+            self.game.level_state.goals[0].remaining = 100
         self.collector = Collector()
         self.game.event_listener.subscribe(self.collector.on_event)
 
     def test_goal_fulfilled_and_gold_events(self):
+        # Verify we have a petition goal with rewards
+        petition_goals = [g for g in self.game.level_state.goals if not g.is_disaster and g.reward_gold > 0]
+        if not petition_goals:
+            self.skipTest("No petition goals with rewards available")
+        
         # Simulate locking a single scoring die (1) worth 100
         die = self.game.dice[0]
         die.value = 1

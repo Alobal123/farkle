@@ -23,12 +23,35 @@ class BankingAndHotDiceTests(unittest.TestCase):
         self.game = Game(self.screen, self.font, self.clock)
 
     def make_goal_easy(self):
-        first_goal = self.game.level_state.goals[0]
-        first_goal.remaining = 100
+        # Use a petition goal (not disaster) since disasters have no rewards
+        petition_goals = [g for g in self.game.level_state.goals if not g.is_disaster]
+        if petition_goals:
+            petition_goals[0].remaining = 100
+            return petition_goals[0]
+        else:
+            # Fallback to first goal if no petitions exist
+            first_goal = self.game.level_state.goals[0]
+            first_goal.remaining = 100
+            return first_goal
 
     def test_bank_awards_gold(self):
         self.game.state_manager.transition_to_rolling()
-        self.make_goal_easy()
+        petition = self.make_goal_easy()
+        
+        # Skip test if the easy goal doesn't have a gold reward
+        if petition.reward_gold == 0:
+            self.skipTest("Easy goal has no gold reward")
+        
+        # Set active goal to the petition
+        self.game.active_goal_index = self.game.level_state.goals.index(petition)
+        
+        # Set up event collector
+        from farkle.core.game_event import GameEvent, GameEventType
+        events = []
+        def collect(e):
+            events.append(e.type)
+        self.game.event_listener.subscribe(collect)
+        
         die = self.game.dice[0]
         die.value = 1
         die.selected = True
@@ -36,8 +59,15 @@ class BankingAndHotDiceTests(unittest.TestCase):
         self.assertTrue(self.game.selection_is_single_combo())
         self.assertTrue(self.game._auto_lock_selection("Locked"))
         prev_gold = self.game.player.gold
+        expected_reward = petition.reward_gold
         handle_bank(self.game)
-        self.assertGreater(self.game.player.gold, prev_gold, "Gold should increase on fulfilled goal banking")
+        
+        # Check if GOAL_FULFILLED was published
+        if GameEventType.GOAL_FULFILLED not in events:
+            self.fail(f"GOAL_FULFILLED not in events: {events}. Goal remaining: {petition.remaining}, fulfilled: {petition.is_fulfilled()}")
+        
+        self.assertEqual(self.game.player.gold, prev_gold + expected_reward, 
+                        f"Gold should increase by {expected_reward} (petition reward). Was {prev_gold}, now {self.game.player.gold}")
 
     def test_hot_dice_reset(self):
         self.game.state_manager.transition_to_rolling()
