@@ -75,11 +75,14 @@ class GameRenderer:
         if g._handle_die_click(mx, my, button=1):
             consumed = True
         # Goal selection via each goal's cached rect from last draw
+        # Skip fulfilled goals - they can't receive more points
         for idx, goal in enumerate(g.level_state.goals):
             rect = getattr(goal, '_last_rect', None)
             if rect and rect.collidepoint(mx, my):
-                g.active_goal_index = idx
-                consumed = True
+                # Only allow selecting non-fulfilled goals
+                if not goal.is_fulfilled():
+                    g.active_goal_index = idx
+                    consumed = True
                 break
         return consumed
 

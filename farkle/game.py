@@ -816,6 +816,23 @@ class Game:
         et = event.type
         # Detect all disasters fulfilled immediately on GOAL_FULFILLED
         if et == GameEventType.GOAL_FULFILLED:
+            # Auto-switch to next unfulfilled goal if current goal was just fulfilled
+            fulfilled_goal = event.get("goal")
+            if fulfilled_goal:
+                try:
+                    current_idx = self.active_goal_index
+                    if current_idx < len(self.level_state.goals) and self.level_state.goals[current_idx] == fulfilled_goal:
+                        # Find next unfulfilled goal
+                        next_unfulfilled_idx = None
+                        for idx, g in enumerate(self.level_state.goals):
+                            if not g.is_fulfilled():
+                                next_unfulfilled_idx = idx
+                                break
+                        if next_unfulfilled_idx is not None:
+                            self.active_goal_index = next_unfulfilled_idx
+                except Exception:
+                    pass
+            
             if self.level_state._all_disasters_fulfilled() and not self.level_state.completed:
                 self.level_state.completed = True
                 # After completion we wait for TURN_END if not already ended; if turn already ended (banked) we advance immediately.
