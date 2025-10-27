@@ -73,10 +73,27 @@ farkle/
   level/       # Level generation, advancement orchestration
   players/     # Player entity (gold, HUD only)
   ui/          # Sprites, tooltips, input controller, renderer
+    screens/   # MenuScreen, GameScreen, App controller
     sprites/   # DieSprite, GoalSprite, overlays, etc.
   settings.py  # Layout constants, colors, timing
   game.py      # Composition root - wires all subsystems
 ```
+
+### Screen Architecture
+The game uses a screen-based architecture managed by `App` (`farkle/ui/screens/app.py`):
+
+- **MenuScreen** (`menu_screen.py`): Main menu with "New Game" button. Displays title and subtitle, handles hover effects.
+- **GameScreen** (`game_screen.py`): Gameplay wrapper delegating to `Game` object. Handles tooltips, hotkeys, and frame progression.
+- **App**: Top-level controller managing screen transitions. Starts at `menu`, transitions to `game` when New Game clicked.
+
+**Screen Protocol** (`base_screen.py`):
+- `handle_event(event)`: Process pygame events
+- `update(dt)`: Frame update logic
+- `draw(surface)`: Render to surface
+- `is_done()`: Signal transition readiness
+- `next_screen()`: Return next screen name (e.g., `'game'`)
+
+**SimpleScreen**: Concrete base class providing `finish(next_screen)` helper for transitions.
 
 ## Developer Workflows
 
@@ -157,6 +174,32 @@ game = Game(screen, font, clock, rng_seed=123)  # Reproducible rolls
 ```
 All dice rolls, relic shuffling use `game.rng`. Pass `None` for non-deterministic gameplay.
 
+### Game Initialization Pattern
+Game object creation is separated from initialization for proper dependency management:
+
+**In production code (App)**:
+```python
+# App creates Game lazily when transitioning to game screen
+app = App(screen, font, clock)  # No game object yet
+# Game auto-initializes when first needed (auto_initialize=True by default)
+```
+
+**In tests (backward compatible)**:
+```python
+# Tests create and auto-initialize in one step
+game = Game(screen, font, clock, rng_seed=1)  # Auto-initialized
+```
+
+**Manual initialization (advanced)**:
+```python
+# Defer initialization for custom setup
+game = Game(screen, font, clock, auto_initialize=False)
+# Custom setup here...
+game.initialize()  # Explicit initialization
+```
+
+This pattern eliminates "if game is None" checks throughout the codebase by ensuring the Game object is fully initialized before any subsystems (sprites, managers) try to access it.
+
 ## Critical Patterns to Follow
 
 ### ✅ DO
@@ -165,6 +208,7 @@ All dice rolls, relic shuffling use `game.rng`. Pass `None` for non-deterministi
 - Call `scoring_manager.preview()` for adjusted scoring projections
 - Test event ordering with explicit assertions
 - Leverage sprite visibility predicates (`visible_states`, `visible_predicate`)
+- Create App with pygame resources only: `App(screen, font, clock)`
 
 ### ❌ DON'T
 - Mutate `player.gold` directly - emit `GOLD_GAINED`/`GOLD_SPENT` events
@@ -172,6 +216,7 @@ All dice rolls, relic shuffling use `game.rng`. Pass `None` for non-deterministi
 - Use global multipliers - prefer selective per-rule modifiers
 - Manually manage z-order - use sprite `Layer` enum
 - Ignore test seeding - always set `rng_seed` in tests
+- Create Game objects in demo.py or UI code - let App handle initialization
 
 ## Common Gotchas
 

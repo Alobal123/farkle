@@ -118,11 +118,38 @@ def handle_next_turn(game) -> bool:
                     game.event_listener.publish(GameEvent(GameEventType.TURN_END, payload={"reason": "farkle_forfeit"}))
                 except Exception:
                     pass
+        
+        # Check if this is the last turn before consuming it
+        will_run_out = (game.level_state.turns_left == 1)
+        
         # reset_turn performs dice recreation, consumes a turn, and calls begin_turn (which sets PRE_ROLL)
         game.reset_turn()
         try:
             game.event_listener.publish(GameEvent(GameEventType.TURN_START, payload={"turns_left": game.level_state.turns_left}))
         except Exception:
             pass
+        
+        # After consuming the turn, check for failure
+        if (will_run_out 
+            and not game.level_state.completed 
+            and not game.level_state._all_disasters_fulfilled()):
+            if not game.level_state.failed:
+                game.level_state.failed = True
+            # Emit failure event
+            unfinished = [game.level.goals[i][0] for i in game.level_state.disaster_indices if not game.level_state.goals[i].is_fulfilled()]
+            try:
+                game.event_listener.publish(GameEvent(GameEventType.LEVEL_FAILED, payload={
+                    "level_name": game.level.name,
+                    "level_index": game.level_index,
+                    "unfinished": unfinished
+                }))
+            except Exception:
+                pass
+            # Set game state to GAME_OVER
+            try:
+                game.state_manager.set_state(game.state_manager.state.GAME_OVER)
+            except Exception:
+                pass
+        
         return True
     return False

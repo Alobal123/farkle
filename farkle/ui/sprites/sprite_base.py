@@ -45,7 +45,7 @@ class BaseSprite(pygame.sprite.Sprite):
             game = getattr(self.logical, 'game', None)
         except Exception:
             game = None
-        if game and (self.visible_states or self.visible_predicate):
+        if self.visible_states or self.visible_predicate:
             try:
                 st = game.state_manager.get_state()
                 allowed = True

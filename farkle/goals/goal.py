@@ -53,8 +53,6 @@ class Goal(GameObject):
 
     # Projection helper for UI/logic: ask scoring manager directly.
     def projected_pending(self) -> int:
-        if not self.game:
-            return 0
         try:
             sm = getattr(self.game, 'scoring_manager', None)
             if sm:
@@ -141,8 +139,6 @@ class Goal(GameObject):
     - BANK applies (multiplied) pending and emits progress/fulfillment.
     - FARKLE discards pending.
         """
-        if not self.game:
-            return
         et = event.type
         if et == GameEventType.LOCK:
             idx = event.get("goal_index")
@@ -234,8 +230,6 @@ class Goal(GameObject):
         # Other events (progress, fulfilled) currently ignored for animation hooks.
 
     def draw(self, surface):  # type: ignore[override]
-        if not self.game:
-            return
         # Renderer previously handled layout; we approximate with same logic values.
         g = self.game
         from farkle.ui.settings import WIDTH, GOAL_PADDING, GOAL_LINE_SPACING, GOAL_WIDTH

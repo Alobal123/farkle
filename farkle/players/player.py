@@ -30,19 +30,17 @@ class Player(GameObject):
             return
         effect.player = self
         self.active_effects.append(effect)
-        if self.game:
-            # Activate will subscribe on_event automatically since effect.active was False
-            effect.activate(self.game)
+        # Activate will subscribe on_event automatically since effect.active was False
+        effect.activate(self.game)
 
     def remove_effect(self, effect) -> None:
         """Remove a temporary effect from this player."""
         if effect in self.active_effects:
             self.active_effects.remove(effect)
-            if self.game:
-                try:
-                    effect.deactivate(self.game)
-                except Exception:
-                    pass
+            try:
+                effect.deactivate(self.game)
+            except Exception:
+                pass
 
 
     # Player might react to events later (stats tracking, etc.)
@@ -51,40 +49,34 @@ class Player(GameObject):
             # Award temple income at the start of each level
             if self.temple_income > 0:
                 self.add_gold(self.temple_income)
-                if self.game:
-                    from farkle.core.game_event import GameEvent as GE, GameEventType as GET
-                    self.game.event_listener.publish(GE(GET.GOLD_GAINED, payload={
-                        "amount": self.temple_income, 
-                        "source": "temple_income"
-                    }))
+                from farkle.core.game_event import GameEvent as GE, GameEventType as GET
+                self.game.event_listener.publish(GE(GET.GOLD_GAINED, payload={
+                    "amount": self.temple_income, 
+                    "source": "temple_income"
+                }))
         elif event.type == GameEventType.GOAL_FULFILLED:
             goal = event.get("goal")
             if goal and hasattr(goal, 'claim_reward'):
                 gold_gained, income_gained, blessing_type = goal.claim_reward()
                 if gold_gained > 0:
                     self.add_gold(gold_gained)
-                    if self.game:
-                        from farkle.core.game_event import GameEvent as GE, GameEventType as GET
-                        self.game.event_listener.publish(GE(GET.GOLD_GAINED, payload={"amount": gold_gained, "goal_name": goal.name}))  # type: ignore[attr-defined]
+                    from farkle.core.game_event import GameEvent as GE, GameEventType as GET
+                    self.game.event_listener.publish(GE(GET.GOLD_GAINED, payload={"amount": gold_gained, "goal_name": goal.name}))  # type: ignore[attr-defined]
                 if income_gained > 0:
                     self.temple_income += income_gained
                     # Publish INCOME_GAINED event for UI feedback
-                    if self.game:
-                        from farkle.core.game_event import GameEvent as GE, GameEventType as GET
-                        self.game.event_listener.publish(GE(GET.INCOME_GAINED, payload={
-                            "amount": income_gained, 
-                            "goal_name": goal.name,  # type: ignore[attr-defined]
-                            "new_total": self.temple_income
-                        }))
+                    from farkle.core.game_event import GameEvent as GE, GameEventType as GET
+                    self.game.event_listener.publish(GE(GET.INCOME_GAINED, payload={
+                        "amount": income_gained, 
+                        "goal_name": goal.name,  # type: ignore[attr-defined]
+                        "new_total": self.temple_income
+                    }))
                 if blessing_type:
                     # Apply blessing based on type
                     self._apply_blessing(blessing_type)
 
     def _apply_blessing(self, blessing_type: str) -> None:
         """Apply a blessing to the player based on type."""
-        if not self.game:
-            return
-        
         try:
             if blessing_type == "double_score":
                 from farkle.blessings import DoubleScoreBlessing
@@ -98,10 +90,6 @@ class Player(GameObject):
             pass
 
     def draw(self, surface):  # type: ignore[override]
-        if not self.game:
-            return
-        g = self.game
-        hud_padding = 10
         # Player no longer directly renders HUD; PlayerHUDSprite handles display.
         pass
 

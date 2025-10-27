@@ -99,8 +99,7 @@ class God(GameObject):
             # Publish a message on level-up
             try:
                 from farkle.core.game_event import GameEvent as GE, GameEventType as GET
-                if getattr(self, 'game', None):
-                    self.game.event_listener.publish(GE(GET.MESSAGE, payload={"text": f"{self.name} reached Lv{self.level}"}))  # type: ignore[attr-defined]
+                self.game.event_listener.publish(GE(GET.MESSAGE, payload={"text": f"{self.name} reached Lv{self.level}"}))  # type: ignore[attr-defined]
             except Exception:
                 pass
 
