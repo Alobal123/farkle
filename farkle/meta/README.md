@@ -1,7 +1,7 @@
-# Meta Progression System - Statistics Tracker
+# Meta Progression System
 
 ## Overview
-The statistics tracker is a foundational component for implementing meta progression features like achievements, upgrades, and persistent player progress across games.
+The meta progression system provides persistent statistics tracking across game sessions, forming the foundation for achievements, upgrades, and long-term player progression.
 
 ## Architecture
 
@@ -9,12 +9,22 @@ The statistics tracker is a foundational component for implementing meta progres
 
 **StatisticsTracker** (`farkle/meta/statistics_tracker.py`)
 - Listens to all game events via the event system
-- Records relevant statistics in real-time
+- Records relevant statistics in real-time during a single game session
 - Provides summary export for display and persistence
 
 **GameStatistics** (dataclass in `statistics_tracker.py`)
 - Container for all tracked statistics from a single game session
 - Separates statistics into categories: gold, farkles, scoring, gameplay
+
+**PersistenceManager** (`farkle/meta/persistence.py`)
+- Manages loading and saving statistics to disk (JSON format)
+- Merges session statistics into cumulative lifetime totals
+- Tracks records (highest scores, furthest level, etc.)
+
+**PersistentStats** (dataclass in `persistence.py`)
+- Container for cumulative statistics across all game sessions
+- Includes lifetime totals, game counts, and personal records
+- Supports backward-compatible deserialization for save file migrations
 
 ### Integration Points
 
@@ -23,39 +33,78 @@ The statistics tracker is a foundational component for implementing meta progres
    - Automatically subscribes to all game events
    - Available as `game.statistics_tracker`
 
-2. **Game Over Screen** (`farkle/ui/screens/game_over_screen.py`)
+2. **App Initialization** (`farkle/ui/screens/app.py`)
+   - PersistenceManager created on app startup
+   - Loads existing statistics from `~/.farkle/stats.json`
+   - Available as `app.persistence`
+
+3. **Game Over Flow** (`farkle/ui/screens/app.py`)
+   - On LEVEL_FAILED event, session stats are merged into persistent storage
+   - `persistence.merge_and_save()` updates lifetime totals and saves to disk
+   - Statistics passed to GameOverScreen for display
+
+4. **Game Over Screen** (`farkle/ui/screens/game_over_screen.py`)
    - Displays statistics summary at end of game
    - Shows: gold gained, farkles, total score, highest score, turns played, etc.
 
-3. **App Controller** (`farkle/ui/screens/app.py`)
-   - Passes statistics to GameOverScreen on level failure
-   - Retrieves summary via `game.statistics_tracker.export_summary()`
-
+## Currently Tracked Statistics
 ## Currently Tracked Statistics
 
-### Gold
+### Session Statistics (StatisticsTracker)
+Tracked during a single game session:
+
+#### Gold
 - `total_gold_gained`: Cumulative gold earned
 - `gold_events`: List of individual gold gain events with source tracking
 
-### Farkles
+#### Farkles
 - `total_farkles`: Number of farkle events
 - `farkle_events`: List of farkle occurrences with turn context
 
-### Scoring
+#### Scoring
 - `total_score`: Cumulative score from all SCORE_APPLIED events
 - `highest_single_score`: Largest single score application
 - `score_events`: Detailed list of score applications with rule keys
 
-### Gameplay
+#### Gameplay
 - `turns_played`: Number of completed turns (tracks TURN_END events)
 - `dice_rolled`: Individual dice roll events
 - `relics_purchased`: Number of relics acquired
 - `goals_completed`: Goals fulfilled
 - `levels_completed`: Levels successfully finished
 
+### Persistent Statistics (PersistentStats)
+Cumulative across all game sessions:
+
+#### Game Counts
+- `total_games_played`: Total number of games started
+- `total_games_won`: Games completed successfully
+- `total_games_lost`: Games that ended in failure
+
+#### Lifetime Totals
+- `lifetime_gold_gained`: Total gold earned across all games
+- `lifetime_farkles`: Total farkle events
+- `lifetime_score`: Cumulative score from all sessions
+- `lifetime_turns_played`: Total turns across all games
+- `lifetime_dice_rolled`: Total individual dice rolled
+- `lifetime_relics_purchased`: Total relics acquired
+- `lifetime_goals_completed`: Total goals fulfilled
+- `lifetime_levels_completed`: Total levels finished
+
+#### Records
+- `highest_single_score`: Best single scoring event ever
+- `highest_game_score`: Best total score in a single game
+- `most_gold_in_game`: Most gold earned in one session
+- `most_turns_survived`: Longest game by turn count
+- `furthest_level_reached`: Highest level/day reached
+
+#### Meta Progression (Future Use)
+- `total_meta_currency`: Currency for permanent upgrades
+- `unlocked_achievements`: List of achievement IDs earned
+
 ## Usage
 
-### Accessing Statistics
+### Session Statistics
 ```python
 # Get current statistics object
 stats = game.statistics_tracker.get_statistics()
@@ -64,13 +113,40 @@ print(f"Farkles: {stats.total_farkles}")
 
 # Get summary dictionary for display/serialization
 summary = game.statistics_tracker.export_summary()
-```
 
-### Resetting Statistics
-```python
 # Reset for new game session
 game.statistics_tracker.reset()
 ```
+
+### Persistent Statistics
+```python
+# Access persistence manager (created by App)
+persistence = app.persistence
+
+# Get lifetime statistics
+lifetime = persistence.get_stats()
+print(f"Total games played: {lifetime.total_games_played}")
+print(f"Win rate: {lifetime.total_games_won / max(1, lifetime.total_games_played):.1%}")
+print(f"Highest score ever: {lifetime.highest_game_score}")
+
+# Manually merge a session (done automatically by App on game over)
+session_stats = game.statistics_tracker.export_summary()
+persistence.merge_and_save(
+    session_stats=session_stats,
+    success=False,  # or True for victory
+    level_index=3   # current level/day
+)
+
+# Reset all persistent data (use with caution!)
+persistence.reset()
+```
+
+### Save File Location
+Statistics are saved to: `~/.farkle/stats.json`
+- Windows: `C:\Users\<username>\.farkle\stats.json`
+- Linux/Mac: `/home/<username>/.farkle/stats.json`
+
+The file is automatically created on first game over and updated after each subsequent game.
 
 ### Event Tracking
 The tracker automatically records these event types:
@@ -89,20 +165,22 @@ The tracker automatically records these event types:
 1. **Achievements System**
    - Use statistics to unlock achievements
    - Examples: "Roll 100 dice", "Score 1000 points in one turn", "Avoid farkle for 10 turns"
+   - Display unlocked achievements on menu or game over screen
 
-2. **Persistent Progression**
-   - Save statistics across game sessions
-   - Track lifetime statistics (JSON/SQLite)
-   - Career totals and records
-
-3. **Unlocks & Upgrades**
+2. **Unlocks & Upgrades**
    - Spend cumulative gold on permanent upgrades
-   - Unlock new relics, gods, or abilities
-   - Meta-game currency earned from achievements
+   - Unlock new relics, gods, or abilities based on achievements
+   - Meta-game currency earned from achievements and milestone rewards
 
-4. **Leaderboards**
-   - Track high scores and best runs
-   - Compare statistics with previous sessions
+3. **Leaderboards & Best Runs**
+   - Track personal best runs (already have highest scores)
+   - Display "best run" summary on menu screen
+   - Compare current session to lifetime records during gameplay
+
+4. **Victory Screen**
+   - Currently only failure screen exists
+   - Victory screen should also merge and save statistics
+   - Display achievement progress and unlocks earned in winning run
 
 ### Adding New Statistics
 To track additional metrics:

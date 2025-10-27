@@ -4,8 +4,10 @@ from .base_screen import Screen
 from .game_screen import GameScreen
 from .menu_screen import MenuScreen
 from .game_over_screen import GameOverScreen
+from .statistics_screen import StatisticsScreen
 from farkle.game import Game
 from farkle.core.game_event import GameEvent, GameEventType
+from farkle.meta.persistence import PersistenceManager
 
 class App:
     """High-level application controller managing screens.
@@ -28,6 +30,10 @@ class App:
         self.game: Optional[Game] = None
         self.current_name = 'menu'  # Start at menu screen
         self.screens: Dict[str, Screen] = {}
+        
+        # Initialize persistence manager for cross-session statistics
+        self.persistence = PersistenceManager()
+        
         self._init_screens()
 
     def _init_screens(self):
@@ -48,6 +54,13 @@ class App:
             statistics = {}
             if self.game and hasattr(self.game, 'statistics_tracker'):
                 statistics = self.game.statistics_tracker.export_summary()
+            
+            # Merge session statistics into persistent storage
+            self.persistence.merge_and_save(
+                session_stats=statistics,
+                success=False,  # LEVEL_FAILED means game lost
+                level_index=level_index
+            )
             
             self.screens['game_over'] = GameOverScreen(
                 self.screen, 
@@ -74,6 +87,12 @@ class App:
         """Create game screen if not already created."""
         if 'game' not in self.screens and self.game:
             self.screens['game'] = GameScreen(self.game)
+    
+    def _ensure_statistics_screen(self):
+        """Create or refresh statistics screen with latest data."""
+        # Always recreate to show fresh stats
+        stats = self.persistence.get_stats()
+        self.screens['statistics'] = StatisticsScreen(self.screen, self.font, stats)
 
     def run(self):
         clock = self.clock
@@ -85,6 +104,10 @@ class App:
             if self.current_name == 'game':
                 self._ensure_game_initialized()
                 self._ensure_game_screen()
+            
+            # Ensure statistics screen is created/refreshed when transitioning to it
+            if self.current_name == 'statistics':
+                self._ensure_statistics_screen()
             
             active = self.screens[self.current_name]
             for event in pygame.event.get():
@@ -103,7 +126,11 @@ class App:
                     self.screens.pop('game', None)
                     self.screens.pop('game_over', None)
                 
-                if next_screen and (next_screen in self.screens or next_screen in ('game', 'menu')):
+                # Handle statistics screen transitions
+                if next_screen == 'statistics':
+                    self._ensure_statistics_screen()
+                
+                if next_screen and (next_screen in self.screens or next_screen in ('game', 'menu', 'statistics')):
                     self.current_name = next_screen
                     # Reset the done state for future transitions
                     from .base_screen import SimpleScreen

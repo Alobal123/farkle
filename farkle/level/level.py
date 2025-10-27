@@ -103,6 +103,7 @@ class Level:
         
         base_increase = 400
         new_goals = []
+        level_name = f"Rite {next_index}"  # Default fallback
         
         # Select a new disaster
         disasters = load_disasters()
@@ -117,6 +118,8 @@ class Level:
             new_target = old_disaster_target + base_increase + 50 * next_index
             
             disaster = rng.choice(disasters)
+            # Use the disaster title as the level name
+            level_name = disaster['title']
             # Disasters have no reward - they just advance to the next level
             new_goals.append((disaster['title'], new_target, True, 0, 0, "", disaster.get('text', ''), disaster.get('category', ''), ''))
         
@@ -161,7 +164,7 @@ class Level:
         max_turns = prev.max_turns + extra_turns
         
         return Level(
-            name=f"Rite {next_index}",
+            name=level_name,
             max_turns=max_turns,
             description="An intensified supplication to sterner deities.",
             goals=tuple(new_goals)

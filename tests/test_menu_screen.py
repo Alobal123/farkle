@@ -20,20 +20,28 @@ class TestMenuScreen(unittest.TestCase):
         """Menu should initialize without errors."""
         self.assertFalse(self.menu.is_done())
         self.assertIsNone(self.menu.next_screen())
-        self.assertFalse(self.menu.hovering)
+        self.assertFalse(self.menu.hovering_new_game)
+        self.assertFalse(self.menu.hovering_stats)
 
     def test_menu_hover_detection(self):
         """Menu should detect hover over New Game button."""
-        # Move mouse over button
+        # Move mouse over New Game button
         center_x, center_y = self.menu.new_game_button.center
         event = pygame.event.Event(pygame.MOUSEMOTION, {'pos': (center_x, center_y)})
         self.menu.handle_event(event)
-        self.assertTrue(self.menu.hovering)
+        self.assertTrue(self.menu.hovering_new_game)
 
         # Move mouse away
         event = pygame.event.Event(pygame.MOUSEMOTION, {'pos': (0, 0)})
         self.menu.handle_event(event)
-        self.assertFalse(self.menu.hovering)
+        self.assertFalse(self.menu.hovering_new_game)
+        
+        # Move mouse over Statistics button
+        center_x, center_y = self.menu.stats_button.center
+        event = pygame.event.Event(pygame.MOUSEMOTION, {'pos': (center_x, center_y)})
+        self.menu.handle_event(event)
+        self.assertTrue(self.menu.hovering_stats)
+        self.assertFalse(self.menu.hovering_new_game)
 
     def test_menu_new_game_click(self):
         """Clicking New Game should transition to game screen."""
@@ -47,6 +55,19 @@ class TestMenuScreen(unittest.TestCase):
         
         self.assertTrue(self.menu.is_done())
         self.assertEqual(self.menu.next_screen(), 'game')
+    
+    def test_menu_statistics_click(self):
+        """Clicking Statistics should transition to statistics screen."""
+        # Click on Statistics button
+        center_x, center_y = self.menu.stats_button.center
+        event = pygame.event.Event(pygame.MOUSEBUTTONDOWN, {
+            'button': 1,
+            'pos': (center_x, center_y)
+        })
+        self.menu.handle_event(event)
+        
+        self.assertTrue(self.menu.is_done())
+        self.assertEqual(self.menu.next_screen(), 'statistics')
 
     def test_menu_draw_no_crash(self):
         """Menu draw should not crash."""
