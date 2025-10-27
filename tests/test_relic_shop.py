@@ -14,7 +14,7 @@ class RelicShopTests(unittest.TestCase):
         cls.clock = pygame.time.Clock()
 
     def setUp(self):
-        self.game = Game(self.screen, self.font, self.clock, rng_seed=1)
+        self.game = Game(self.screen, self.font, self.clock, rng_seed=2)
         # Give player enough gold for purchase
         self.game.player.gold = 500
         # Simulate level completion to trigger advancement and shop

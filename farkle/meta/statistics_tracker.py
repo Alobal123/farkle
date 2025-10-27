@@ -118,6 +118,47 @@ class GameStatistics:
                 'levels_completed': self.levels_completed
             }
         }
+    
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize statistics for saving."""
+        return {
+            'total_gold_gained': self.total_gold_gained,
+            'total_faith_gained': self.total_faith_gained,
+            'total_farkles': self.total_farkles,
+            'total_score': self.total_score,
+            'highest_single_score': self.highest_single_score,
+            'turns_played': self.turns_played,
+            'dice_rolled': self.dice_rolled,
+            'relics_purchased': self.relics_purchased,
+            'goals_completed': self.goals_completed,
+            'levels_completed': self.levels_completed,
+            # Save event lists for detailed history
+            'gold_events': self.gold_events,
+            'faith_events': self.faith_events,
+            'farkle_events': self.farkle_events,
+            'score_events': self.score_events
+        }
+    
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "GameStatistics":
+        """Restore statistics from saved data."""
+        stats = cls()
+        stats.total_gold_gained = data.get('total_gold_gained', 0)
+        stats.total_faith_gained = data.get('total_faith_gained', 0)
+        stats.total_farkles = data.get('total_farkles', 0)
+        stats.total_score = data.get('total_score', 0)
+        stats.highest_single_score = data.get('highest_single_score', 0)
+        stats.turns_played = data.get('turns_played', 0)
+        stats.dice_rolled = data.get('dice_rolled', 0)
+        stats.relics_purchased = data.get('relics_purchased', 0)
+        stats.goals_completed = data.get('goals_completed', 0)
+        stats.levels_completed = data.get('levels_completed', 0)
+        # Restore event lists
+        stats.gold_events = data.get('gold_events', [])
+        stats.faith_events = data.get('faith_events', [])
+        stats.farkle_events = data.get('farkle_events', [])
+        stats.score_events = data.get('score_events', [])
+        return stats
 
 
 class StatisticsTracker:

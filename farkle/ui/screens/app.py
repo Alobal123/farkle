@@ -8,6 +8,7 @@ from .statistics_screen import StatisticsScreen
 from farkle.game import Game
 from farkle.core.game_event import GameEvent, GameEventType
 from farkle.meta.persistence import PersistenceManager
+from farkle.meta.save_manager import SaveManager
 
 class App:
     """High-level application controller managing screens.
@@ -34,12 +35,16 @@ class App:
         # Initialize persistence manager for cross-session statistics
         self.persistence = PersistenceManager()
         
+        # Initialize save manager for game state autosave
+        self.save_manager = SaveManager()
+        
         self._init_screens()
 
     def _init_screens(self):
         # Initialize persistent screens
-        # Menu screen doesn't need game object
-        self.screens['menu'] = MenuScreen(self.screen, self.font)
+        # Menu screen doesn't need game object, but needs to know if save exists
+        has_save = self.save_manager.has_save()
+        self.screens['menu'] = MenuScreen(self.screen, self.font, has_save=has_save)
         # Game screen will be created when first needed
 
     def _on_event(self, event: GameEvent):  # type: ignore[override]
@@ -74,14 +79,27 @@ class App:
             # Transition to game over screen
             self.current_name = 'game_over'
     
-    def _ensure_game_initialized(self):
-        """Create and initialize game object if not already done."""
+    def _ensure_game_initialized(self, load_save: bool = False):
+        """Create and initialize game object if not already done.
+        
+        Args:
+            load_save: If True, attempt to load game from save file
+        """
         if self.game is None:
             self.game = Game(self.screen, self.font, self.clock, rng_seed=None)
             # Game is auto-initialized by default
+            
+            # Load saved state if requested
+            if load_save:
+                save_data = self.save_manager.load()
+                if save_data:
+                    self.save_manager.restore_game_state(self.game, save_data)
+            
             # Subscribe to game events for app-level concerns
             if self.game.event_listener:
                 self.game.event_listener.subscribe(self._on_event)
+            # Attach save manager for autosave
+            self.save_manager.attach(self.game)
     
     def _ensure_game_screen(self):
         """Create game screen if not already created."""
@@ -102,8 +120,14 @@ class App:
             
             # Ensure game is initialized if transitioning to game screen
             if self.current_name == 'game':
-                self._ensure_game_initialized()
+                self._ensure_game_initialized(load_save=False)
                 self._ensure_game_screen()
+            
+            # Ensure game is initialized from save if continuing
+            if self.current_name == 'continue_game':
+                self._ensure_game_initialized(load_save=True)
+                self._ensure_game_screen()
+                self.current_name = 'game'  # Redirect to game screen
             
             # Ensure statistics screen is created/refreshed when transitioning to it
             if self.current_name == 'statistics':
@@ -121,16 +145,21 @@ class App:
                 
                 # If transitioning to menu from game/game_over, reset the game
                 if next_screen == 'menu' and self.current_name in ('game', 'game_over'):
+                    # Delete save file when returning to menu (game over)
+                    self.save_manager.delete_save()
                     self.game = None  # Clear game state
                     # Remove game and game_over screens to force recreation on next play
                     self.screens.pop('game', None)
                     self.screens.pop('game_over', None)
+                    # Recreate menu screen with updated save status
+                    has_save = self.save_manager.has_save()
+                    self.screens['menu'] = MenuScreen(self.screen, self.font, has_save=has_save)
                 
                 # Handle statistics screen transitions
                 if next_screen == 'statistics':
                     self._ensure_statistics_screen()
                 
-                if next_screen and (next_screen in self.screens or next_screen in ('game', 'menu', 'statistics')):
+                if next_screen and (next_screen in self.screens or next_screen in ('game', 'menu', 'statistics', 'continue_game')):
                     self.current_name = next_screen
                     # Reset the done state for future transitions
                     from .base_screen import SimpleScreen

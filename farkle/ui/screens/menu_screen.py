@@ -10,10 +10,11 @@ class MenuScreen(SimpleScreen):
     When New Game is clicked, signals transition to game screen.
     """
     
-    def __init__(self, screen: pygame.Surface, font: pygame.font.Font):
+    def __init__(self, screen: pygame.Surface, font: pygame.font.Font, has_save: bool = False):
         super().__init__()
         self.screen = screen
         self.font = font
+        self.has_save = has_save
         self.title_font = pygame.font.SysFont("Arial", 72, bold=True)
         self.button_font = pygame.font.SysFont("Arial", 36)
         
@@ -22,16 +23,28 @@ class MenuScreen(SimpleScreen):
         button_height = 80
         button_spacing = 20
         
-        # New Game button
+        # Calculate button positions based on whether we have a save
         button_x = WIDTH // 2 - button_width // 2
-        button_y = HEIGHT // 2 + 20
-        self.new_game_button = pygame.Rect(button_x, button_y, button_width, button_height)
+        start_y = HEIGHT // 2 + 20
+        
+        # Continue button (only shown if has_save)
+        if self.has_save:
+            self.continue_button = pygame.Rect(button_x, start_y, button_width, button_height)
+            new_game_y = start_y + button_height + button_spacing
+        else:
+            self.continue_button = None
+            new_game_y = start_y
+        
+        # New Game button
+        self.new_game_button = pygame.Rect(button_x, new_game_y, button_width, button_height)
         
         # Statistics button (below New Game)
-        stats_button_y = button_y + button_height + button_spacing
+        stats_button_y = new_game_y + button_height + button_spacing
         self.stats_button = pygame.Rect(button_x, stats_button_y, button_width, button_height)
         
         # Button colors
+        self.continue_color = (80, 120, 60)
+        self.continue_hover_color = (110, 160, 80)
         self.new_game_color = (60, 120, 80)
         self.new_game_hover_color = (80, 160, 110)
         self.stats_color = (60, 80, 120)
@@ -39,17 +52,22 @@ class MenuScreen(SimpleScreen):
         self.button_text_color = (255, 255, 255)
         
         # Track hover state
+        self.hovering_continue = False
         self.hovering_new_game = False
         self.hovering_stats = False
         
     def handle_event(self, event: pygame.event.Event) -> None:  # type: ignore[override]
         if event.type == pygame.MOUSEMOTION:
+            self.hovering_continue = self.continue_button.collidepoint(event.pos) if self.continue_button else False
             self.hovering_new_game = self.new_game_button.collidepoint(event.pos)
             self.hovering_stats = self.stats_button.collidepoint(event.pos)
             
         elif event.type == pygame.MOUSEBUTTONDOWN:
             if event.button == 1:  # Left click
-                if self.new_game_button.collidepoint(event.pos):
+                if self.continue_button and self.continue_button.collidepoint(event.pos):
+                    # Signal transition to game screen with continue flag
+                    self.finish(next_screen='continue_game')
+                elif self.new_game_button.collidepoint(event.pos):
                     # Signal transition to game screen
                     self.finish(next_screen='game')
                 elif self.stats_button.collidepoint(event.pos):
@@ -74,6 +92,18 @@ class MenuScreen(SimpleScreen):
         subtitle_surf = self.font.render(subtitle_text, True, (180, 180, 200))
         subtitle_rect = subtitle_surf.get_rect(center=(WIDTH // 2, HEIGHT // 3 + 60))
         surface.blit(subtitle_surf, subtitle_rect)
+        
+        # Draw Continue button (if save exists)
+        if self.continue_button:
+            continue_color = self.continue_hover_color if self.hovering_continue else self.continue_color
+            pygame.draw.rect(surface, continue_color, self.continue_button, border_radius=8)
+            pygame.draw.rect(surface, (200, 200, 200), self.continue_button, width=2, border_radius=8)
+            
+            # Draw Continue button text
+            continue_text = "Continue"
+            continue_text_surf = self.button_font.render(continue_text, True, self.button_text_color)
+            continue_text_rect = continue_text_surf.get_rect(center=self.continue_button.center)
+            surface.blit(continue_text_surf, continue_text_rect)
         
         # Draw New Game button
         new_game_color = self.new_game_hover_color if self.hovering_new_game else self.new_game_color

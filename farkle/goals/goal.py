@@ -62,6 +62,62 @@ class Goal(GameObject):
             pass
         return int(getattr(self, 'pending_raw', 0) or 0)
 
+    def to_dict(self) -> dict:
+        """Serialize goal state for saving."""
+        return {
+            'name': self.name,
+            'target_score': self.target_score,
+            'remaining': self.remaining,
+            'pending_raw': self.pending_raw,
+            'is_disaster': self.is_disaster,
+            'reward_gold': self.reward_gold,
+            'reward_income': self.reward_income,
+            'reward_blessing': self.reward_blessing,
+            'reward_faith': self.reward_faith,
+            'reward_claimed': self.reward_claimed,
+            'flavor': self.flavor,
+            'category': self.category,
+            'persona': self.persona
+        }
+
+    def update_from_dict(self, data: dict) -> None:
+        """Update goal attributes from a dictionary (for restoring saved state)."""
+        self.name = data.get('name', self.name)
+        self.target_score = data.get('target_score', self.target_score)
+        self.remaining = data.get('remaining', self.remaining)
+        self.pending_raw = data.get('pending_raw', self.pending_raw)
+        self.is_disaster = data.get('is_disaster', self.is_disaster)
+        self.reward_gold = data.get('reward_gold', self.reward_gold)
+        self.reward_income = data.get('reward_income', self.reward_income)
+        self.reward_blessing = data.get('reward_blessing', self.reward_blessing)
+        self.reward_faith = data.get('reward_faith', self.reward_faith)
+        self.reward_claimed = data.get('reward_claimed', self.reward_claimed)
+        self.flavor = data.get('flavor', self.flavor)
+        self.category = data.get('category', self.category)
+        self.persona = data.get('persona', self.persona)
+
+    @classmethod
+    def from_dict(cls, data: dict, game: "Game") -> "Goal":
+        """Restore goal from saved data."""
+        goal = cls(
+            target_score=data['target_score'],
+            game=game,
+            name=data.get('name', ''),
+            is_disaster=data.get('is_disaster', True),
+            reward_gold=data.get('reward_gold', 0),
+            flavor=data.get('flavor', ''),
+            category=data.get('category', ''),
+            persona=data.get('persona', ''),
+            reward_income=data.get('reward_income', 0),
+            reward_blessing=data.get('reward_blessing', ''),
+            reward_faith=data.get('reward_faith', 0)
+        )
+        # Restore progress state
+        goal.remaining = data.get('remaining', goal.target_score)
+        goal.pending_raw = data.get('pending_raw', 0)
+        goal.reward_claimed = data.get('reward_claimed', False)
+        return goal
+
     # Rendering helpers (decoupled from Game specifics but reusable)
     @staticmethod
     def get_category_colors(category: str, is_fulfilled: bool) -> tuple[tuple[int, int, int], tuple[int, int, int]]:

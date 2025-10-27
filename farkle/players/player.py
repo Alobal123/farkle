@@ -109,3 +109,37 @@ class Player(GameObject):
     def handle_click(self, game, pos) -> bool:  # type: ignore[override]
         """Reserved for future player HUD interactions (StarterEffect removed)."""
         return False
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize player state to dictionary for saving.
+        
+        Returns:
+            Dictionary containing player state
+        """
+        return {
+            'gold': self.gold,
+            'faith': self.faith,
+            'temple_income': self.temple_income,
+            'active_effects': [
+                {
+                    'type': effect.__class__.__name__,
+                    'name': effect.name,
+                    'duration': effect.duration,
+                }
+                for effect in self.active_effects
+            ],
+        }
+    
+    def from_dict(self, data: dict[str, Any]) -> None:
+        """Restore player state from saved dictionary.
+        
+        Args:
+            data: Saved player data
+        """
+        self.gold = data.get('gold', 0)
+        self.faith = data.get('faith', 0)
+        self.temple_income = data.get('temple_income', 30)
+        
+        # Active effects are restored separately by SaveManager
+        # since they need special handling for activation
+
