@@ -43,9 +43,9 @@ class GodLevel2UIButtonTests(unittest.TestCase):
         sanctify_buttons = [b for b in self.game.ui_buttons if 'sanctify' in b.name.lower()]
         self.assertEqual(len(sanctify_buttons), 0)
         
-        # Complete 2 nature goals to reach level 2 (TEMPORARY: fast leveling with [1,1,1])
+        # Complete 6 nature goals to reach level 2 (2 for level 1, 4 more for level 2)
         completed_count = 0
-        while completed_count < 2:
+        while completed_count < 6:
             goal = None
             for g in self.game.level_state.goals:
                 if g.category == 'nature' and not g.is_fulfilled():
@@ -67,8 +67,8 @@ class GodLevel2UIButtonTests(unittest.TestCase):
         
         # Verify we completed enough goals
         demeter = self.game.gods.worshipped[0]
-        # Should be level 2 if we completed 2 goals (with fast leveling)
-        self.assertEqual(completed_count, 2)
+        # Should be level 2 if we completed 6 goals (2 for level 1, 4 more for level 2)
+        self.assertEqual(completed_count, 6)
         self.assertEqual(demeter.level, 2)
         
         # NOW a sanctify button should exist

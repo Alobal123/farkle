@@ -19,8 +19,7 @@ class Demeter(God):
     """Demeter grants powers related to harvest, growth, and natural abundance."""
     
     # Goals required per level: [level 0->1, level 1->2, level 2->3]
-    # TEMPORARY: Fast leveling for testing (1 goal for level 2)
-    GOALS_PER_LEVEL = [1, 1, 1]
+    GOALS_PER_LEVEL = [2, 4, 6]
     
     def __init__(self, game=None):
         super().__init__(name="Demeter", game=game)

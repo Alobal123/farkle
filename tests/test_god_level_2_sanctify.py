@@ -35,8 +35,8 @@ class GodLevel2SanctifyTests(unittest.TestCase):
         
         self.assertIsNotNone(nature_goal)
         
-        # Level up Demeter to level 2 (TEMPORARY: requires 2 total nature goals with fast leveling)
-        for i in range(2):
+        # Level up Demeter to level 2 (requires 6 total nature goals: 2 for level 1, 4 more for level 2)
+        for i in range(6):
             self.game.event_listener.publish(
                 GameEvent(
                     GameEventType.GOAL_FULFILLED,
@@ -77,8 +77,8 @@ class GodLevel2SanctifyTests(unittest.TestCase):
         old_category = other_goal.category
         self.assertNotEqual(old_category, 'nature')
         
-        # Level up Demeter to level 2 (TEMPORARY: requires 2 total nature goals with fast leveling)
-        for i in range(2):
+        # Level up Demeter to level 2 (requires 6 total nature goals: 2 for level 1, 4 more for level 2)
+        for i in range(6):
             self.game.event_listener.publish(
                 GameEvent(
                     GameEventType.GOAL_FULFILLED,
@@ -174,8 +174,8 @@ class GodLevel2SanctifyTests(unittest.TestCase):
             if not goal:
                 continue
             
-            # Level up to 2 (TEMPORARY: 2 goals total with fast leveling)
-            for i in range(2):
+            # Level up to 2 (requires 6 total goals: 2 for level 1, 4 more for level 2)
+            for i in range(6):
                 self.game.event_listener.publish(
                     GameEvent(
                         GameEventType.GOAL_FULFILLED,
