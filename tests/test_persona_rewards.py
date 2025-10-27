@@ -57,11 +57,10 @@ class PersonaRewardTests(unittest.TestCase):
         """When a goal with income reward is fulfilled, temple income should increase."""
         # Manually create a goal with income reward
         from farkle.goals.goal import Goal
-        goal = Goal(target_score=100, name="Test Income", is_disaster=False, 
+        goal = Goal(target_score=100, game=self.game, name="Test Income", is_disaster=False, 
                    reward_gold=0, reward_income=5, persona="nobleman")
         
         # Subscribe to game
-        goal.game = self.game
         self.game.level_state.goals.append(goal)
         
         initial_income = self.game.player.temple_income
@@ -79,11 +78,10 @@ class PersonaRewardTests(unittest.TestCase):
     def test_gold_reward_increases_gold(self):
         """When a goal with gold reward is fulfilled, gold should increase."""
         from farkle.goals.goal import Goal
-        goal = Goal(target_score=100, name="Test Gold", is_disaster=False, 
+        goal = Goal(target_score=100, game=self.game, name="Test Gold", is_disaster=False, 
                    reward_gold=50, reward_income=0, persona="merchant")
         
         # Subscribe to game
-        goal.game = self.game
         self.game.level_state.goals.append(goal)
         
         initial_gold = self.game.player.gold
@@ -111,10 +109,9 @@ class PersonaRewardTests(unittest.TestCase):
         # Subscribe to events (callback first, then event types)
         self.game.event_listener.subscribe(event_handler, [GameEventType.INCOME_GAINED])
         
-        goal = Goal(target_score=100, name="Test Income Event", is_disaster=False, 
+        goal = Goal(target_score=100, game=self.game, name="Test Income Event", is_disaster=False, 
                    reward_gold=0, reward_income=5, persona="nobleman")
         
-        goal.game = self.game
         self.game.level_state.goals.append(goal)
         
         # Fulfill the goal

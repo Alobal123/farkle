@@ -3,26 +3,34 @@ from farkle.core.game_object import GameObject
 from farkle.core.game_event import GameEvent, GameEventType
 from dataclasses import dataclass as _dc
 import pygame
-from typing import Any
+from typing import Any, TYPE_CHECKING
 from farkle.ui.settings import WIDTH
+
+if TYPE_CHECKING:
+    from farkle.game import Game
 
 
 @dataclass
 class Player(GameObject):
     gold: int = 0
+    faith: int = 0  # Meta currency (persists across games)
     temple_income: int = 0  # Gold awarded at the start of each level
-    game: Any | None = None  # runtime-injected game; typed loosely for flexibility
 
-    def __init__(self):
+    def __init__(self, game: 'Game'):
         GameObject.__init__(self, name="Player")
+        self.game = game
         self.gold = 0
+        self.faith = 0
         self.temple_income = 30  # Starting temple income
-        self.game = None  # set by Game after construction
         self.active_effects: list = []  # TemporaryEffect instances (blessings/curses)
 
     def add_gold(self, amount: int) -> None:
         if amount > 0:
             self.gold += amount
+
+    def add_faith(self, amount: int) -> None:
+        if amount > 0:
+            self.faith += amount
 
     def apply_effect(self, effect) -> None:
         """Apply a temporary effect (blessing/curse) to this player."""
@@ -57,7 +65,7 @@ class Player(GameObject):
         elif event.type == GameEventType.GOAL_FULFILLED:
             goal = event.get("goal")
             if goal and hasattr(goal, 'claim_reward'):
-                gold_gained, income_gained, blessing_type = goal.claim_reward()
+                gold_gained, income_gained, blessing_type, faith_gained = goal.claim_reward()
                 if gold_gained > 0:
                     self.add_gold(gold_gained)
                     from farkle.core.game_event import GameEvent as GE, GameEventType as GET
@@ -71,6 +79,13 @@ class Player(GameObject):
                         "goal_name": goal.name,  # type: ignore[attr-defined]
                         "new_total": self.temple_income
                     }))
+                if faith_gained > 0:
+                    self.add_faith(faith_gained)
+                    from farkle.core.game_event import GameEvent as GE, GameEventType as GET
+                    self.game.event_listener.publish(GE(GET.FAITH_GAINED, payload={
+                        "amount": faith_gained,
+                        "goal_name": goal.name  # type: ignore[attr-defined]
+                    }))
                 if blessing_type:
                     # Apply blessing based on type
                     self._apply_blessing(blessing_type)
@@ -80,8 +95,6 @@ class Player(GameObject):
         try:
             if blessing_type == "double_score":
                 from farkle.blessings import DoubleScoreBlessing
-                # Duration=1 means it lasts for the next turn
-                # (decrements on TURN_START, so granted mid-turn = active for entire next turn)
                 blessing = DoubleScoreBlessing(duration=1)
                 self.active_effects.append(blessing)
                 blessing.player = self

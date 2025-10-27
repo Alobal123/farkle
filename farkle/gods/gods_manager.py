@@ -14,8 +14,9 @@ GOD_XP_TO_LEVEL = [100, 150, 200, 250, 300, 350, 400, 450, 500]
 class God(GameObject):
     name: str = ""
     # For future: each god can have a modifier_chain (selective effects). Start empty.
-    def __init__(self, name: str):
+    def __init__(self, name: str, game=None):
         super().__init__(name=name)
+        self.game = game
         # Lazy import to avoid cycles
         from farkle.scoring.score_modifiers import ScoreModifierChain
         self.modifier_chain = ScoreModifierChain()
@@ -145,12 +146,6 @@ class GodsManager(GameObject):
         self.worshipped = gods[:3]
         if self.active_index >= len(self.worshipped):
             self.active_index = 0 if self.worshipped else -1
-        # Ensure gods know the game reference for drawing
-        for gd in self.worshipped:
-            try:
-                gd.game = self.game  # type: ignore[attr-defined]
-            except Exception:
-                pass
 
     def active_god(self) -> Optional[God]:
         if 0 <= self.active_index < len(self.worshipped):

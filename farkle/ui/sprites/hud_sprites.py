@@ -27,6 +27,7 @@ class PlayerHUDSprite(BaseSprite):
         hud_lines = [
             f"Turns: {g.level_state.turns_left}",
             f"Gold: {p.gold}",
+            f"Faith: {p.faith}",
             f"Income: {p.temple_income}",
         ]
         line_surfs = []

@@ -187,7 +187,7 @@ class PersistentStatsTests(unittest.TestCase):
         data = {
             'total_games_played': 5,
             'lifetime_gold_gained': 1000
-            # Missing many fields
+            # Missing many fields including faith
         }
         
         stats = PersistentStats.from_dict(data)
@@ -195,7 +195,70 @@ class PersistentStatsTests(unittest.TestCase):
         self.assertEqual(stats.total_games_played, 5)
         self.assertEqual(stats.lifetime_gold_gained, 1000)
         self.assertEqual(stats.lifetime_farkles, 0)  # Default value
+        self.assertEqual(stats.faith, 0)  # Default value for new field
         self.assertEqual(stats.unlocked_achievements, [])  # Default value
+    
+    def test_priest_goals_grant_faith(self):
+        """Completing priest goals should grant faith via events."""
+        stats = PersistentStats()
+        session = {
+            'gold': {'total': 50},
+            'farkles': {'total': 0},
+            'scoring': {'total_score': 300, 'highest_single': 100},
+            'faith': {'total': 4, 'events_count': 2},  # 2 faith events
+            'gameplay': {
+                'turns_played': 3,
+                'dice_rolled': 18,
+                'relics_purchased': 1,
+                'goals_completed': 2,
+                'levels_completed': 1
+            }
+        }
+        
+        stats.merge_session(session, success=False, level_index=1)
+        
+        # Should grant faith from events: 4
+        self.assertEqual(stats.faith, 4)
+    
+    def test_faith_accumulates_across_sessions(self):
+        """Faith should accumulate across multiple game sessions."""
+        stats = PersistentStats()
+        
+        # First session with faith
+        session1 = {
+            'gold': {'total': 50},
+            'farkles': {'total': 0},
+            'scoring': {'total_score': 300, 'highest_single': 100},
+            'faith': {'total': 2, 'events_count': 1},
+            'gameplay': {
+                'turns_played': 3,
+                'dice_rolled': 18,
+                'relics_purchased': 1,
+                'goals_completed': 2,
+                'levels_completed': 1
+            }
+        }
+        stats.merge_session(session1, success=False, level_index=1)
+        self.assertEqual(stats.faith, 2)
+        
+        # Second session with more faith
+        session2 = {
+            'gold': {'total': 75},
+            'farkles': {'total': 1},
+            'scoring': {'total_score': 450, 'highest_single': 150},
+            'faith': {'total': 6, 'events_count': 3},
+            'gameplay': {
+                'turns_played': 5,
+                'dice_rolled': 30,
+                'relics_purchased': 2,
+                'goals_completed': 4,
+                'levels_completed': 1
+            }
+        }
+        stats.merge_session(session2, success=False, level_index=2)
+        
+        # Total: 2 + 6 = 8
+        self.assertEqual(stats.faith, 8)
 
 
 class PersistenceManagerTests(unittest.TestCase):

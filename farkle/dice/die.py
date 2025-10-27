@@ -16,15 +16,15 @@ PIP_POSITIONS = {
 _die_surface_cache: dict[tuple[int,bool,bool,bool], pygame.Surface] = {}
 
 class Die(GameObject):
-    def __init__(self, value, x, y):
+    def __init__(self, value, x, y, game):
         super().__init__(name="Die")
+        self.game = game
         self.value = value
         self.x = x
         self.y = y
         self.held = False
         self.selected = False
         self.scoring_eligible = False
-        self.game = None  # set by container for sprite gating & highlight logic
         # Sprite reference (assigned by DieSprite); use Any to avoid circular import for type checkers.
         from typing import Any as _Any
         self.sprite: _Any = None

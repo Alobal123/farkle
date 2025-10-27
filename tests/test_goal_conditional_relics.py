@@ -63,8 +63,8 @@ def test_disaster_focus_talisman_only_on_disaster_goal(scoring_mgr):
     relic = DisasterGoalScoreBonusRelic()
     # Activate by adding modifier chain directly (simulate purchase)
     scoring_mgr.modifier_chain.add(relic.modifier_chain.snapshot()[0])
-    disaster_goal = Goal(target_score=1000, name="D", is_disaster=True)
-    petition_goal = Goal(target_score=1000, name="P", is_disaster=False)
+    disaster_goal = Goal(target_score=1000, game=scoring_mgr.game, name="D", is_disaster=True)
+    petition_goal = Goal(target_score=1000, game=scoring_mgr.game, name="P", is_disaster=False)
     parts, comp = build_parts(scoring_mgr, [1,5])  # raw 150
     base_raw = comp['total_raw']
     assert base_raw == 150
@@ -78,8 +78,8 @@ def test_disaster_focus_talisman_only_on_disaster_goal(scoring_mgr):
 def test_petition_focus_charm_only_on_petition_goal(scoring_mgr):
     relic = PetitionGoalScoreBonusRelic()
     scoring_mgr.modifier_chain.add(relic.modifier_chain.snapshot()[0])
-    disaster_goal = Goal(target_score=1000, name="D", is_disaster=True)
-    petition_goal = Goal(target_score=1000, name="P", is_disaster=False)
+    disaster_goal = Goal(target_score=1000, game=scoring_mgr.game, name="D", is_disaster=True)
+    petition_goal = Goal(target_score=1000, game=scoring_mgr.game, name="P", is_disaster=False)
     parts, comp = build_parts(scoring_mgr, [1,1,5])  # raw 250
     base_raw = comp['total_raw']
     assert base_raw == 250

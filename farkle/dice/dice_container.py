@@ -33,12 +33,8 @@ class DiceContainer:
                 initial_val,
                 start_x + i * (DICE_SIZE + MARGIN),
                 HEIGHT - 360,
+                self.game
             )
-            # Attach game reference for sprite gating & highlight logic
-            try:
-                d.game = self.game
-            except Exception:
-                pass
             self.dice.append(d)
             # Attach sprite
             if renderer:

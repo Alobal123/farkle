@@ -105,7 +105,7 @@ class Game:
             description="",
             rng=self.rng
         )
-        self.level_state = LevelState(self.level)
+        self.level_state = LevelState(self.level, self)
         self.active_goal_index: int = 0
         self.rules = ScoringRules()
         self._init_rules()
@@ -126,8 +126,7 @@ class Game:
         # Track whether at least one scoring combo has been locked since the most recent roll
         self.locked_after_last_roll = False
         # Player meta progression container
-        self.player = Player()
-        self.player.game = self
+        self.player = Player(self)
         # Relic manager handles between-level shop & relic aggregation
         self.relic_manager = RelicManager(self)
         # Gods manager: manages worshipped gods and applies selective effects
@@ -162,16 +161,14 @@ class Game:
         self.show_help = False
     # Shop interaction handled via separate ShopScreen/overlay sprite; legacy inline overlay fully removed.
         self.ui_misc: list[GameObject] = [
-            HelpIcon(10, self.screen.get_height() - 50, 40),
-            RelicPanel(),
-            RulesOverlay(),
+            HelpIcon(10, self.screen.get_height() - 50, self, 40),
+            RelicPanel(self),
+            RulesOverlay(self),
             self.player,
             self.gods,
         ]
         # Predeclare shop overlay sprite attribute for clarity (may remain None if creation fails)
         self.shop_overlay_sprite = None
-        for obj in self.ui_misc:
-            obj.game = self  # type: ignore[attr-defined]
         # Wrap certain misc UI objects with sprites (help icon, rules overlay)
         try:
             from farkle.ui.sprites.overlay_sprites import HelpIconSprite, RulesOverlaySprite, ShopOverlaySprite
@@ -231,7 +228,7 @@ class Game:
         self.event_listener.subscribe(self.input_controller.on_event)
         # Seed a default set of worshipped gods (up to three)
         try:
-            self.gods.set_worshipped([God("Zeus"), God("Athena"), God("Hermes")])
+            self.gods.set_worshipped([God("Zeus", self), God("Athena", self), God("Hermes", self)])
         except Exception:
             pass
         # Emit LEVEL_GENERATED for the initial level (so temple income is awarded on first level)
@@ -373,7 +370,6 @@ class Game:
                             pass
                 # Subscribe new level goals
                 for gobj in self.level_state.goals:
-                    gobj.game = self  # type: ignore[attr-defined]
                     self.event_listener.subscribe(gobj.on_event)
                 # Ensure game.on_event remains subscribed
                 if self.on_event not in getattr(self.event_listener, "_subs_all", []):
@@ -582,7 +578,7 @@ class Game:
         prev_level = self.level
         # Generate new level with progressive petitions
         self.level = Level.advance(self.level, self.level_index, rng=self.rng)
-        self.level_state = LevelState(self.level)
+        self.level_state = LevelState(self.level, self)
         self.active_goal_index = 0
         for g in self.level_state.goals:
             g.pending_raw = 0
@@ -823,7 +819,6 @@ class Game:
             self.event_listener.subscribe(self.input_controller.on_event)
         self.event_listener.subscribe(self.player.on_event)
         for g in self.level_state.goals:
-            g.game = self  # type: ignore[attr-defined]
             self.event_listener.subscribe(g.on_event)
         # Subscribe gods manager if present
         if hasattr(self, 'gods') and self.gods:

@@ -44,10 +44,9 @@ class PendingScoringTests(unittest.TestCase):
         if len(self.game.level_state.goals) == 1:
             # Extend manually (test-only) by appending a new Goal clone
             from farkle.goals.goal import Goal
-            new_goal = Goal(150, name="Temp", is_disaster=False, reward_gold=0)
+            new_goal = Goal(150, self.game, name="Temp", is_disaster=False, reward_gold=0)
             self.game.level_state.goals.append(new_goal)
             # Also wire into event system
-            new_goal.game = self.game  # type: ignore[attr-defined]
             self.game.event_listener.subscribe(new_goal.on_event)
             # Also extend the immutable level definition tuple so name lookups succeed
             self.game.level = type(self.game.level)(

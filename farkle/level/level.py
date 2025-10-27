@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from farkle.goals.goal import Goal
-from typing import List, Tuple, TYPE_CHECKING
+from typing import List, Tuple, TYPE_CHECKING, Any
 import random
 
 if TYPE_CHECKING:
@@ -18,7 +18,7 @@ class Level:
     name: str
     max_turns: int
     description: str = ""
-    goals: Tuple[Tuple[str, int, bool, int, int, str, str, str, str], ...] = ()  # sequence of (goal_name, target, is_disaster, reward_gold, reward_income, reward_blessing, flavor_text, category, persona)
+    goals: Tuple[Tuple[str, int, bool, int, int, str, str, str, str, int], ...] = ()  # sequence of (goal_name, target, is_disaster, reward_gold, reward_income, reward_blessing, flavor_text, category, persona, reward_faith)
 
     @staticmethod
     def single(name: str, target_goal: int, max_turns: int, description: str = "", reward_gold: int = 50, rng: 'RandomSource | random.Random | None' = None):
@@ -42,16 +42,16 @@ class Level:
             # Use the disaster title as the level name
             level_name = disaster['title']
             # Disasters have no reward - they just advance to the next level
-            goals_list.append((disaster['title'], target_goal, True, 0, 0, "", disaster.get('text', ''), disaster.get('category', ''), ''))
+            goals_list.append((disaster['title'], target_goal, True, 0, 0, "", disaster.get('text', ''), disaster.get('category', ''), '', 0))
         else:
             # Fallback to original behavior
-            goals_list.append((name, target_goal, True, 0, 0, description, '', ''))
+            goals_list.append((name, target_goal, True, 0, 0, "", description, '', '', 0))
         
         # Add 2 petitions for the first level
         petitions = load_petitions()
         if petitions:
-            # Filter to only petitions with rewards (merchant, nobleman, or beggar)
-            petitions_with_rewards = [p for p in petitions if p.get('persona') in ('merchant', 'nobleman', 'beggar')]
+            # Filter to only petitions with rewards (merchant, nobleman, beggar, or priest)
+            petitions_with_rewards = [p for p in petitions if p.get('persona') in ('merchant', 'nobleman', 'beggar', 'priest')]
             
             if petitions_with_rewards:
                 # Select 2 random petitions from those with rewards
@@ -67,6 +67,7 @@ class Level:
                     opt_reward_gold = 0
                     opt_reward_income = 0
                     opt_reward_blessing = ""
+                    opt_reward_faith = 0
                     if opt_persona == 'merchant':
                         # Merchants give gold (scaled with level progression)
                         opt_reward_gold = 25 + 5 * i
@@ -76,8 +77,11 @@ class Level:
                     elif opt_persona == 'beggar':
                         # Beggars grant blessings
                         opt_reward_blessing = "double_score"
+                    elif opt_persona == 'priest':
+                        # Priests give faith (meta currency)
+                        opt_reward_faith = 2
                     
-                    goals_list.append((opt_name, opt_target, False, opt_reward_gold, opt_reward_income, opt_reward_blessing, opt_flavor, opt_category, opt_persona))
+                    goals_list.append((opt_name, opt_target, False, opt_reward_gold, opt_reward_income, opt_reward_blessing, opt_flavor, opt_category, opt_persona, opt_reward_faith))
         
         return Level(name=level_name, max_turns=max_turns, description=description,
                      goals=tuple(goals_list))
@@ -110,7 +114,7 @@ class Level:
         if disasters:
             # Find the old disaster's target to calculate the new one
             old_disaster_target = 0
-            for _, target, is_disaster, _, _, _, _, _, _ in prev.goals:
+            for _, target, is_disaster, _, _, _, _, _, _, _ in prev.goals:
                 if is_disaster:
                     old_disaster_target = target
                     break
@@ -121,7 +125,7 @@ class Level:
             # Use the disaster title as the level name
             level_name = disaster['title']
             # Disasters have no reward - they just advance to the next level
-            new_goals.append((disaster['title'], new_target, True, 0, 0, "", disaster.get('text', ''), disaster.get('category', ''), ''))
+            new_goals.append((disaster['title'], new_target, True, 0, 0, "", disaster.get('text', ''), disaster.get('category', ''), '', 0))
         
         # Calculate how many petitions this level should have
         # Formula: min(2 + ((next_index - 1) // 2), 4)
@@ -130,8 +134,8 @@ class Level:
         # Generate new petitions
         petitions = load_petitions()
         if petitions:
-            # Filter to only petitions with rewards (merchant, nobleman, or beggar)
-            petitions_with_rewards = [p for p in petitions if p.get('persona') in ('merchant', 'nobleman', 'beggar')]
+            # Filter to only petitions with rewards (merchant, nobleman, beggar, or priest)
+            petitions_with_rewards = [p for p in petitions if p.get('persona') in ('merchant', 'nobleman', 'beggar', 'priest')]
             
             if petitions_with_rewards:
                 # Select random petitions (avoiding duplicates)
@@ -147,6 +151,7 @@ class Level:
                     opt_reward_gold = 0
                     opt_reward_income = 0
                     opt_reward_blessing = ""
+                    opt_reward_faith = 0
                     if opt_persona == 'merchant':
                         # Merchants give gold (scaled with level progression)
                         opt_reward_gold = 25 + 5 * next_index + 2 * i
@@ -156,8 +161,11 @@ class Level:
                     elif opt_persona == 'beggar':
                         # Beggars grant blessings
                         opt_reward_blessing = "double_score"
+                    elif opt_persona == 'priest':
+                        # Priests give faith (meta currency)
+                        opt_reward_faith = 2
                     
-                    new_goals.append((opt_name, opt_target, False, opt_reward_gold, opt_reward_income, opt_reward_blessing, opt_flavor, opt_category, opt_persona))
+                    new_goals.append((opt_name, opt_target, False, opt_reward_gold, opt_reward_income, opt_reward_blessing, opt_flavor, opt_category, opt_persona, opt_reward_faith))
         
         # Add extra turns every 3 levels
         extra_turns = 1 if (next_index % 3 == 0) else 0
@@ -173,6 +181,7 @@ class Level:
 @dataclass
 class LevelState:
     level: Level
+    game: Any  # Game reference for creating goals
     goals: List[Goal] = field(init=False)
     disaster_indices: List[int] = field(init=False)
     turns_left: int = field(init=False)
@@ -180,14 +189,14 @@ class LevelState:
     failed: bool = False
 
     def __post_init__(self):
-        self.goals = [Goal(target, name=_n, is_disaster=_m, reward_gold=_rg, reward_income=_ri, reward_blessing=_rb, flavor=_f, category=_c, persona=_p) 
-                      for (_n, target, _m, _rg, _ri, _rb, _f, _c, _p) in self.level.goals]
-        self.disaster_indices = [i for i, (_n, _t, m, _rg, _ri, _rb, _f, _c, _p) in enumerate(self.level.goals) if m]
+        self.goals = [Goal(target, self.game, name=_n, is_disaster=_m, reward_gold=_rg, reward_income=_ri, reward_blessing=_rb, flavor=_f, category=_c, persona=_p, reward_faith=_rf) 
+                      for (_n, target, _m, _rg, _ri, _rb, _f, _c, _p, _rf) in self.level.goals]
+        self.disaster_indices = [i for i, (_n, _t, m, _rg, _ri, _rb, _f, _c, _p, _rf) in enumerate(self.level.goals) if m]
         self.turns_left = self.level.max_turns
 
     def reset(self):
-        self.goals = [Goal(target, name=_n, is_disaster=_m, reward_gold=_rg, reward_income=_ri, reward_blessing=_rb, flavor=_f, category=_c, persona=_p) 
-                      for (_n, target, _m, _rg, _ri, _rb, _f, _c, _p) in self.level.goals]
+        self.goals = [Goal(target, self.game, name=_n, is_disaster=_m, reward_gold=_rg, reward_income=_ri, reward_blessing=_rb, flavor=_f, category=_c, persona=_p, reward_faith=_rf) 
+                      for (_n, target, _m, _rg, _ri, _rb, _f, _c, _p, _rf) in self.level.goals]
         self.turns_left = self.level.max_turns
         self.completed = False
         self.failed = False

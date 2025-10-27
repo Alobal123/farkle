@@ -33,7 +33,8 @@ class PersistentStats:
     most_turns_survived: int = 0
     furthest_level_reached: int = 0
     
-    # Meta progression (for future use)
+    # Meta progression
+    faith: int = 0  # Permanent currency earned from priest goals
     total_meta_currency: int = 0
     unlocked_achievements: list[str] = field(default_factory=list)
     
@@ -62,6 +63,10 @@ class PersistentStats:
         scoring_data = session_stats.get('scoring', {})
         session_score = scoring_data.get('total_score', 0)
         self.lifetime_score += session_score
+        
+        # Add faith gained during session
+        faith_data = session_stats.get('faith', {})
+        self.faith += faith_data.get('total', 0)
         
         gameplay_data = session_stats.get('gameplay', {})
         self.lifetime_turns_played += gameplay_data.get('turns_played', 0)
@@ -114,6 +119,7 @@ class PersistentStats:
             most_gold_in_game=data.get('most_gold_in_game', 0),
             most_turns_survived=data.get('most_turns_survived', 0),
             furthest_level_reached=data.get('furthest_level_reached', 0),
+            faith=data.get('faith', 0),
             total_meta_currency=data.get('total_meta_currency', 0),
             unlocked_achievements=data.get('unlocked_achievements', [])
         )

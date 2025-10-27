@@ -22,13 +22,8 @@ class GodSwitchingGateTests(unittest.TestCase):
         gm = self.game.gods  # attribute is 'gods' in Game
         if len(gm.worshipped) < 2:
             from farkle.gods.gods_manager import God
-            extra = God("TestGod")
+            extra = God("TestGod", self.game)
             gm.worshipped.append(extra)
-            # God draws rely on god.game for font access; assignment may trigger static analysis warning.
-            try:
-                extra.game = self.game  # type: ignore[attr-defined]
-            except Exception:
-                pass
             self.game.renderer.draw()
             pygame.display.flip()
         # After potential mutation, ensure gods manager draws to set _rect for each god

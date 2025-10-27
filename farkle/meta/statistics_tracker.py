@@ -21,6 +21,10 @@ class GameStatistics:
     total_gold_gained: int = 0
     gold_events: list[dict[str, Any]] = field(default_factory=list)
     
+    # Faith tracking
+    total_faith_gained: int = 0
+    faith_events: list[dict[str, Any]] = field(default_factory=list)
+    
     # Farkle tracking
     total_farkles: int = 0
     farkle_events: list[dict[str, Any]] = field(default_factory=list)
@@ -47,6 +51,18 @@ class GameStatistics:
             'amount': amount,
             'source': source,
             'total_after': self.total_gold_gained
+        })
+    
+    def add_faith_event(self, event: GameEvent) -> None:
+        """Record a faith gain event."""
+        amount = event.get('amount', 0)
+        source = event.get('goal_name', 'unknown')
+        
+        self.total_faith_gained += amount
+        self.faith_events.append({
+            'amount': amount,
+            'source': source,
+            'total_after': self.total_faith_gained
         })
     
     def add_farkle_event(self, event: GameEvent) -> None:
@@ -90,6 +106,10 @@ class GameStatistics:
                 'highest_single': self.highest_single_score,
                 'events_count': len(self.score_events)
             },
+            'faith': {
+                'total': self.total_faith_gained,
+                'events_count': len(self.faith_events)
+            },
             'gameplay': {
                 'turns_played': self.turns_played,
                 'dice_rolled': self.dice_rolled,
@@ -129,6 +149,10 @@ class StatisticsTracker:
         # Gold tracking
         if event.type == GameEventType.GOLD_GAINED:
             self.current_session.add_gold_event(event)
+        
+        # Faith tracking
+        elif event.type == GameEventType.FAITH_GAINED:
+            self.current_session.add_faith_event(event)
         
         # Farkle tracking
         elif event.type == GameEventType.FARKLE:

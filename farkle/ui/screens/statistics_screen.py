@@ -64,6 +64,14 @@ class StatisticsScreen(SimpleScreen):
         title_rect = title_surf.get_rect(center=(WIDTH // 2, 50))
         surface.blit(title_surf, title_rect)
         
+        # Draw Faith prominently below title (meta currency)
+        if self.stats.faith > 0 or True:  # Always show faith, even if zero
+            faith_text = f"Faith: {self.stats.faith}"
+            faith_color = (255, 215, 100)  # Golden color for faith
+            faith_surf = self.section_font.render(faith_text, True, faith_color)
+            faith_rect = faith_surf.get_rect(center=(WIDTH // 2, 85))
+            surface.blit(faith_surf, faith_rect)
+        
         # Calculate column positions
         left_col_x = WIDTH // 4
         right_col_x = 3 * WIDTH // 4

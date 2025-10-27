@@ -130,8 +130,9 @@ class HelpIcon(GameObject):
     - Toggle game.show_help flag on click.
     - High z-order but below full-screen overlays.
     """
-    def __init__(self, x: int, y: int, size: int = 40):
+    def __init__(self, x: int, y: int, game, size: int = 40):
         super().__init__(name="HelpIcon")
+        self.game = game
         import pygame
         self.rect = pygame.Rect(x, y, size, size)
         from farkle.core.game_state_enum import GameState
@@ -150,8 +151,9 @@ class HelpIcon(GameObject):
 
 class RelicPanel(GameObject):
     """Non-interactive panel listing active relics (debug-style)."""
-    def __init__(self):
+    def __init__(self, game):
         super().__init__(name="RelicPanel")
+        self.game = game
         self._last_rect = None
         from farkle.core.game_state_enum import GameState
         # Hide during shop and targeting to reduce clutter.
@@ -169,8 +171,9 @@ class RelicPanel(GameObject):
 
 class RulesOverlay(GameObject):
     """Help / rules panel shown when game.show_help True."""
-    def __init__(self):
+    def __init__(self, game):
         super().__init__(name="RulesOverlay")
+        self.game = game
         from farkle.core.game_state_enum import GameState
         # Can be shown over any non-shop state; predicate drives actual toggle.
         self.visible_states = {GameState.PRE_ROLL, GameState.ROLLING, GameState.FARKLE, GameState.SELECTING_TARGETS, GameState.BANKED}

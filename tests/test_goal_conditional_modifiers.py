@@ -9,20 +9,18 @@ from farkle.scoring.scoring_manager import ScoringManager
 @pytest.fixture
 def disaster_goal():
     """A goal that is a disaster."""
-    goal = Goal(name="Avert Disaster", target_score=1000, is_disaster=True)
     game_mock = Mock()
     game_mock.scoring_manager.project_goal_pending.return_value = 0
-    goal.game = game_mock
+    goal = Goal(name="Avert Disaster", target_score=1000, game=game_mock, is_disaster=True)
     return goal
 
 
 @pytest.fixture
 def petition_goal():
     """A goal that is a petition (not a disaster)."""
-    goal = Goal(name="Fulfill Petition", target_score=500, is_disaster=False)
     game_mock = Mock()
     game_mock.scoring_manager.project_goal_pending.return_value = 0
-    goal.game = game_mock
+    goal = Goal(name="Fulfill Petition", target_score=500, game=game_mock, is_disaster=False)
     return goal
 
 

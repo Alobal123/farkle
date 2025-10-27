@@ -26,6 +26,7 @@ class BeggarBlessingTests(unittest.TestCase):
         # Create a beggar goal with blessing reward
         goal = Goal(
             target_score=100,
+            game=self.game,
             name="Beggar's Prayer",
             is_disaster=False,
             reward_gold=0,
@@ -60,6 +61,7 @@ class BeggarBlessingTests(unittest.TestCase):
         # Create a beggar goal
         goal = Goal(
             target_score=100,
+            game=self.game,
             name="Beggar's Prayer",
             is_disaster=False,
             reward_blessing="double_score",
@@ -93,6 +95,7 @@ class BeggarBlessingTests(unittest.TestCase):
         # Create and fulfill a beggar goal
         goal = Goal(
             target_score=100,
+            game=self.game,
             name="Beggar's Prayer",
             is_disaster=False,
             reward_blessing="double_score",
