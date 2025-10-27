@@ -224,6 +224,17 @@ class ScoringManager(GameObject):
                             _add_mod(m)
             except Exception:
                 pass
+            # Live god modifiers
+            try:
+                gods_mgr = getattr(self.game, 'gods', None)
+                if gods_mgr:
+                    for god in getattr(gods_mgr, 'worshipped', []):
+                        if not getattr(god, 'active', True):
+                            continue
+                        for m in god.modifier_chain.snapshot():
+                            _add_mod(m)
+            except Exception:
+                pass
             adjusted_total = merged.apply(score_obj.total_raw, context)
         except Exception:
             adjusted_total = score_obj.total_effective

@@ -18,9 +18,15 @@ class GameEventType(Enum):
     BANK = auto()
     GOAL_PROGRESS = auto()
     GOAL_FULFILLED = auto()
-    GOLD_GAINED = auto()
-    FAITH_GAINED = auto()
-    INCOME_GAINED = auto()
+    # Reward events (two-phase: rewarded = offered, gained = received)
+    GOLD_REWARDED = auto()  # Goal offers gold reward
+    GOLD_GAINED = auto()    # Player receives gold
+    INCOME_REWARDED = auto()  # Goal offers income reward
+    INCOME_GAINED = auto()  # Player receives income
+    FAITH_REWARDED = auto()  # Goal offers faith reward
+    FAITH_GAINED = auto()   # Player receives faith
+    BLESSING_REWARDED = auto()  # Goal/god offers blessing reward
+    BLESSING_GAINED = auto()  # Player receives blessing
     # Scoring application (player-mediated multiplier)
     SCORE_APPLY_REQUEST = auto()
     SCORE_APPLIED = auto()
@@ -63,8 +69,11 @@ class GameEventType(Enum):
     TARGET_SELECTION_FINISHED = auto()
     ABILITY_CHARGES_ADDED = auto()
     ABILITY_TARGETS_ADDED = auto()
+    ABILITY_REGISTERED = auto()
     SCORE_MODIFIER_ADDED = auto()
     SCORE_MODIFIER_REMOVED = auto()
+    # Gods
+    GOD_LEVEL_UP = auto()
 
 @dataclass(slots=True)
 class GameEvent:

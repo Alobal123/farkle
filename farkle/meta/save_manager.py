@@ -159,17 +159,15 @@ class SaveManager:
             for relic in game.relic_manager.active_relics
         ]
         
-        # Gods
+        # Gods data
         gods_data = {
             'worshipped': [
                 {
                     'name': god.name,
                     'level': god.level,
-                    'xp': god.xp,
                 }
                 for god in game.gods.worshipped
             ],
-            'active_index': game.gods.active_index,
         }
         
         # Current turn state
@@ -353,19 +351,16 @@ class SaveManager:
         from farkle.gods.gods_manager import God
         
         worshipped_data = gods_data.get('worshipped', [])
-        active_index = gods_data.get('active_index', 0)
         
         # Restore worshipped gods
         restored_gods = []
         for god_data in worshipped_data:
             god = God(god_data.get('name', 'Unknown'), game)
             god.level = god_data.get('level', 1)
-            god.xp = god_data.get('xp', 0)
             restored_gods.append(god)
         
         if restored_gods:
             game.gods.set_worshipped(restored_gods)
-            game.gods.active_index = min(active_index, len(restored_gods) - 1)
     
     def _restore_game_state(self, game: Game, state_name: str) -> None:
         """Restore game state enum."""

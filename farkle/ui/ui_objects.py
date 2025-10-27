@@ -103,6 +103,28 @@ def build_core_buttons(game):
         used = reroll.charges_used if reroll else 0
         label = f"REROLL{star} ({remaining} / {cap})" if star else f"REROLL ({remaining} / {cap})"
         return label
+    
+    def sanctify_enabled(ability_id):
+        def _enabled(g):
+            abm = getattr(g,'ability_manager',None)
+            if not abm: return False
+            a = abm.get(ability_id)
+            return bool(a and a.can_activate(abm))
+        return _enabled
+    
+    def sanctify_label(ability_id):
+        def _label(g):
+            abm = getattr(g,'ability_manager',None)
+            sel = abm.selecting_ability() if abm else None
+            ability = abm.get(ability_id) if abm else None
+            remaining = ability.available() if ability else 0
+            star = '*' if (sel and sel.id==ability_id) else ''
+            cap = ability.charges_per_level if ability else 0
+            name = ability.name if ability else "Sanctify"
+            label = f"{name}{star} ({remaining}/{cap})" if star else f"{name} ({remaining}/{cap})"
+            return label
+        return _label
+    
     def next_enabled(g):
         # Always enabled while in a FARKLE state to allow player to forfeit rescue.
         return g.state_manager.get_state() == g.state_manager.state.FARKLE
@@ -113,12 +135,62 @@ def build_core_buttons(game):
         if reroll and reroll.available() > 0:
             return "Skip Rescue (Next Turn)"
         return "Next Turn (Farkle)"
+    
     buttons = [
         UIButton('reroll', REROLL_BTN, 'REROLL', (120,160,200), (120,160,200), None, reroll_enabled, reroll_label),
         UIButton('roll', ROLL_BTN, 'ROLL', BTN_ROLL_COLOR, BTN_ROLL_COLOR, GameEventType.REQUEST_ROLL, roll_enabled),
         UIButton('bank', BANK_BTN, 'BANK', BTN_BANK_COLOR, BTN_BANK_COLOR, GameEventType.REQUEST_BANK, bank_enabled),
-    UIButton('next', NEXT_BTN, 'Next Turn', (200,50,50), (200,50,50), GameEventType.REQUEST_NEXT_TURN, next_enabled, next_label),
+        UIButton('next', NEXT_BTN, 'Next Turn', (200,50,50), (200,50,50), GameEventType.REQUEST_NEXT_TURN, next_enabled, next_label),
     ]
+    
+    # Add sanctify ability buttons dynamically for each god
+    abm = getattr(game, 'ability_manager', None)
+    if abm:
+        sanctify_index = 0
+        for ability in abm.abilities:
+            if ability.id.startswith('sanctify_'):
+                # Position button to the right of reroll button (horizontally)
+                btn_x = REROLL_BTN.x + REROLL_BTN.width + 10 + (sanctify_index * 170)
+                btn_rect = pygame.Rect(btn_x, REROLL_BTN.y, 160, 40)
+                btn = UIButton(
+                    ability.id,
+                    btn_rect,
+                    ability.name,
+                    (150, 100, 180),  # Purple-ish color for god abilities
+                    (150, 100, 180),
+                    GameEventType.REQUEST_ABILITY,  # Use REQUEST_ABILITY event type
+                    sanctify_enabled(ability.id),
+                    sanctify_label(ability.id)
+                )
+                # Set visibility states (same as reroll button)
+                from farkle.core.game_state_enum import GameState
+                btn.visible_states = {GameState.ROLLING, GameState.FARKLE, GameState.SELECTING_TARGETS}
+                btn.interactable_states = {GameState.ROLLING, GameState.FARKLE, GameState.SELECTING_TARGETS}
+                
+                # Store ability_id for click handling
+                btn.ability_id = ability.id
+                
+                # Override handle_click to pass ability_id in payload
+                original_handle_click = btn.handle_click
+                def make_handler(aid):
+                    def handler(game, pos):
+                        # Check visibility and collision first
+                        st = game.state_manager.get_state()
+                        if hasattr(btn, 'visible_states') and st not in getattr(btn, 'visible_states', set()):
+                            return False
+                        if not btn.rect.collidepoint(*pos):
+                            return False
+                        if not btn.is_enabled_fn(game):
+                            return False
+                        # Publish REQUEST_ABILITY with ability_id
+                        game.event_listener.publish(GameEvent(GameEventType.REQUEST_ABILITY, payload={'ability_id': aid}))
+                        return True
+                    return handler
+                btn.handle_click = make_handler(ability.id)
+                
+                buttons.append(btn)
+                sanctify_index += 1
+    
     return buttons
 
 

@@ -228,7 +228,10 @@ class Game:
         self.event_listener.subscribe(self.input_controller.on_event)
         # Seed a default set of worshipped gods (up to three)
         try:
-            self.gods.set_worshipped([God("Zeus", self), God("Athena", self), God("Hermes", self)])
+            from farkle.gods.demeter import Demeter
+            from farkle.gods.ares import Ares
+            from farkle.gods.hades import Hades
+            self.gods.set_worshipped([Demeter(self), Ares(self), Hades(self)])
         except Exception:
             pass
         # Emit LEVEL_GENERATED for the initial level (so temple income is awarded on first level)
@@ -640,9 +643,33 @@ class Game:
             if getattr(event, 'button', None) == 3:
                 if self.state_manager.get_state() in (self.state_manager.state.ROLLING, self.state_manager.state.FARKLE, self.state_manager.state.SELECTING_TARGETS):
                     if self.state_manager.get_state() == self.state_manager.state.SELECTING_TARGETS:
-                        die_hit = any((not d.held) and d.rect().collidepoint(mx,my) for d in self.dice)
-                        if not die_hit and self.cancel_target_selection(reason="cancelled"):
-                            return
+                        # Check if ability targets goals
+                        abm = getattr(self, 'ability_manager', None)
+                        selecting_ability = abm.selecting_ability() if abm else None
+                        if selecting_ability:
+                            if selecting_ability.target_type == 'goal':
+                                # Check if right-click is on a goal to finalize
+                                goal_hit = False
+                                for idx, goal in enumerate(self.level_state.goals):
+                                    rect = getattr(goal, '_last_rect', None)
+                                    if rect and rect.collidepoint(mx, my):
+                                        goal_hit = True
+                                        # If goal not already selected, select it first
+                                        if idx not in getattr(selecting_ability, 'collected_targets', []):
+                                            abm.attempt_target('goal', idx)
+                                        # Finalize selection
+                                        if abm.finalize_selection():
+                                            return
+                                        break
+                                # If not clicking on goal, cancel selection
+                                if not goal_hit and self.cancel_target_selection(reason="cancelled"):
+                                    return
+                                return
+                            elif selecting_ability.target_type == 'die':
+                                # Original die handling
+                                die_hit = any((not d.held) and d.rect().collidepoint(mx,my) for d in self.dice)
+                                if not die_hit and self.cancel_target_selection(reason="cancelled"):
+                                    return
                     else:
                         die_hit = any((not d.held) and d.rect().collidepoint(mx,my) for d in self.dice)
                         if not die_hit and self.clear_all_selected_dice():
@@ -834,9 +861,48 @@ class Game:
             except Exception:
                 pass
 
+    def _rebuild_ui_buttons(self):
+        """Rebuild UI buttons to reflect new abilities (e.g., when gods level up)."""
+        try:
+            # Only rebuild if UI is fully initialized
+            if not hasattr(self, 'ui_buttons') or not hasattr(self, 'renderer'):
+                return
+            
+            # Remove old button sprites from sprite groups
+            from farkle.ui.sprites.ui_sprites import UIButtonSprite
+            if hasattr(self.renderer, 'layered'):
+                for sprite in list(self.renderer.layered.sprites()):
+                    if isinstance(sprite, UIButtonSprite):
+                        sprite.kill()
+            
+            # Rebuild logical buttons
+            self.ui_buttons = build_core_buttons(self)
+            
+            # Attach game reference to buttons
+            for _btn in self.ui_buttons:
+                try:
+                    setattr(_btn, 'game', self)
+                except Exception:
+                    pass
+            
+            # Create new button sprites
+            for btn in self.ui_buttons:
+                try:
+                    UIButtonSprite(btn, self, self.renderer.sprite_groups['ui'], self.renderer.layered)
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
     # Auto progression logic
     def on_event(self, event: GameEvent):  # type: ignore[override]
         et = event.type
+        # Rebuild UI buttons when new ability is registered (e.g., god levels up)
+        if et == GameEventType.ABILITY_REGISTERED:
+            try:
+                self._rebuild_ui_buttons()
+            except Exception:
+                pass
         # Detect all disasters fulfilled immediately on GOAL_FULFILLED
         if et == GameEventType.GOAL_FULFILLED:
             # Auto-switch to next unfulfilled goal if current goal was just fulfilled

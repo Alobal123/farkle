@@ -45,23 +45,33 @@ class GameStatistics:
         """Record a gold gain event."""
         amount = event.get('amount', 0)
         source = event.get('source', 'unknown')
+        goal_name = event.get('goal_name', '')
+        goal_category = event.get('goal_category', '')
+        god_name = event.get('god_name', '')
         
         self.total_gold_gained += amount
         self.gold_events.append({
             'amount': amount,
             'source': source,
+            'goal_name': goal_name,
+            'goal_category': goal_category,
+            'god_name': god_name,
             'total_after': self.total_gold_gained
         })
     
     def add_faith_event(self, event: GameEvent) -> None:
         """Record a faith gain event."""
         amount = event.get('amount', 0)
-        source = event.get('goal_name', 'unknown')
+        source = event.get('source', 'unknown')
+        goal_name = event.get('goal_name', '')
+        god_name = event.get('god_name', '')
         
         self.total_faith_gained += amount
         self.faith_events.append({
             'amount': amount,
             'source': source,
+            'goal_name': goal_name,
+            'god_name': god_name,
             'total_after': self.total_faith_gained
         })
     

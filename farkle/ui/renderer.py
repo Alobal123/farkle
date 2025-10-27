@@ -71,19 +71,52 @@ class GameRenderer:
         if getattr(g, 'relic_manager', None) and g.relic_manager.shop_open:
             return False
 
-    # Dice selection handled centrally by Game._handle_die_click.
-        if g._handle_die_click(mx, my, button=1):
-            consumed = True
+    # Check if we're in target selection mode
+        in_target_selection = g.state_manager.get_state() == g.state_manager.state.SELECTING_TARGETS
+        
         # Goal selection via each goal's cached rect from last draw
         # Skip fulfilled goals - they can't receive more points
-        for idx, goal in enumerate(g.level_state.goals):
-            rect = getattr(goal, '_last_rect', None)
-            if rect and rect.collidepoint(mx, my):
-                # Only allow selecting non-fulfilled goals
-                if not goal.is_fulfilled():
-                    g.active_goal_index = idx
+        # In target selection mode, check if ability targets goals first
+        if in_target_selection:
+            abm = getattr(g, 'ability_manager', None)
+            selecting_ability = abm.selecting_ability() if abm else None
+            if selecting_ability and selecting_ability.target_type == 'goal':
+                # Let goal sprites handle clicks during goal-targeting
+                for idx, goal in enumerate(g.level_state.goals):
+                    rect = getattr(goal, '_last_rect', None)
+                    if rect and rect.collidepoint(mx, my):
+                        # Goal sprite should handle this via its handle_click
+                        # which calls attempt_target
+                        if abm.attempt_target('goal', idx):
+                            return True
+                        break
+                return consumed
+        
+        # Normal goal selection (not in target selection mode)
+        if not in_target_selection:
+            for idx, goal in enumerate(g.level_state.goals):
+                rect = getattr(goal, '_last_rect', None)
+                if rect and rect.collidepoint(mx, my):
+                    # Only allow selecting non-fulfilled goals
+                    if not goal.is_fulfilled():
+                        g.active_goal_index = idx
+                        consumed = True
+                    break
+        
+        # Dice selection handled centrally by Game._handle_die_click
+        # Only allow dice selection during SELECTING_TARGETS if ability targets dice
+        if in_target_selection:
+            abm = getattr(g, 'ability_manager', None)
+            selecting_ability = abm.selecting_ability() if abm else None
+            if selecting_ability and selecting_ability.target_type == 'die':
+                # Allow dice clicks - they'll be handled by _handle_die_click
+                if g._handle_die_click(mx, my, button=1):
                     consumed = True
-                break
+        else:
+            # Normal dice selection (not in target selection mode)
+            if g._handle_die_click(mx, my, button=1):
+                consumed = True
+        
         return consumed
 
     # Button state & selection preview logic migrated to Game / button factories.

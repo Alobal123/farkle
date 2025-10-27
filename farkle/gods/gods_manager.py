@@ -6,9 +6,7 @@ from farkle.core.game_event import GameEvent, GameEventType
 from farkle.ui.settings import TEXT_PRIMARY, TEXT_ACCENT, HEIGHT
 
 # Gods progression constants
-GOD_MAX_LEVEL = 10
-# XP required to advance from level N to N+1 (indices 0..8 correspond to levels 1..9)
-GOD_XP_TO_LEVEL = [100, 150, 200, 250, 300, 350, 400, 450, 500]
+GOD_MAX_LEVEL = 3
 
 @dataclass
 class God(GameObject):
@@ -22,10 +20,8 @@ class God(GameObject):
         self.modifier_chain = ScoreModifierChain()
         # UI state managed by GodsManager during draw
         self._rect: Optional[pygame.Rect] = None
-        self._active: bool = False
         # Progression
         self.level: int = 1
-        self.xp: int = 0
 
     def draw(self, surface):  # type: ignore[override]
         # Draw the label for this god at its assigned rect
@@ -34,142 +30,47 @@ class God(GameObject):
         g = getattr(self, 'game', None)
         if not g:
             return None
-        display = f"[{self.name} Lv{self.level}]" if self._active else f"{self.name} Lv{self.level}"
-        color = (240, 230, 140) if self._active else TEXT_ACCENT
+        display = f"{self.name} Lv{self.level}"
+        color = TEXT_ACCENT
         try:
             surf = g.font.render(display, True, color)
             surface.blit(surf, self._rect.topleft)
-            # XP progress (below name)
-            xp_req = self.xp_required_for_next()
-            if xp_req > 0:
-                xp_text = f"XP {self.xp}/{xp_req}"
-            else:
-                xp_text = "MAX"
-            small = getattr(g, 'small_font', g.font)
-            xp_surf = small.render(xp_text, True, TEXT_PRIMARY)
-            xp_pos = (self._rect.x, self._rect.y + surf.get_height() + 2)
-            surface.blit(xp_surf, xp_pos)
-            # XP bar under the XP text
-            bar_margin_top = 2
-            bar_x = self._rect.x
-            bar_y = xp_pos[1] + xp_surf.get_height() + bar_margin_top
-            # Choose a reasonable width based on name width, min 80, max 160
-            bar_w = max(80, min(160, surf.get_width()))
-            bar_h = 6
-            # Background
-            pygame.draw.rect(surface, (50, 60, 70), pygame.Rect(bar_x, bar_y, bar_w, bar_h), border_radius=3)
-            # Border
-            pygame.draw.rect(surface, (90, 110, 130), pygame.Rect(bar_x, bar_y, bar_w, bar_h), width=1, border_radius=3)
-            # Fill proportion
-            if xp_req > 0:
-                pct = max(0.0, min(1.0, self.xp / float(xp_req)))
-            else:
-                pct = 1.0  # MAX
-            fill_w = int(bar_w * pct)
-            if fill_w > 0:
-                fill_color = (240, 230, 140) if xp_req == 0 else (90, 200, 110)
-                pygame.draw.rect(surface, fill_color, pygame.Rect(bar_x, bar_y, fill_w, bar_h), border_radius=3)
         except Exception:
             pass
         return None
 
-    # Progression helpers
-    def xp_required_for_next(self) -> int:
-        if self.level >= GOD_MAX_LEVEL:
-            return 0
-        idx = max(0, min(self.level - 1, len(GOD_XP_TO_LEVEL) - 1))
-        return GOD_XP_TO_LEVEL[idx]
-
-    def add_xp(self, amount: int) -> None:
-        if amount <= 0 or self.level >= GOD_MAX_LEVEL:
-            return
-        self.xp += int(amount)
-        # Handle multiple level-ups if enough XP
-        leveled = False
-        while self.level < GOD_MAX_LEVEL:
-            req = self.xp_required_for_next()
-            if req <= 0 or self.xp < req:
-                break
-            self.xp -= req
-            self.level += 1
-            leveled = True
-        if self.level >= GOD_MAX_LEVEL:
-            # Clamp XP at 0 for max level display
-            self.xp = 0
-        if leveled:
-            # Publish a message on level-up
-            try:
-                from farkle.core.game_event import GameEvent as GE, GameEventType as GET
-                self.game.event_listener.publish(GE(GET.MESSAGE, payload={"text": f"{self.name} reached Lv{self.level}"}))  # type: ignore[attr-defined]
-            except Exception:
-                pass
-
-    def apply_selective(self, score_obj) -> None:
-        """Apply this god's selective modifiers to the provided score_obj if any.
-
-        Global multipliers are removed from the game; only selective part modifiers may be used.
-        """
-        if not score_obj:
-            return
-        try:
-            base = getattr(score_obj, 'total_effective', 0)
-            # Build a concrete context that satisfies ScoreContext Protocol
-            class _GodScoreContext:
-                def __init__(self, score_obj, pending_raw: int):
-                    self.score_obj = score_obj
-                    self.pending_raw = pending_raw
-            context = _GodScoreContext(score_obj, base)
-            for m in self.modifier_chain.snapshot():  # type: ignore[attr-defined]
-                try:
-                    _ = m.apply(base, context)
-                except Exception:
-                    pass
-        except Exception:
-            pass
-
 
 class GodsManager(GameObject):
-    """Manages the currently worshipped gods and which one is active (prayed to).
+    """Manages the currently worshipped gods.
 
     - Up to three gods are worshipped at a time (displayed in UI).
-    - Only one god can be active; only the active god's effects apply to score events.
+    - Each god implementation listens for specific events and levels up independently.
     - Effects are selective modifiers contributed via events (SCORE_MODIFIER_ADDED) and applied centrally by ScoringManager.
     """
     def __init__(self, game):
         super().__init__(name="GodsManager")
         self.game = game
         self.worshipped: List[God] = []
-        self.active_index: int = 0
         self._god_name_rects: list[pygame.Rect] = []
 
     def set_worshipped(self, gods: List[God]):
+        """Set the worshipped gods and activate them."""
+        # Deactivate old gods
+        for god in self.worshipped:
+            if god.active:
+                god.deactivate(self.game)
+        
+        # Set new gods
         self.worshipped = gods[:3]
-        if self.active_index >= len(self.worshipped):
-            self.active_index = 0 if self.worshipped else -1
-
-    def active_god(self) -> Optional[God]:
-        if 0 <= self.active_index < len(self.worshipped):
-            return self.worshipped[self.active_index]
-        return None
-
-    def select_active(self, index: int) -> None:
-        if 0 <= index < len(self.worshipped):
-            self.active_index = index
-            try:
-                from farkle.core.game_event import GameEvent as GE, GameEventType as GET
-                self.game.event_listener.publish(GE(GET.MESSAGE, payload={"text": f"Praying to {self.worshipped[index].name}"}))
-            except Exception:
-                pass
+        
+        # Activate new gods
+        for god in self.worshipped:
+            if not god.active:
+                god.activate(self.game)
 
     def on_event(self, event: GameEvent):  # type: ignore[override]
-        if event.type == GameEventType.SCORE_APPLIED:
-            # Award XP to active god equal to applied adjusted points
-            adjusted = int(event.get('adjusted', 0) or 0)
-            if adjusted > 0:
-                g = self.active_god()
-                if g is not None:
-                    g.add_xp(adjusted)
-        # No other event handling yet
+        # Gods no longer gain XP from scoring events
+        # Each god implementation will listen for specific events and level up independently
         return
 
     def draw(self, surface):  # type: ignore[override]
@@ -204,9 +105,8 @@ class GodsManager(GameObject):
         for i, god in enumerate(self.worshipped):
             # Compute size from current label (with level) to advance x; God will render itself
             base_display = f"{god.name} Lv{god.level}"
-            display = f"[{base_display}]" if i == self.active_index else base_display
             try:
-                surf = g.font.render(display, True, TEXT_ACCENT)
+                surf = g.font.render(base_display, True, TEXT_ACCENT)
                 rect = surf.get_rect()
             except Exception:
                 rect = pygame.Rect(0, 0, 60, 20)
@@ -214,7 +114,6 @@ class GodsManager(GameObject):
             rect.topleft = (x, y_start)
             # Update per-god UI state
             god._rect = rect
-            god._active = (i == self.active_index)
             # Delegate draw to the god
             try:
                 god.draw(surface)
@@ -232,8 +131,8 @@ class GodsManager(GameObject):
         if in_shop:
             try:
                 total_w = max(0, x - x_start)
-                # Name height + xp text height + spacing + bar height (6)
-                panel_h = max_name_h + 2 + small_h + 2 + 6
+                # Name height only (no XP bar anymore)
+                panel_h = max_name_h + 4
                 if total_w > 0 and panel_h > 0:
                     overlay = pygame.Surface((total_w, panel_h), pygame.SRCALPHA)
                     overlay.fill((0, 0, 0, 120))
@@ -242,35 +141,5 @@ class GodsManager(GameObject):
                 pass
 
     def handle_click(self, game, pos) -> bool:  # type: ignore[override]
-        mx, my = pos
-        if not self.worshipped:
-            return False
-        # Ignore clicks during shop
-        try:
-            if hasattr(game, 'relic_manager') and getattr(game.relic_manager, 'shop_open', False):
-                return False
-            st = game.state_manager.get_state()
-            if st == game.state_manager.state.SHOP:
-                return False
-            # Gating: allow switching while in PRE_ROLL (before first roll) or BANKED (after banking, before next turn starts)
-            if st not in (game.state_manager.state.PRE_ROLL, game.state_manager.state.BANKED):
-                # Provide subtle feedback message (non-intrusive); swallow click if over a god label
-                for god in self.worshipped:
-                    r = getattr(god, '_rect', None)
-                    if r and r.collidepoint(mx, my):
-                        try:
-                            from farkle.core.game_event import GameEvent as GE, GameEventType as GET
-                            game.event_listener.publish(GE(GET.MESSAGE, payload={"text": "Can only switch gods before or after a turn (banked)."}))
-                        except Exception:
-                            pass
-                        return True  # treat as consumed so other handlers don't misinterpret
-                return False
-        except Exception:
-            pass
-        # Prefer per-god rects for click detection
-        for i, god in enumerate(self.worshipped):
-            r = getattr(god, '_rect', None)
-            if r and r.collidepoint(mx, my):
-                self.select_active(i)
-                return True
+        # No longer handle god switching clicks
         return False

@@ -18,9 +18,9 @@ class GameObject(ABC):
         # Interaction gating separate from visibility (object may be visible but not clickable)
         self.interactable_states = None  # type: ignore[attr-defined]
         self.interactable_predicate = None  # type: ignore[attr-defined]
-    # Activation flag. Subclasses wanting deferred activation (e.g., relic before purchase)
-    # can set this False then call activate(game) later.
-        self.active: bool = True
+    # Activation flag. Objects start inactive by default and must be explicitly activated.
+    # This ensures proper event subscription via activate(game).
+        self.active: bool = False
         # Internal subscription bookkeeping so deactivate can unsubscribe only
         # the callbacks this object registered through activate(). Each entry
         # is (callback, events_or_None)

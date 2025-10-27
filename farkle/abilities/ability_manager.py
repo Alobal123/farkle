@@ -29,6 +29,13 @@ class AbilityManager:
                 el.subscribe(ability.on_event, types={GameEventType.ABILITY_CHARGES_ADDED, GameEventType.ABILITY_TARGETS_ADDED})
             except Exception:
                 pass
+        # Emit ABILITY_REGISTERED event so UI can rebuild buttons
+        if el is not None:
+            try:
+                from farkle.core.game_event import GameEvent
+                el.publish(GameEvent(GameEventType.ABILITY_REGISTERED, payload={"ability_id": ability.id, "ability_name": ability.name}))
+            except Exception:
+                pass
 
     def reset_level(self):
         for a in self.abilities:

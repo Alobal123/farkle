@@ -39,13 +39,77 @@ class Goal(GameObject):
         return self.remaining == 0
 
     def claim_reward(self) -> tuple[int, int, str, int]:
-        """Return (gold_reward, income_reward, blessing_type, faith_reward) if goal is fulfilled and not yet claimed; mark claimed.
+        """Emit reward events if goal is fulfilled and not yet claimed; mark claimed.
         
         Returns:
             tuple[int, int, str, int]: (gold_amount, income_amount, blessing_type, faith_amount)
         """
         if self.is_fulfilled() and not self.reward_claimed and (self.reward_gold > 0 or self.reward_income > 0 or self.reward_blessing or self.reward_faith > 0):
             self.reward_claimed = True
+            
+            # Emit REWARDED events (offered rewards, gods can intercept)
+            if self.reward_gold > 0:
+                try:
+                    self.game.event_listener.publish(GameEvent(
+                        GameEventType.GOLD_REWARDED,
+                        payload={
+                            "amount": self.reward_gold,
+                            "source": "goal_reward",
+                            "goal_name": self.name,
+                            "goal_category": self.category
+                        }
+                    ))
+                except Exception:
+                    pass
+            
+            if self.reward_income > 0:
+                try:
+                    # Calculate new total for the event
+                    player = getattr(self.game, 'player', None)
+                    new_total = getattr(player, 'temple_income', 0) + self.reward_income if player else self.reward_income
+                    
+                    self.game.event_listener.publish(GameEvent(
+                        GameEventType.INCOME_REWARDED,
+                        payload={
+                            "amount": self.reward_income,
+                            "source": "goal_reward",
+                            "goal_name": self.name,
+                            "goal_category": self.category,
+                            "new_total": new_total
+                        }
+                    ))
+                except Exception:
+                    pass
+            
+            if self.reward_faith > 0:
+                try:
+                    self.game.event_listener.publish(GameEvent(
+                        GameEventType.FAITH_REWARDED,
+                        payload={
+                            "amount": self.reward_faith,
+                            "source": "goal_reward",
+                            "goal_name": self.name,
+                            "goal_category": self.category
+                        }
+                    ))
+                except Exception:
+                    pass
+            
+            if self.reward_blessing:
+                try:
+                    self.game.event_listener.publish(GameEvent(
+                        GameEventType.BLESSING_REWARDED,
+                        payload={
+                            "blessing_type": self.reward_blessing,
+                            "source": "goal_reward",
+                            "goal_name": self.name,
+                            "goal_category": self.category
+                        }
+                    ))
+                except Exception:
+                    pass
+            
+            # Return original values for backward compatibility
             return (self.reward_gold, self.reward_income, self.reward_blessing, self.reward_faith)
         return (0, 0, "", 0)
 

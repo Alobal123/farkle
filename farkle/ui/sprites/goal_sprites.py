@@ -131,7 +131,25 @@ class GoalSprite(BaseSprite):
         bg, border = goal.get_category_colors(goal.category, goal.is_fulfilled())
         
         pygame.draw.rect(self.image, bg, self.image.get_rect(), border_radius=10)
-        if g.active_goal_index == idx:
+        
+        # Check if this goal is selected as an ability target
+        is_target_selected = False
+        try:
+            abm = getattr(g, 'ability_manager', None)
+            if abm and g.state_manager.get_state() == g.state_manager.state.SELECTING_TARGETS:
+                selecting_ability = abm.selecting_ability()
+                if selecting_ability and selecting_ability.target_type == 'goal':
+                    collected = getattr(selecting_ability, 'collected_targets', [])
+                    if idx in collected:
+                        is_target_selected = True
+        except Exception:
+            pass
+        
+        # Draw borders: ability target selection takes precedence
+        if is_target_selected:
+            # Bright cyan/gold border for selected ability target
+            pygame.draw.rect(self.image, (100, 220, 255), self.image.get_rect(), width=4, border_radius=10)
+        elif g.active_goal_index == idx:
             pygame.draw.rect(self.image, GOAL_BORDER_ACTIVE, self.image.get_rect(), width=3, border_radius=10)
         
         # --- Content Rendering ---
@@ -230,6 +248,42 @@ class GoalSprite(BaseSprite):
             self.image.blit(reward_surf, (reward_x, reward_y))
 
         self.dirty = 1
+
+    def handle_click(self, game, pos):
+        """Handle clicks on goals for target selection (e.g., sanctify ability)."""
+        mx, my = pos
+        if not self.rect.collidepoint(mx, my):
+            return False
+        
+        # Check if we're in target selection mode for a goal-targeting ability
+        try:
+            ability_mgr = getattr(game, 'ability_manager', None)
+            if not ability_mgr:
+                return False
+            
+            selecting_ability = ability_mgr.selecting_ability()
+            if not selecting_ability:
+                return False
+            
+            # Check if this ability targets goals
+            if getattr(selecting_ability, 'target_type', None) != 'goal':
+                return False
+            
+            # Get goal index
+            goals = game.level_state.goals
+            try:
+                goal_index = goals.index(self.goal)
+            except (ValueError, AttributeError):
+                return False
+            
+            # Attempt to use ability on this goal
+            if ability_mgr.attempt_target('goal', goal_index):
+                return True
+                
+        except Exception:
+            pass
+        
+        return False
 
 
 __all__ = ["GoalSprite"]

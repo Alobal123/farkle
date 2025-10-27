@@ -71,15 +71,14 @@ class DieSprite(BaseSprite):
         self.image = cached
         # Keep rect in sync with logical position
         self.rect.topleft = (d.x, d.y)
-        # Reroll highlight overlay (replaces legacy renderer overlay).
+        # Ability target selection highlight overlay (unified visual with goal selection)
         game = getattr(d, 'game', None)
         try:
             abm = getattr(game, 'ability_manager', None)
             sel_ab = abm.selecting_ability() if abm else None
-            if sel_ab and sel_ab.id == 'reroll' and not d.held:
-                # Multi-target selection visuals:
-                # - Unselected selectable dice: green outline only
-                # - Selected dice: green fill overlay
+            if sel_ab and sel_ab.target_type == 'die' and not d.held:
+                # Unified target selection visuals (matching goal selection):
+                # - Selected dice: bright cyan border (same as goals)
                 base = self.image.copy()
                 import pygame as _pg
                 die_index = None
@@ -89,14 +88,9 @@ class DieSprite(BaseSprite):
                     pass
                 collected = getattr(sel_ab, 'collected_targets', []) if sel_ab else []
                 if die_index is not None and die_index in collected:
-                    overlay = _pg.Surface(base.get_size(), _pg.SRCALPHA)
-                    overlay.fill((60,220,140,100))
-                    base.blit(overlay, (0,0))
-                    self.image = base
-                else:
-                    # Draw only circumference highlight
+                    # Bright cyan border for selected targets (matches goal selection)
                     ring = _pg.Surface(base.get_size(), _pg.SRCALPHA)
-                    _pg.draw.rect(ring, (60,220,140), ring.get_rect(), 4, border_radius=8)
+                    _pg.draw.rect(ring, (100, 220, 255), ring.get_rect(), 4, border_radius=8)
                     base.blit(ring, (0,0))
                     self.image = base
         except Exception:

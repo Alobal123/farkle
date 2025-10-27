@@ -78,28 +78,25 @@ class GodsPanelSprite(BaseSprite):
         y_start = 20
         
         font = g.font
-        small_font = getattr(g, 'small_font', font)
         
-        # Compute needed width incrementally
+        # Compute needed width incrementally - only god name + level now
         name_surfs = []
         max_name_h = 0
         for i, god in enumerate(gm.worshipped):
             base_display = f"{god.name} Lv{god.level}"
-            display = f"[{base_display}]" if i == gm.active_index else base_display
             try:
-                surf = font.render(display, True, (240,230,140) if i == gm.active_index else (180,210,250))
+                surf = font.render(base_display, True, (180,210,250))
             except Exception:
                 surf = font.render("?", True, (200,200,200))
             name_surfs.append(surf)
             max_name_h = max(max_name_h, surf.get_height())
-        # xp text height
-        xp_h = small_font.get_height()
-        bar_h = 6
-        panel_h = max_name_h + 2 + xp_h + 2 + bar_h
+        
+        # Panel height is just the name height now (no XP bar)
+        panel_h = max_name_h + 4
+        
         # Compute width
         spacing = 12
         total_width = 0
-        per_god_rects = []
         for surf in name_surfs:
             total_width += surf.get_width() + spacing
         if name_surfs:
@@ -110,39 +107,13 @@ class GodsPanelSprite(BaseSprite):
         # Build surface
         self.image = pygame.Surface((total_width, panel_h), pygame.SRCALPHA)
         self.rect = self.image.get_rect(topleft=(x_start, y_start))
-        # Draw label
         
+        # Draw gods
         x = 0
-        xp_req_cache = []
         for i, (surf, god) in enumerate(zip(name_surfs, gm.worshipped)):
-            rect = surf.get_rect(topleft=(x,0))
+            rect = surf.get_rect(topleft=(x, 2))
             god._rect = pygame.Rect(self.rect.x + rect.x, self.rect.y + rect.y, rect.width, rect.height)
-            god._active = (i == gm.active_index)
             self.image.blit(surf, rect.topleft)
-            # XP text
-            xp_req = god.xp_required_for_next()
-            xp_req_cache.append(xp_req)
-            if xp_req > 0:
-                xp_text = f"XP {god.xp}/{xp_req}"
-            else:
-                xp_text = "MAX"
-            xp_surf = small_font.render(xp_text, True, (200,210,220))
-            xp_pos = (rect.x, rect.bottom + 2)
-            self.image.blit(xp_surf, xp_pos)
-            # XP bar
-            bar_x = rect.x
-            bar_y = xp_pos[1] + xp_surf.get_height() + 2
-            bar_w = max(80, min(160, surf.get_width()))
-            pygame.draw.rect(self.image, (50,60,70), pygame.Rect(bar_x, bar_y, bar_w, bar_h), border_radius=3)
-            pygame.draw.rect(self.image, (90,110,130), pygame.Rect(bar_x, bar_y, bar_w, bar_h), width=1, border_radius=3)
-            if xp_req > 0:
-                pct = max(0.0, min(1.0, god.xp / float(xp_req)))
-            else:
-                pct = 1.0
-            fill_w = int(bar_w * pct)
-            if fill_w > 0:
-                fill_color = (240,230,140) if xp_req == 0 else (90,200,110)
-                pygame.draw.rect(self.image, fill_color, pygame.Rect(bar_x, bar_y, fill_w, bar_h), border_radius=3)
             x += rect.width + spacing
         self.dirty = 1
 

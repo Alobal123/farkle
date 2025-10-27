@@ -63,32 +63,72 @@ class Player(GameObject):
                     "source": "temple_income"
                 }))
         elif event.type == GameEventType.GOAL_FULFILLED:
+            # Trigger reward claiming (goal will emit reward events)
             goal = event.get("goal")
             if goal and hasattr(goal, 'claim_reward'):
-                gold_gained, income_gained, blessing_type, faith_gained = goal.claim_reward()
-                if gold_gained > 0:
-                    self.add_gold(gold_gained)
-                    from farkle.core.game_event import GameEvent as GE, GameEventType as GET
-                    self.game.event_listener.publish(GE(GET.GOLD_GAINED, payload={"amount": gold_gained, "goal_name": goal.name}))  # type: ignore[attr-defined]
-                if income_gained > 0:
-                    self.temple_income += income_gained
-                    # Publish INCOME_GAINED event for UI feedback
-                    from farkle.core.game_event import GameEvent as GE, GameEventType as GET
-                    self.game.event_listener.publish(GE(GET.INCOME_GAINED, payload={
-                        "amount": income_gained, 
-                        "goal_name": goal.name,  # type: ignore[attr-defined]
-                        "new_total": self.temple_income
-                    }))
-                if faith_gained > 0:
-                    self.add_faith(faith_gained)
-                    from farkle.core.game_event import GameEvent as GE, GameEventType as GET
-                    self.game.event_listener.publish(GE(GET.FAITH_GAINED, payload={
-                        "amount": faith_gained,
-                        "goal_name": goal.name  # type: ignore[attr-defined]
-                    }))
-                if blessing_type:
-                    # Apply blessing based on type
-                    self._apply_blessing(blessing_type)
+                goal.claim_reward()
+                # Blessings are now handled via BLESSING_REWARDED events
+        elif event.type == GameEventType.BLESSING_REWARDED:
+            # Blessing reward offered by goal or god - apply and emit BLESSING_GAINED
+            blessing_type = event.get("blessing_type", "")
+            source = event.get("source", "unknown")
+            if source in ("goal_reward", "god_bonus") and blessing_type:
+                self._apply_blessing(blessing_type)
+                # Emit BLESSING_GAINED to confirm receipt
+                from farkle.core.game_event import GameEvent as GE, GameEventType as GET
+                self.game.event_listener.publish(GE(GET.BLESSING_GAINED, payload={
+                    "blessing_type": blessing_type,
+                    "source": source,
+                    "goal_name": event.get("goal_name"),
+                    "goal_category": event.get("goal_category"),
+                    "god_name": event.get("god_name")
+                }))
+        elif event.type == GameEventType.GOLD_REWARDED:
+            # Gold reward offered by goal or god - process and emit GOLD_GAINED
+            amount = event.get("amount", 0)
+            source = event.get("source", "unknown")
+            if source in ("goal_reward", "god_bonus") and amount > 0:
+                self.add_gold(amount)
+                # Emit GOLD_GAINED to confirm receipt
+                from farkle.core.game_event import GameEvent as GE, GameEventType as GET
+                self.game.event_listener.publish(GE(GET.GOLD_GAINED, payload={
+                    "amount": amount,
+                    "source": source,
+                    "goal_name": event.get("goal_name"),
+                    "goal_category": event.get("goal_category"),
+                    "god_name": event.get("god_name")
+                }))
+        elif event.type == GameEventType.INCOME_REWARDED:
+            # Income reward offered by goal or god - process and emit INCOME_GAINED
+            amount = event.get("amount", 0)
+            source = event.get("source", "unknown")
+            if source in ("goal_reward", "god_bonus") and amount > 0:
+                self.temple_income += amount
+                # Emit INCOME_GAINED to confirm receipt
+                from farkle.core.game_event import GameEvent as GE, GameEventType as GET
+                self.game.event_listener.publish(GE(GET.INCOME_GAINED, payload={
+                    "amount": amount,
+                    "source": source,
+                    "goal_name": event.get("goal_name"),
+                    "goal_category": event.get("goal_category"),
+                    "god_name": event.get("god_name"),
+                    "new_total": self.temple_income
+                }))
+        elif event.type == GameEventType.FAITH_REWARDED:
+            # Faith reward offered by goal or god - process and emit FAITH_GAINED
+            amount = event.get("amount", 0)
+            source = event.get("source", "unknown")
+            if source in ("goal_reward", "god_bonus") and amount > 0:
+                self.add_faith(amount)
+                # Emit FAITH_GAINED to confirm receipt
+                from farkle.core.game_event import GameEvent as GE, GameEventType as GET
+                self.game.event_listener.publish(GE(GET.FAITH_GAINED, payload={
+                    "amount": amount,
+                    "source": source,
+                    "goal_name": event.get("goal_name"),
+                    "goal_category": event.get("goal_category"),
+                    "god_name": event.get("god_name")
+                }))
 
     def _apply_blessing(self, blessing_type: str) -> None:
         """Apply a blessing to the player based on type."""

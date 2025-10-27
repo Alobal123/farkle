@@ -103,7 +103,14 @@ class InputController:
     # Ability selection state indicated by ability.selecting (reroll button outline uses this).
         if ability.selectable:
             if ability.selecting:
-                g.set_message(f"Select target(s) for {ability.name}.")
+                # Customize message based on target type
+                target_type = getattr(ability, 'target_type', 'die')
+                if target_type == 'goal':
+                    g.set_message(f"Select target goal for {ability.name}. Right-click to confirm.")
+                elif target_type == 'die':
+                    g.set_message(f"Select target die/dice for {ability.name}. Right-click to confirm.")
+                else:
+                    g.set_message(f"Select target(s) for {ability.name}.")
             else:
                 # If selection cancelled without execution
                 if ability.available() >= 0:  # state unchanged or executed
