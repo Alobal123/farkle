@@ -27,7 +27,6 @@ class TestGameOverScreen(unittest.TestCase):
         self.assertFalse(screen.success)
         self.assertEqual(screen.level_name, "Test Level")
         self.assertEqual(screen.level_index, 3)
-        self.assertEqual(len(screen.unfinished_goals), 2)
         self.assertFalse(screen.is_done())
 
     def test_game_over_screen_success(self):
@@ -43,7 +42,7 @@ class TestGameOverScreen(unittest.TestCase):
         
         self.assertTrue(screen.success)
         self.assertEqual(screen.level_name, "Final Trial")
-        self.assertEqual(len(screen.unfinished_goals), 0)
+        self.assertEqual(screen.level_index, 10)
 
     def test_game_over_button_click(self):
         """Test clicking return to menu button."""

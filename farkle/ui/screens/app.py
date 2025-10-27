@@ -44,13 +44,19 @@ class App:
             level_index = event.get("level_index", 1)
             unfinished = event.get("unfinished", [])
             
+            # Get statistics from the game if available
+            statistics = {}
+            if self.game and hasattr(self.game, 'statistics_tracker'):
+                statistics = self.game.statistics_tracker.export_summary()
+            
             self.screens['game_over'] = GameOverScreen(
                 self.screen, 
                 self.font,
                 success=False,
                 level_name=level_name,
                 level_index=level_index,
-                unfinished_goals=unfinished
+                unfinished_goals=unfinished,
+                statistics=statistics
             )
             # Transition to game over screen
             self.current_name = 'game_over'

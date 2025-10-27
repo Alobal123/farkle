@@ -44,7 +44,9 @@ class LevelFailureTests(unittest.TestCase):
         
         # Verify the event contains correct information
         failed_event = failed_events[0]
-        self.assertEqual(failed_event.get("level_name"), "Test Level")
+        # Level name is now the disaster name from JSON (randomly chosen)
+        self.assertIsNotNone(failed_event.get("level_name"))
+        self.assertNotEqual(failed_event.get("level_name"), "")
         self.assertEqual(failed_event.get("level_index"), 1)
         
         # Check that level_state.failed is set

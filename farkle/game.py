@@ -38,6 +38,7 @@ from farkle.relics.relic_manager import RelicManager
 from farkle.abilities.ability_manager import AbilityManager
 from farkle.scoring.scoring_manager import ScoringManager
 from farkle.gods.gods_manager import GodsManager, God
+from farkle.meta.statistics_tracker import StatisticsTracker
 
 class Game:
     def __init__(self, screen, font, clock, level: Level | None = None, *, rng_seed: int | None = None, auto_initialize: bool = True):
@@ -96,12 +97,12 @@ class Game:
         except Exception:
             self.rng = None  # fallback; direct random usage will occur until fixed
         
-        # Use provided level or default prototype (multi-goal capable with petitions)
+        # Use provided level or create a default level with disaster from JSON
         self.level = self._initial_level or Level.single(
-            name="Invocation Rite", 
+            name="",  # Name will be replaced by disaster title from JSON
             target_goal=300, 
-            max_turns=3,  # Changed from 2 to 3 to fix test assumptions
-            description="Basic ritual to avert a minor omen.",
+            max_turns=3,
+            description="",
             rng=self.rng
         )
         self.level_state = LevelState(self.level)
@@ -209,6 +210,8 @@ class Game:
         # Removed transient GameStateDebugSprite used for debugging state visibility.
         # Event listener hub (create before abilities so filtered subscriptions can attach)
         self.event_listener = EventListener()
+        # Statistics tracker for meta progression (achievements, upgrades, etc.)
+        self.statistics_tracker = StatisticsTracker(self)
         # Ability manager owns reroll ability; create then subscribe filtered
         self.ability_manager = AbilityManager(self)
         try:
@@ -1017,7 +1020,9 @@ class Game:
                 if self.state_manager.get_state() != self.state_manager.state.SHOP:
                     self.state_manager.set_state(self.state_manager.state.PRE_ROLL)
             # Reset per-turn selection flags
-            self.active_goal_index = 0
+            # Only reset goal index on initial turn or when advancing to new level
+            if initial or advancing:
+                self.active_goal_index = 0
             self.locked_after_last_roll = False
             # Ensure dice selection flags cleared (values preserved until first roll unless reset_turn already did)
             for d in self.dice:

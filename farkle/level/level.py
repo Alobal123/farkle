@@ -35,9 +35,12 @@ class Level:
         
         # Start with a disaster
         goals_list = []
+        level_name = name  # Default to provided name
         disasters = load_disasters()
         if disasters:
             disaster = rng.choice(disasters)
+            # Use the disaster title as the level name
+            level_name = disaster['title']
             # Disasters have no reward - they just advance to the next level
             goals_list.append((disaster['title'], target_goal, True, 0, 0, "", disaster.get('text', ''), disaster.get('category', ''), ''))
         else:
@@ -76,7 +79,7 @@ class Level:
                     
                     goals_list.append((opt_name, opt_target, False, opt_reward_gold, opt_reward_income, opt_reward_blessing, opt_flavor, opt_category, opt_persona))
         
-        return Level(name=name, max_turns=max_turns, description=description,
+        return Level(name=level_name, max_turns=max_turns, description=description,
                      goals=tuple(goals_list))
 
     @staticmethod
