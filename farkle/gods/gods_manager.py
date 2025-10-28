@@ -30,7 +30,7 @@ class God(GameObject):
         g = getattr(self, 'game', None)
         if not g:
             return None
-        display = f"{self.name} Lv{self.level}"
+        display = f"{self.name}"
         color = TEXT_ACCENT
         try:
             surf = g.font.render(display, True, color)

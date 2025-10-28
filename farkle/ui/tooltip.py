@@ -264,7 +264,25 @@ def resolve_hover(game, pos: tuple[int,int]) -> Optional[Dict]:
                             return {"title": "Player Status", "lines": ["No active effects"], "target": sprite.rect.copy(), "id": "player_hud"}
     except Exception:
         pass
-    # 7. Help icon
+    # 7. Gods panel
+    try:
+        gods_manager = getattr(game, 'gods', None)
+        if gods_manager:
+            for god in gods_manager.worshipped:
+                god_rect = getattr(god, '_rect', None)
+                if god_rect and god_rect.collidepoint(mx, my):
+                    # Get tooltip lines from the god itself
+                    lines = []
+                    if hasattr(god, 'get_tooltip_lines'):
+                        lines = god.get_tooltip_lines()
+                    else:
+                        # Fallback for gods that don't implement get_tooltip_lines
+                        lines = [god.name]
+                    
+                    return {"title": god.name, "lines": lines, "target": god_rect.copy(), "id": f"god_{god.name}"}
+    except Exception:
+        pass
+    # 8. Help icon
     try:
         for obj in getattr(game, 'ui_misc', []):
             if getattr(obj, 'name', None) == 'HelpIcon' and getattr(obj, 'rect', None) and obj.rect.collidepoint(mx,my):

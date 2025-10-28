@@ -79,11 +79,11 @@ class GodsPanelSprite(BaseSprite):
         
         font = g.font
         
-        # Compute needed width incrementally - only god name + level now
+        # Compute needed width incrementally - only god name (no level)
         name_surfs = []
         max_name_h = 0
         for i, god in enumerate(gm.worshipped):
-            base_display = f"{god.name} Lv{god.level}"
+            base_display = f"{god.name}"
             try:
                 surf = font.render(base_display, True, (180,210,250))
             except Exception:
