@@ -7,4 +7,5 @@ class GameState(Enum):
     BANKED = auto()    # Player banked points, show dice, wait for next turn
     SHOP = auto()      # Between-level relic shop open; gameplay inputs gated
     SELECTING_TARGETS = auto()  # Ability targeting mode (die clicks select targets)
+    CHOICE_WINDOW = auto()  # Choice window open; gameplay inputs gated
     GAME_OVER = auto()  # Game ended (failure or victory), show results

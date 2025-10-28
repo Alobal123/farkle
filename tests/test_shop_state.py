@@ -14,7 +14,7 @@ class ShopStateTests(unittest.TestCase):
         cls.clock = pygame.time.Clock()
 
     def setUp(self):
-        self.game = Game(self.screen, self.font, self.clock)
+        self.game = Game(self.screen, self.font, self.clock, skip_god_selection=True)
         # Force level advancement finished to open shop
         self.game.event_listener.publish(GameEvent(GameEventType.LEVEL_ADVANCE_FINISHED, payload={"level_index": 2}))
         self.assertEqual(self.game.state_manager.get_state().name, 'SHOP')

@@ -14,7 +14,7 @@ class PendingScoringTests(unittest.TestCase):
         cls.clock = pygame.time.Clock()
 
     def setUp(self):
-        self.game = Game(self.screen, self.font, self.clock)
+        self.game = Game(self.screen, self.font, self.clock, skip_god_selection=True)
         self.game.state_manager.transition_to_rolling()
 
     def prepare_scoring_die(self, die_index: int, value: int):

@@ -6,6 +6,35 @@ are included in the scoring manager chain without relying on event side-effects.
 from __future__ import annotations
 from typing import Iterable
 
+def skip_god_selection(game):
+    """Close the god selection window if open, to get to normal gameplay state.
+    
+    Many tests don't care about god selection and just want to test gameplay.
+    This helper selects a default god and closes the window.
+    """
+    from farkle.core.game_state_enum import GameState
+    from farkle.core.game_event import GameEventType
+    
+    # Check if we're in god selection state
+    if game.state_manager.get_state() != GameState.CHOICE_WINDOW:
+        return
+    
+    # Get the active choice window
+    if not hasattr(game, 'choice_window_manager'):
+        return
+    
+    window = game.choice_window_manager.get_active_window()
+    if not window or window.window_type != "god_selection":
+        return
+    
+    # Select the first god (Demeter) as default
+    if len(window.items) > 0:
+        first_god = window.items[0]
+        window.select_item(first_god.id)
+    
+    # Confirm selection (this will close the window and trigger begin_turn)
+    window.confirm()
+
 def ensure_relic_modifiers(game, relics: Iterable):
     """Activate each relic (if not already) and inject its modifiers into scoring manager.
 

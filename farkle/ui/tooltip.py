@@ -64,6 +64,36 @@ def _wrap(font: pygame.font.Font, text: str, max_width: int) -> List[str]:
 
 def resolve_hover(game, pos: tuple[int,int]) -> Optional[Dict]:
     mx, my = pos
+    
+    # CHOICE WINDOW - Check first since it's modal and should take precedence
+    try:
+        if hasattr(game, 'choice_window_sprite') and game.choice_window_sprite:
+            cw = game.choice_window_sprite.choice_window
+            if cw and cw.is_open() and not cw.is_minimized():
+                # Check if hovering over a god choice item
+                if hasattr(game.choice_window_sprite, '_item_sprites'):
+                    for sprite in game.choice_window_sprite._item_sprites:
+                        if sprite.rect.collidepoint(mx, my):
+                            # Check if this is a god choice sprite
+                            if hasattr(sprite, 'god'):
+                                god = sprite.god
+                                lines = []
+                                # Get tooltip lines from the god
+                                if hasattr(god, 'get_tooltip_lines'):
+                                    lines = god.get_tooltip_lines()
+                                else:
+                                    # Fallback for gods that don't implement get_tooltip_lines
+                                    if hasattr(god, 'description'):
+                                        lines.append(god.description)
+                                return {
+                                    "title": god.name,
+                                    "lines": lines,
+                                    "target": sprite.rect.copy(),
+                                    "id": f"god_choice_{god.name}"
+                                }
+    except Exception:
+        pass
+    
     # If the shop is open, treat its panel/buttons as exclusive hover targets before any other UI.
     try:
         if getattr(game.relic_manager, 'shop_open', False):

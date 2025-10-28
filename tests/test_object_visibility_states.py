@@ -23,7 +23,7 @@ class TestObjectVisibilityStates(unittest.TestCase):
         cls.clock = pygame.time.Clock()
 
     def setUp(self):
-        self.game = Game(self.screen, self.font, self.clock)
+        self.game = Game(self.screen, self.font, self.clock, skip_god_selection=True)
         # Inject dummy object; dynamic list expects dice but draw loop tolerates generic GameObject
         dummy = DummyObj()
         self.game.ui_dynamic.append(dummy)  # type: ignore[arg-type]

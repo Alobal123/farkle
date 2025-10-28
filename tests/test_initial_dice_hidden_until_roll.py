@@ -13,7 +13,7 @@ class TestInitialDiceHiddenUntilRoll(unittest.TestCase):
         cls.clock = pygame.time.Clock()
 
     def setUp(self):
-        self.game = Game(self.screen, self.font, self.clock)
+        self.game = Game(self.screen, self.font, self.clock, skip_god_selection=True)
         # Initial turn should have dice hidden now
         # Sprite gating: run update then verify hidden (image 1x1 or off-screen)
         self.game.renderer.draw()

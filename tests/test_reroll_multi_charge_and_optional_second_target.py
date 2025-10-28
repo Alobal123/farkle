@@ -15,7 +15,7 @@ class RerollMultiChargeOptionalSecondTargetTests(unittest.TestCase):
         cls.clock = pygame.time.Clock()
 
     def setUp(self):
-        self.game = Game(self.screen, self.font, self.clock)
+        self.game = Game(self.screen, self.font, self.clock, skip_god_selection=True)
         # Perform initial roll to allow reroll usage
         self.game.event_listener.publish(GameEvent(GameEventType.REQUEST_ROLL))
 

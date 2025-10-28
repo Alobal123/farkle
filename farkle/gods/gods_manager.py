@@ -11,10 +11,15 @@ GOD_MAX_LEVEL = 3
 @dataclass
 class God(GameObject):
     name: str = ""
+    lore: str = ""  # Lore text for choice window display
+    description: str = ""  # Short description
+    
     # For future: each god can have a modifier_chain (selective effects). Start empty.
-    def __init__(self, name: str, game=None):
+    def __init__(self, name: str, game=None, lore: str = "", description: str = ""):
         super().__init__(name=name)
         self.game = game
+        self.lore = lore
+        self.description = description
         # Lazy import to avoid cycles
         from farkle.scoring.score_modifiers import ScoreModifierChain
         self.modifier_chain = ScoreModifierChain()
@@ -23,8 +28,78 @@ class God(GameObject):
         # Progression
         self.level: int = 1
 
+    def draw_card(self, surface: pygame.Surface, rect: pygame.Rect, font, small_font, selected: bool = False):
+        """Draw a god card for choice windows or other displays.
+        
+        Args:
+            surface: Surface to draw on
+            rect: Rectangle to draw within
+            font: Main font
+            small_font: Small font for details
+            selected: Whether this god is selected
+        """
+        # Card background with pronounced highlight when selected
+        if selected:
+            # Draw outer glow for selected card
+            glow_rect = rect.inflate(8, 8)
+            pygame.draw.rect(surface, (100, 150, 255), glow_rect, border_radius=10)
+            pygame.draw.rect(surface, (120, 180, 255), glow_rect, width=3, border_radius=10)
+            
+            bg_color = (85, 110, 150)  # Brighter background
+            border_color = (180, 220, 255)  # Much brighter border
+            border_width = 4  # Thicker border
+        else:
+            bg_color = (65, 90, 120)
+            border_color = (120, 170, 210)
+            border_width = 2
+        
+        pygame.draw.rect(surface, bg_color, rect, border_radius=8)
+        pygame.draw.rect(surface, border_color, rect, width=border_width, border_radius=8)
+        
+        y = rect.y + 12
+        
+        # God name and level
+        name_text = f"{self.name} (Lv{self.level})" if self.level > 0 else self.name
+        name_surf = font.render(name_text, True, (255, 255, 255))
+        surface.blit(name_surf, (rect.x + 10, y))
+        y += name_surf.get_height() + 8
+        
+        # Description
+        if self.description:
+            desc_color = (210, 210, 210)
+            desc_surf = small_font.render(self.description, True, desc_color)
+            surface.blit(desc_surf, (rect.x + 10, y))
+            y += desc_surf.get_height() + 8
+        
+        # Lore text with wrapping
+        if self.lore:
+            lore_color = (180, 200, 220)
+            line_spacing = small_font.get_linesize()
+            max_width = rect.width - 20
+            
+            words = self.lore.split(' ')
+            lines = []
+            current_line = ""
+            for word in words:
+                test_line = current_line + word + " "
+                if small_font.size(test_line)[0] < max_width:
+                    current_line = test_line
+                else:
+                    if current_line:
+                        lines.append(current_line)
+                    current_line = word + " "
+            if current_line:
+                lines.append(current_line)
+            
+            for line in lines:
+                if y + line_spacing > rect.bottom - 10:
+                    break
+                line_surf = small_font.render(line.strip(), True, lore_color)
+                surface.blit(line_surf, (rect.x + 10, y))
+                y += line_spacing
+
     def draw(self, surface):  # type: ignore[override]
-        # Draw the label for this god at its assigned rect
+        # Draw the label for this god at its assigned rect (used in gods panel)
         if not self._rect:
             return None
         g = getattr(self, 'game', None)

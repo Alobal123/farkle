@@ -18,6 +18,13 @@ class GodLevel1BonusTests(unittest.TestCase):
 
     def setUp(self):
         self.game = Game(self.screen, self.font, self.clock, rng_seed=1)
+        
+        # Initialize default gods for testing (Demeter, Ares, Hades)
+        from farkle.gods.demeter import Demeter
+        from farkle.gods.ares import Ares
+        from farkle.gods.hades import Hades
+        self.game.gods.set_worshipped([Demeter(self.game), Ares(self.game), Hades(self.game)])
+        
         self.events = []
         self.game.event_listener.subscribe(lambda e: self.events.append(e))
 

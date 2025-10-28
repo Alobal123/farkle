@@ -16,7 +16,7 @@ class GameLogicTests(unittest.TestCase):
         cls.clock = pygame.time.Clock()
 
     def setUp(self):
-        self.game = Game(self.screen, self.font, self.clock)
+        self.game = Game(self.screen, self.font, self.clock, skip_god_selection=True)
         # Force into ROLLING state for most selection tests
         self.game.state_manager.transition_to_rolling()
         # Ensure no randomness interference
@@ -60,7 +60,7 @@ class GameLogicTests(unittest.TestCase):
         self.assertEqual(self.game.current_roll_score, 0)
 
     def test_button_states_pre_roll(self):
-        fresh_game = Game(self.screen, self.font, self.clock)
+        fresh_game = Game(self.screen, self.font, self.clock, skip_god_selection=True)
         # Fresh game should be in PRE_ROLL
         states = {b.name: b.is_enabled_fn(fresh_game) for b in fresh_game.ui_buttons}
         self.assertTrue(states['roll'])

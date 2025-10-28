@@ -74,6 +74,14 @@ class GameEventType(Enum):
     SCORE_MODIFIER_REMOVED = auto()
     # Gods
     GOD_LEVEL_UP = auto()
+    # Choice Window
+    CHOICE_WINDOW_OPENED = auto()
+    CHOICE_WINDOW_CLOSED = auto()
+    CHOICE_WINDOW_MINIMIZED = auto()
+    CHOICE_WINDOW_MAXIMIZED = auto()
+    CHOICE_ITEM_SELECTED = auto()
+    REQUEST_CHOICE_CONFIRM = auto()
+    REQUEST_CHOICE_SKIP = auto()
 
 @dataclass(slots=True)
 class GameEvent:

@@ -15,7 +15,7 @@ class RightClickAutoLockTests(unittest.TestCase):
         cls.clock = pygame.time.Clock()
 
     def setUp(self):
-        self.game = Game(self.screen, self.font, self.clock)
+        self.game = Game(self.screen, self.font, self.clock, skip_god_selection=True)
         self.collector = EventCollector()
         self.game.event_listener.subscribe(self.collector.on_event)
         # Move to rolling state for die interaction

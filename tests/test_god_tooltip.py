@@ -17,6 +17,18 @@ class GodTooltipTests(unittest.TestCase):
 
     def setUp(self):
         self.game = Game(self.screen, self.font, self.clock, rng_seed=42)
+        
+        # Initialize default gods for testing (Demeter, Ares, Hades)
+        from farkle.gods.demeter import Demeter
+        from farkle.gods.ares import Ares
+        from farkle.gods.hades import Hades
+        gods = [Demeter(self.game), Ares(self.game), Hades(self.game)]
+        self.game.gods.set_worshipped(gods)
+        
+        # Activate gods to ensure they have rects
+        for god in gods:
+            god.activate(self.game)
+        
         # Draw once to initialize god rects
         self.game.draw()
 

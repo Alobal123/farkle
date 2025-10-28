@@ -39,9 +39,10 @@ from farkle.abilities.ability_manager import AbilityManager
 from farkle.scoring.scoring_manager import ScoringManager
 from farkle.gods.gods_manager import GodsManager, God
 from farkle.meta.statistics_tracker import StatisticsTracker
+from farkle.ui.choice_window_manager import ChoiceWindowManager
 
 class Game:
-    def __init__(self, screen, font, clock, level: Level | None = None, *, rng_seed: int | None = None, auto_initialize: bool = True):
+    def __init__(self, screen, font, clock, level: Level | None = None, *, rng_seed: int | None = None, auto_initialize: bool = True, skip_god_selection: bool = False):
         """Core gameplay model: state, dice, scoring, events.
 
         UI concerns (tooltips, hotkeys, modal shop rendering) are handled by screen
@@ -63,6 +64,7 @@ class Game:
         self.clock = clock
         self._initial_level = level
         self._rng_seed = rng_seed
+        self._skip_god_selection = skip_god_selection
         
         # Small font for auxiliary text
         try:
@@ -131,6 +133,8 @@ class Game:
         self.relic_manager = RelicManager(self)
         # Gods manager: manages worshipped gods and applies selective effects
         self.gods = GodsManager(self)
+        # Choice window manager: handles all selection screens (god selection, shop, etc.)
+        self.choice_window_manager = ChoiceWindowManager(self)
         # Renderer handles all drawing/UI composition
         self.renderer = GameRenderer(self)
         # Recreate dice now that renderer exists so DieSprites attach to layered groups (initial container may have created dice before renderer ready)
@@ -193,6 +197,32 @@ class Game:
             _safe_create_shop_overlay()
         except Exception:
             pass
+        # Choice window sprite (modal) for god selection, shop, etc.
+        self.choice_window_sprite = None
+        
+        # Debug flag for layer printing
+        self._debug_layers_printed = False
+        
+        try:
+            from farkle.ui.sprites.choice_window_sprite import ChoiceWindowSprite
+            # Create sprite that will show/hide based on choice_window_manager state
+            def _safe_create_choice_window_sprite():
+                try:
+                    # The sprite checks if game has choice_window_manager and if there's an active window
+                    # We'll create a dummy window object that the sprite uses for its visible_predicate
+                    dummy_window = type('obj', (object,), {'is_open': lambda self: False})()
+                    self.choice_window_sprite = ChoiceWindowSprite(dummy_window, self, self.renderer.sprite_groups['modal'], self.renderer.layered)
+                except Exception as e:
+                    self.choice_window_sprite = None
+                    setattr(self, 'last_choice_window_sprite_error', repr(e))
+                    print(f"ERROR: Failed to create ChoiceWindowSprite: {e}")
+                    import traceback
+                    traceback.print_exc()
+            _safe_create_choice_window_sprite()
+        except Exception as e:
+            print(f"ERROR: Exception in choice window sprite setup: {e}")
+            import traceback
+            traceback.print_exc()
         # Goal & relic panel sprites
         self._init_goal_and_panel_sprites()
         # Player & Gods HUD sprites
@@ -226,14 +256,7 @@ class Game:
         # Input controller (handles REQUEST_* events)
         self.input_controller = InputController(self)
         self.event_listener.subscribe(self.input_controller.on_event)
-        # Seed a default set of worshipped gods (up to three)
-        try:
-            from farkle.gods.demeter import Demeter
-            from farkle.gods.ares import Ares
-            from farkle.gods.hades import Hades
-            self.gods.set_worshipped([Demeter(self), Ares(self), Hades(self)])
-        except Exception:
-            pass
+        # Gods will be selected by player at game start (no default gods)
         # Emit LEVEL_GENERATED for the initial level (so temple income is awarded on first level)
         try:
             self.event_listener.publish(GameEvent(GameEventType.LEVEL_GENERATED, payload={
@@ -245,11 +268,27 @@ class Game:
             }))
         except Exception:
             pass
-        # Emit initial TURN_START for the very first turn
-        try:
-            self.begin_turn(initial=True)
-        except Exception:
-            pass
+        # Open god selection window at game start (instead of auto-starting turn)
+        if self._skip_god_selection:
+            # For tests: skip god selection and go straight to first turn
+            try:
+                self.begin_turn(initial=True)
+            except Exception:
+                pass
+        else:
+            # Normal flow: open god selection window
+            try:
+                self._open_god_selection_window()
+            except Exception as e:
+                # Log the error for debugging
+                import traceback
+                print(f"ERROR: Failed to open god selection window: {e}")
+                traceback.print_exc()
+                # Fallback: if god selection fails, start turn normally
+                try:
+                    self.begin_turn(initial=True)
+                except Exception:
+                    pass
         # Subscribe game itself for auto progression
         self.event_listener.subscribe(self.on_event)
     # dice already initialized by container
@@ -640,6 +679,17 @@ class Game:
             return  # Key handling now performed in GameScreen.
         elif event.type == pygame.MOUSEBUTTONDOWN:
             mx,my = event.pos
+            
+            # Check choice window first - if open, it should consume all clicks
+            if self.choice_window_sprite and self.choice_window_sprite.choice_window:
+                if self.choice_window_sprite.choice_window.is_open():
+                    if hasattr(self.choice_window_sprite, 'handle_click'):
+                        if self.choice_window_sprite.handle_click(self, (mx, my)):
+                            return
+                    # Even if handle_click doesn't exist or returns False, consume the click
+                    # to prevent it from going to underlying UI
+                    return
+            
             if getattr(event, 'button', None) == 3:
                 if self.state_manager.get_state() in (self.state_manager.state.ROLLING, self.state_manager.state.FARKLE, self.state_manager.state.SELECTING_TARGETS):
                     if self.state_manager.get_state() == self.state_manager.state.SELECTING_TARGETS:
@@ -834,6 +884,89 @@ class Game:
             self.update_current_selection_score()
         return any_deselected
 
+    def _open_god_selection_window(self):
+        """Open a choice window for selecting patron gods at game start."""
+        from farkle.ui.choice_window import ChoiceWindow, ChoiceItem
+        from farkle.gods.demeter import Demeter
+        from farkle.gods.ares import Ares
+        from farkle.gods.hades import Hades
+        from farkle.gods.hermes import Hermes
+        
+        def select_god(game, god_class):
+            """Called when a god is selected - create and worship the god."""
+            god = god_class(game=game)
+            # Add to worshipped gods
+            current_gods = list(game.gods.worshipped)
+            current_gods.append(god)
+            game.gods.set_worshipped(current_gods)
+        
+        # Create choice items for each god
+        all_items = [
+            ChoiceItem(
+                id="demeter",
+                name="Demeter",
+                description="Goddess of harvest, growth, and natural abundance",
+                payload=Demeter,
+                on_select=select_god,
+                effect_text="Level up through nature goals. Gain +20% to nature scoring at level 1, Sanctify ability at level 2, and double nature rewards at level 3."
+            ),
+            ChoiceItem(
+                id="ares",
+                name="Ares",
+                description="God of war, conflict, and martial prowess",
+                payload=Ares,
+                on_select=select_god,
+                effect_text="Level up through warfare goals. Gain +20% to warfare scoring at level 1, Sanctify ability at level 2, and double warfare rewards at level 3."
+            ),
+            ChoiceItem(
+                id="hades",
+                name="Hades",
+                description="God of the underworld and the dead",
+                payload=Hades,
+                on_select=select_god,
+                effect_text="Level up through spirit goals. Gain +20% to spirit scoring at level 1, Sanctify ability at level 2, and double spirit rewards at level 3."
+            ),
+            ChoiceItem(
+                id="hermes",
+                name="Hermes",
+                description="God of commerce, travel, and cunning",
+                payload=Hermes,
+                on_select=select_god,
+                effect_text="Level up through commerce goals. Gain +20% to commerce scoring at level 1, Sanctify ability at level 2, and double commerce rewards at level 3."
+            )
+        ]
+        
+        # Randomly select 3 gods to offer
+        import random
+        items = random.sample(all_items, 3)
+        
+        # Create choice window
+        window = ChoiceWindow(
+            title="Choose Your Patron God",
+            items=items,
+            window_type="god_selection",
+            allow_skip=False,  # Must select a god
+            allow_minimize=True,  # Can minimize to see game state
+            min_selections=1,
+            max_selections=1  # Only one god - auto-confirms on selection
+        )
+        
+        # Set game state to CHOICE_WINDOW to disable normal UI interactions
+        from farkle.core.game_state_enum import GameState
+        self.state_manager.set_state(GameState.CHOICE_WINDOW)
+        
+        # Open the window
+        self.choice_window_manager.open_window(window)
+        
+        # Update the choice window sprite to show the new window
+        if self.choice_window_sprite:
+            try:
+                self.choice_window_sprite.choice_window = window
+                self.choice_window_sprite.sync_from_logical()
+            except Exception as e:
+                print(f"ERROR: Failed to update choice window sprite: {e}")
+                import traceback
+                traceback.print_exc()
 
 
     # Internal: subscribe core objects
@@ -897,6 +1030,43 @@ class Game:
     # Auto progression logic
     def on_event(self, event: GameEvent):  # type: ignore[override]
         et = event.type
+        # Handle choice window events
+        if et == GameEventType.REQUEST_CHOICE_CONFIRM:
+            window_type = event.get("window_type")
+            self.choice_window_manager.close_window(window_type)
+            return
+        elif et == GameEventType.REQUEST_CHOICE_SKIP:
+            window_type = event.get("window_type")
+            self.choice_window_manager.skip_window(window_type)
+            return
+        elif et == GameEventType.CHOICE_WINDOW_CLOSED:
+            window_type = event.get("window_type")
+            # Restore game state from CHOICE_WINDOW
+            from farkle.core.game_state_enum import GameState
+            if self.state_manager.get_state() == GameState.CHOICE_WINDOW:
+                # Will be set to PRE_ROLL by begin_turn()
+                pass
+            # After god selection, start the first turn
+            if window_type == "god_selection":
+                try:
+                    self.begin_turn(initial=True)
+                except Exception:
+                    pass
+            # After shop closes, continue to next turn
+            elif window_type == "shop":
+                skipped = event.get("skipped", False)
+                try:
+                    self.begin_turn(from_shop=True)
+                except Exception:
+                    pass
+            # Update choice window sprite to reflect closed state
+            if self.choice_window_sprite:
+                try:
+                    self.choice_window_sprite.choice_window = self.choice_window_manager.get_active_window()
+                    self.choice_window_sprite.sync_from_logical()
+                except Exception:
+                    pass
+            return
         # Rebuild UI buttons when new ability is registered (e.g., god levels up)
         if et == GameEventType.ABILITY_REGISTERED:
             try:

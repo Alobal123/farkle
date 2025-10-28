@@ -22,7 +22,7 @@ def test_roll_button_enabled_after_real_advancement(shop_action):
     screen = pygame.display.set_mode((800,600))
     font = pygame.font.Font(None, 32)
     clock = pygame.time.Clock()
-    g = Game(screen, font, clock, level=Level.single("Test", target_goal=50, max_turns=2, description=""))
+    g = Game(screen, font, clock, level=Level.single("Test", target_goal=50, max_turns=2, description=""), skip_god_selection=True)
     complete_level_legit(g)
     # Expect SHOP then skip
     if g.state_manager.get_state().name == 'SHOP':

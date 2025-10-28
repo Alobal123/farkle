@@ -14,7 +14,7 @@ class FarkleCreatedByRerollTests(unittest.TestCase):
         cls.clock = pygame.time.Clock()
 
     def setUp(self):
-        self.game = Game(self.screen, self.font, self.clock)
+        self.game = Game(self.screen, self.font, self.clock, skip_god_selection=True)
 
     def test_reroll_can_create_farkle(self):
         # Roll once to enter ROLLING

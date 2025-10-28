@@ -14,7 +14,7 @@ class TestFarkleUI(unittest.TestCase):
         cls.clock = pygame.time.Clock()
 
     def setUp(self):
-        self.game = Game(self.screen, self.font, self.clock)
+        self.game = Game(self.screen, self.font, self.clock, skip_god_selection=True)
 
     def test_farkle_banner_and_buttons(self):
         # Transition to FARKLE and ensure sprites reflect visibility rules.

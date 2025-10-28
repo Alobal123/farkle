@@ -9,7 +9,7 @@ def test_dice_reset_between_turns(bank_path):
     screen = pygame.display.set_mode((800, 600))
     font = pygame.font.Font(None, 32)
     clock = pygame.time.Clock()
-    g = Game(screen, font, clock, level=Level.single("Test", target_goal=150, max_turns=3, description=""))
+    g = Game(screen, font, clock, level=Level.single("Test", target_goal=150, max_turns=3, description=""), skip_god_selection=True)
 
     # First roll
     assert g.state_manager.get_state().name == 'PRE_ROLL'

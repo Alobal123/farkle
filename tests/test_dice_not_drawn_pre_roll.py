@@ -14,7 +14,7 @@ class TestDiceNotDrawnPreRoll(unittest.TestCase):
         cls.clock = pygame.time.Clock()
 
     def setUp(self):
-        self.game = Game(self.screen, self.font, self.clock)
+        self.game = Game(self.screen, self.font, self.clock, skip_god_selection=True)
 
     def test_initial_level_dice_not_drawn_before_roll(self):
         # PRE_ROLL: retain logical visibility check; sprite may not yet have run update cycle.

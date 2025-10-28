@@ -19,9 +19,8 @@ class CategoryGod(God):
     GOALS_PER_LEVEL = [2, 4, 6]
     
     def __init__(self, name: str, category: str, lore: str, game=None):
-        super().__init__(name=name, game=game)
+        super().__init__(name=name, game=game, lore=lore, description=f"{category.capitalize()} deity")
         self.category = category
-        self.lore = lore
         self.level = 0  # Start at level 0
         self.goals_completed = 0  # Track category goals completed
     

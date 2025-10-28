@@ -23,7 +23,7 @@ class EventTests(unittest.TestCase):
         cls.clock = pygame.time.Clock()
 
     def setUp(self):
-        self.game = Game(self.screen, self.font, self.clock)
+        self.game = Game(self.screen, self.font, self.clock, skip_god_selection=True)
         # Find a petition goal (not disaster) since disasters have no rewards
         petition_goals = [g for g in self.game.level_state.goals if not g.is_disaster and g.reward_gold > 0]
         if petition_goals:

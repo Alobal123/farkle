@@ -14,7 +14,7 @@ class FiveFlatBonusRelicTests(unittest.TestCase):
         cls.clock = pygame.time.Clock()
 
     def setUp(self):
-        self.game = Game(self.screen, self.font, self.clock)
+        self.game = Game(self.screen, self.font, self.clock, skip_god_selection=True)
         
         # Directly create and activate the "Charm of Fives" relic
         from farkle.relics.relic import Relic

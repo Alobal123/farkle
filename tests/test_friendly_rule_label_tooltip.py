@@ -14,7 +14,7 @@ class FriendlyRuleLabelTooltipTests(unittest.TestCase):
         cls.clock = pygame.time.Clock()
 
     def setUp(self):
-        self.game = Game(self.screen, self.font, self.clock)
+        self.game = Game(self.screen, self.font, self.clock, skip_god_selection=True)
         self.game.state_manager.transition_to_rolling()
         # Create a three-of-a-kind selection (e.g., 2,2,2)
         for i, d in enumerate(self.game.dice):

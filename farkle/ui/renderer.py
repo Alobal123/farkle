@@ -181,6 +181,23 @@ class GameRenderer:
         try:
             # Sync all sprites (dice, buttons, goals, HUD, overlays) AFTER layout changes.
             self.layered.update()
+            
+            # LayeredUpdates doesn't maintain sort order when sprites added dynamically during update.
+            # Rebuild the group in proper layer order.
+            if getattr(g, 'choice_window_sprite', None):
+                try:
+                    cw = g.choice_window_sprite
+                    if cw.choice_window and cw.choice_window.is_open():
+                        # Collect all sprites and re-add in sorted order
+                        all_sprites = list(self.layered.sprites())
+                        self.layered.empty()
+                        # Sort by layer (ascending) so higher layers draw last (on top)
+                        all_sprites.sort(key=lambda s: s._layer)
+                        for sprite in all_sprites:
+                            self.layered.add(sprite)
+                except Exception as e:
+                    pass
+            
             self.layered.draw(screen)
         except Exception:
             pass
