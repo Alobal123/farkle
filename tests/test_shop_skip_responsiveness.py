@@ -17,7 +17,7 @@ class ShopSkipResponsivenessTests(unittest.TestCase):
         cls.clock = pygame.time.Clock()
 
     def setUp(self):
-        self.game = Game(self.screen, self.font, self.clock)
+        self.game = Game(self.screen, self.font, self.clock, skip_god_selection=True)
         self.collector = Collector()
         self.game.event_listener.subscribe(self.collector.on_event)
         # Force shop open by simulating level advancement completion
@@ -28,11 +28,12 @@ class ShopSkipResponsivenessTests(unittest.TestCase):
         self.assertTrue(self.game.relic_manager.shop_open, 'Shop should be open for test setup')
 
     def test_skip_closes_shop_and_emits_events_immediately(self):
-        # Directly publish skip request (ShopScreen UI abstraction removed from core Game tests)
-        self.game.event_listener.publish(GameEvent(GameEventType.REQUEST_SKIP_SHOP))
-        self.assertFalse(self.game.relic_manager.shop_open, 'Shop should be closed immediately after skip event')
+        # Skip the shop using the choice window manager
+        self.game.choice_window_manager.skip_window("shop")
+        self.assertFalse(self.game.relic_manager.shop_open, 'Shop should be closed immediately after skip')
         types = [e.type for e in self.collector.events]
-        self.assertIn(GameEventType.REQUEST_SKIP_SHOP, types, 'Skip request event missing')
+        # CHOICE_WINDOW_CLOSED should be emitted with skipped=True
+        self.assertIn(GameEventType.CHOICE_WINDOW_CLOSED, types, 'Choice window closed event missing')
         self.assertIn(GameEventType.SHOP_CLOSED, types, 'Shop closed event missing')
         # TURN_START should follow SHOP_CLOSED
         idx_closed = types.index(GameEventType.SHOP_CLOSED)

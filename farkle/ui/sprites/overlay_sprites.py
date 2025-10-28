@@ -98,6 +98,9 @@ class RulesOverlaySprite(BaseSprite):
         self.image.blit(hint, (panel_rect.x + 20, panel_rect.bottom - 28))
         self.dirty = 1
 
+# ShopOverlaySprite deprecated - shop now uses ChoiceWindow system
+# Kept here temporarily for reference during migration
+"""
 class ShopOverlaySprite(BaseSprite):
     def __init__(self, shop_overlay, game, *groups):
         # Use MODAL layer so it draws above other overlays/UI elements.
@@ -205,5 +208,6 @@ class ShopOverlaySprite(BaseSprite):
             game.event_listener.publish(GameEvent(GameEventType.REQUEST_SKIP_SHOP))
             return True
         return True  # Swallow clicks while open
+"""
 
-__all__ = ["HelpIconSprite", "RulesOverlaySprite", "ShopOverlaySprite"]
+__all__ = ["HelpIconSprite", "RulesOverlaySprite"]

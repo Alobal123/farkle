@@ -3,7 +3,7 @@ import pygame
 try:
     import farkle.ui.sprites.die_sprite as die_sprite  # ensures DieSprite definition loaded
     import farkle.ui.sprites.ui_sprites as ui_sprites  # UIButtonSprite
-    import farkle.ui.sprites.overlay_sprites as overlay_sprites  # HelpIconSprite, RulesOverlaySprite, ShopOverlaySprite
+    import farkle.ui.sprites.overlay_sprites as overlay_sprites  # HelpIconSprite, RulesOverlaySprite
     import farkle.ui.sprites.goal_sprites as goal_sprites  # GoalSprite
     import farkle.ui.sprites.relic_panel_sprite as relic_panel_sprite # RelicPanelSprite
     import farkle.ui.sprites.hud_sprites as hud_sprites  # PlayerHUDSprite, GodsPanelSprite
@@ -171,11 +171,9 @@ class Game:
             self.player,
             self.gods,
         ]
-        # Predeclare shop overlay sprite attribute for clarity (may remain None if creation fails)
-        self.shop_overlay_sprite = None
         # Wrap certain misc UI objects with sprites (help icon, rules overlay)
         try:
-            from farkle.ui.sprites.overlay_sprites import HelpIconSprite, RulesOverlaySprite, ShopOverlaySprite
+            from farkle.ui.sprites.overlay_sprites import HelpIconSprite, RulesOverlaySprite
             for o in list(self.ui_misc):
                 try:
                     if o.__class__.__name__ == 'HelpIcon':
@@ -186,15 +184,6 @@ class Game:
                         setattr(o, 'has_sprite', True)
                 except Exception:
                     pass
-            # Shop overlay sprite (modal) capturing clicks when shop_open flag set
-            def _safe_create_shop_overlay():
-                try:
-                    self.shop_overlay_sprite = ShopOverlaySprite(object(), self, self.renderer.sprite_groups['modal'], self.renderer.layered)
-                except Exception as e:
-                    # Minimal logging: store last error for debug inspection/tests instead of silent pass
-                    self.shop_overlay_sprite = None
-                    setattr(self, 'last_shop_overlay_error', repr(e))
-            _safe_create_shop_overlay()
         except Exception:
             pass
         # Choice window sprite (modal) for god selection, shop, etc.

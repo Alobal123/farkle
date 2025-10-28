@@ -30,26 +30,90 @@ class RelicManager:
         et = event.type
         if et == GameEventType.LEVEL_ADVANCE_FINISHED:
             self._open_shop()
-        elif et == GameEventType.REQUEST_BUY_RELIC and self.shop_open:
-            idx = event.get("offer_index", 0)
-            self._attempt_purchase(idx)
-        elif et == GameEventType.REQUEST_SKIP_SHOP and self.shop_open:
-            self._close_shop(skipped=True)
+        elif et == GameEventType.CHOICE_WINDOW_CLOSED:
+            # Handle shop closure
+            window_type = event.get("window_type")
+            if window_type == "shop":
+                skipped = event.get("skipped", False)
+                self._close_shop(skipped=skipped)
 
     # --- Offer pool configuration ---
     def _open_shop(self):
+        """Open shop using choice window system."""
         self.shop_open = True
-        self.offers = self._generate_offers()
+        shop_offers = self._generate_offers()
+        self.offers = shop_offers
+        
+        # Convert ShopOffers to ChoiceItems
+        from farkle.ui.choice_window import ChoiceItem, ChoiceWindow
+        choice_items = []
+        
+        for offer in shop_offers:
+            # Get relic from offer payload
+            relic = offer.payload
+            choice_item = ChoiceItem(
+                id=offer.id,
+                name=offer.name,
+                description=relic.description if hasattr(relic, 'description') else "",
+                enabled=True,  # All relics are selectable, affordability checked visually
+                payload=offer,  # Store the ShopOffer object
+                on_select=self._on_relic_selected
+            )
+            choice_items.append(choice_item)
+        
+        # Create and open choice window for shop
+        if choice_items:
+            print(f"DEBUG: Creating shop choice window with {len(choice_items)} items")
+            for idx, item in enumerate(choice_items):
+                print(f"  Item {idx}: {item.name}, payload type={type(item.payload).__name__}")
+            
+            window = ChoiceWindow(
+                window_type="shop",
+                title="Relic Shop",
+                items=choice_items,
+                min_selections=0,  # Can skip without buying
+                max_selections=1,  # Can only buy one relic per shop
+                allow_skip=True,
+                allow_minimize=True
+            )
+            
+            print(f"DEBUG: Created ChoiceWindow: type={window.window_type}, items={len(window.items)}")
+            
+            # Set game state to CHOICE_WINDOW to disable normal UI interactions
+            from farkle.core.game_state_enum import GameState
+            self.game.state_manager.set_state(GameState.CHOICE_WINDOW)
+            
+            # Open the window
+            self.game.choice_window_manager.open_window(window)
+            
+            print(f"DEBUG: Opened choice window, active window={self.game.choice_window_manager.active_window}")
+            
+            # Update the choice window sprite to show the new window
+            print(f"DEBUG: Checking choice_window_sprite: {self.game.choice_window_sprite}")
+            if self.game.choice_window_sprite:
+                try:
+                    print(f"DEBUG: Assigning window to sprite...")
+                    self.game.choice_window_sprite.choice_window = window
+                    print(f"DEBUG: Calling sync_from_logical...")
+                    self.game.choice_window_sprite.sync_from_logical()
+                    print(f"DEBUG: Updated choice window sprite")
+                except Exception as e:
+                    print(f"ERROR: Failed to update choice window sprite for shop: {e}")
+                    import traceback
+                    traceback.print_exc()
+            else:
+                print(f"ERROR: choice_window_sprite is None!")
+        
+        # Emit legacy events for any listeners
         el = self.game.event_listener
         el.publish(GameEvent(GameEventType.SHOP_OPENED, payload={
             "level_index": self.game.level_index,
-            "offers": [self._offer_payload(o) for o in self.offers]
+            "offers": [self._offer_payload(o) for o in shop_offers]
         }))
-        for idx, offer in enumerate(self.offers):
+        for idx, offer in enumerate(shop_offers):
             payload = self._offer_payload(offer)
             payload["offer_index"] = idx
             el.publish(GameEvent(GameEventType.RELIC_OFFERED, payload=payload))
-        self.current_offer = self.offers[0] if self.offers else None
 
     def _generate_offers(self) -> List[ShopOffer]:
         _build_pool_once()
@@ -144,7 +208,40 @@ class RelicManager:
         return {"name": offer.name, "cost": offer.cost, "description": relic.description}
 
     # --- Purchase flow ---
+    def _on_relic_selected(self, game, payload):
+        """Called when a relic is selected in the choice window."""
+        offer = payload  # ShopOffer object
+        player = game.player
+        
+        # Check if player can afford it
+        if player.gold < offer.cost:
+            game.event_listener.publish(GameEvent(
+                GameEventType.MESSAGE, 
+                payload={"text": f"Not enough gold! Need {offer.cost}g, have {player.gold}g"}
+            ))
+            # Re-open the shop window so they can try again
+            return
+        
+        # Deduct gold and purchase
+        player.gold -= offer.cost
+        relic = offer.payload
+        
+        # Add to active relics
+        self.active_relics.append(relic)
+        relic.activate(game)
+        game.event_listener.subscribe(relic.on_event)
+        
+        # Emit purchase event
+        game.event_listener.publish(GameEvent(
+            GameEventType.RELIC_PURCHASED, 
+            payload={
+                "name": offer.name,
+                "cost": offer.cost,
+            }
+        ))
+    
     def _attempt_purchase(self, index: int = 0):
+        """Legacy method for old event-based purchases. Deprecated."""
         if not self.offers:
             return
         if not isinstance(index, int) or index < 0 or index >= len(self.offers):
@@ -171,8 +268,11 @@ class RelicManager:
         game.event_listener.subscribe(relic.on_event)
 
     def _close_shop(self, skipped: bool):
-        self.game.event_listener.publish(GameEvent(GameEventType.SHOP_CLOSED, payload={"skipped": skipped}))
-        self.current_offer = None
+        """Close the shop and clean up."""
+        self.game.event_listener.publish(GameEvent(
+            GameEventType.SHOP_CLOSED, 
+            payload={"skipped": skipped}
+        ))
         self.offers = []
         self.shop_open = False
 

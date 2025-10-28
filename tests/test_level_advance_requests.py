@@ -34,8 +34,8 @@ class LevelAdvanceRequestTests(unittest.TestCase):
     def test_can_roll_after_level_advances(self):
         self.fulfill_level_and_advance()
         # If shop opened due to advancement, skip it first
-        if getattr(self.game, 'relic_manager', None) and self.game.state_manager.get_state().name == 'SHOP':
-            self.game.event_listener.publish(GameEvent(GameEventType.REQUEST_SKIP_SHOP))
+        if getattr(self.game, 'choice_window_manager', None) and self.game.state_manager.get_state().name == 'CHOICE_WINDOW':
+            self.game.choice_window_manager.skip_window("shop")
         before_events = []
         class Collector:
             def __init__(self): self.events = []

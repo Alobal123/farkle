@@ -48,8 +48,8 @@ def test_advancement_event_sequence_with_deferred_turn_start():
     post_finished = names[idx_finished+1:]
     assert GameEventType.TURN_START not in post_finished, "TURN_START should be deferred until shop closes"
     # Skip shop
-    g.event_listener.publish(GameEvent(GameEventType.REQUEST_SKIP_SHOP))
-    # Now a TURN_START should occur after SHOP_CLOSED
+    g.choice_window_manager.skip_window("shop")
+    # Now a TURN_START should occur after SHOP_CLOSED or CHOICE_WINDOW_CLOSED
     later = [e.type for e in collector.events[idx_shop_open+1:]]
     assert GameEventType.SHOP_CLOSED in later, "SHOP_CLOSED missing after skip"
     # TURN_START should appear after SHOP_CLOSED

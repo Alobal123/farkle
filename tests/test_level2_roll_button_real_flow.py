@@ -24,10 +24,9 @@ def test_roll_button_enabled_after_real_advancement(shop_action):
     clock = pygame.time.Clock()
     g = Game(screen, font, clock, level=Level.single("Test", target_goal=50, max_turns=2, description=""), skip_god_selection=True)
     complete_level_legit(g)
-    # Expect SHOP then skip
-    if g.state_manager.get_state().name == 'SHOP':
-        g.event_listener.publish(GameEvent(GameEventType.REQUEST_SKIP_SHOP, payload={}))
-        g.event_listener.publish(GameEvent(GameEventType.MESSAGE, payload={}))
+    # Expect CHOICE_WINDOW (shop) then skip
+    if g.state_manager.get_state().name == 'CHOICE_WINDOW':
+        g.choice_window_manager.skip_window("shop")
     assert g.state_manager.get_state().name == 'PRE_ROLL'
     roll_btn = next(b for b in g.ui_buttons if b.name == 'roll')
     assert roll_btn.is_enabled_fn(g), f"Roll disabled: state={g.state_manager.get_state().name} locked_after_last_roll={g.locked_after_last_roll}"

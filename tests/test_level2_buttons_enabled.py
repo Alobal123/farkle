@@ -31,9 +31,9 @@ def test_roll_button_enabled_on_level2(shop_action):
 
     # After advancement finishes, game may enter shop or go straight to PRE_ROLL depending on event ordering
     state_name = g.state_manager.get_state().name
-    if state_name == 'SHOP':
-        g.event_listener.publish(GameEvent(GameEventType.REQUEST_SKIP_SHOP, payload={}))
-        g.event_listener.publish(GameEvent(GameEventType.MESSAGE, payload={}))
+    if state_name == 'CHOICE_WINDOW':
+        # Skip the shop using the choice window manager
+        g.choice_window_manager.skip_window("shop")
         assert g.state_manager.get_state().name == 'PRE_ROLL'
     else:
         assert state_name == 'PRE_ROLL'

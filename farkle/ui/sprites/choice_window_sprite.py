@@ -238,6 +238,7 @@ class ChoiceWindowSprite(BaseSprite):
         self._item_button_rects: List[Tuple[int, pygame.Rect]] = []
         self._minimized_icon_rect = None
         self._last_items_id = None  # Track if items changed
+        self._last_window_id = None  # Track if window changed
         
         # Visible only when window is open
         self.visible_predicate = lambda g: (
@@ -249,6 +250,11 @@ class ChoiceWindowSprite(BaseSprite):
     def update(self, *args, **kwargs):
         """Override update to correctly pass game instance for visibility checking."""
         game = self.game
+        
+        # CRITICAL: Update window reference before visibility check
+        if hasattr(game, 'choice_window_manager'):
+            self.choice_window = game.choice_window_manager.active_window
+        
         if self.visible_states or self.visible_predicate:
             try:
                 st = game.state_manager.get_state()
@@ -257,6 +263,7 @@ class ChoiceWindowSprite(BaseSprite):
                     allowed = False
                 if allowed and self.visible_predicate and not self.visible_predicate(game):
                     allowed = False
+                
                 if not allowed:
                     # Hide sprite; keep off-screen to avoid interaction
                     if self.image.get_width() != 1 or self.image.get_height() != 1:
@@ -272,14 +279,25 @@ class ChoiceWindowSprite(BaseSprite):
     
     def sync_from_logical(self):
         """Render the choice window based on its current state."""
-        window = self.choice_window
         g = self.game
+        # CRITICAL: Update our window reference from the manager
+        window = g.choice_window_manager.active_window if hasattr(g, 'choice_window_manager') else None
+        self.choice_window = window  # Keep in sync for visibility predicate
         
         if not window or not window.is_open():
             self.image.fill((0, 0, 0, 0))
             self._clear_item_sprites()
             self.dirty = 1
             return
+        
+        # CRITICAL: Recreate full-size image if it was hidden (1x1)
+        if self.image.get_width() != self.screen_width or self.image.get_height() != self.screen_height:
+            self.image = pygame.Surface((self.screen_width, self.screen_height), pygame.SRCALPHA)
+            self.rect = self.image.get_rect(topleft=(0, 0))
+        
+        # Ensure rect is at the correct position (reset from any off-screen positioning)
+        if self.rect.topleft != (0, 0):
+            self.rect.topleft = (0, 0)
         
         if window.is_minimized():
             self._render_minimized()
@@ -325,10 +343,10 @@ class ChoiceWindowSprite(BaseSprite):
         window = self.choice_window
         g = self.game
         
-        # Very light semi-transparent overlay - goals clearly visible
+        # Semi-transparent overlay
         self.image.fill((0, 0, 0, 0))
         dim = pygame.Surface((self.screen_width, self.screen_height), pygame.SRCALPHA)
-        dim.fill((18, 28, 40, 80))  # Very transparent - goals clearly visible
+        dim.fill((18, 28, 40, 160))  # Semi-transparent dark overlay
         self.image.blit(dim, (0, 0))
         
         # Calculate panel dimensions
@@ -349,8 +367,8 @@ class ChoiceWindowSprite(BaseSprite):
         panel = pygame.Rect(panel_x, panel_y, panel_width, panel_height)
         
         # Panel background
-        pygame.draw.rect(self.image, (50, 70, 95), panel, border_radius=12)
-        pygame.draw.rect(self.image, (120, 170, 210), panel, width=2, border_radius=12)
+        pygame.draw.rect(self.image, (40, 60, 80), panel, border_radius=12)
+        pygame.draw.rect(self.image, (80, 110, 140), panel, width=3, border_radius=12)
         
         # Title
         title_surf = g.font.render(window.title, True, (255, 255, 255))
@@ -426,6 +444,15 @@ class ChoiceWindowSprite(BaseSprite):
     def _ensure_item_sprites(self, items, panel_rect, header_height):
         """Create/update sprites for choice items."""
         g = self.game
+        window = self.choice_window
+        
+        # Check if window changed (different window instance)
+        current_window_id = id(window)
+        window_changed = self._last_window_id != current_window_id
+        
+        if window_changed:
+            self._last_window_id = current_window_id
+            self._last_items_id = None  # Force recreation
         
         # Check if items changed - use id() to detect list changes
         current_items_id = id(items)
@@ -433,7 +460,7 @@ class ChoiceWindowSprite(BaseSprite):
         # Check if sprites still exist and are alive (not killed)
         sprites_alive = all(sprite.alive() for sprite in self._item_sprites) if self._item_sprites else False
         
-        if self._last_items_id == current_items_id and len(self._item_sprites) == len(items) and sprites_alive:
+        if self._last_items_id == current_items_id and len(self._item_sprites) == len(items) and sprites_alive and not window_changed:
             # Items haven't changed and sprites are alive, just update positions
             card_width = 220
             card_height = 200
@@ -464,17 +491,24 @@ class ChoiceWindowSprite(BaseSprite):
         for idx, item in enumerate(items):
             item_x = items_start_x + idx * (card_width + spacing)
             
-            # Check if this is a god choice - if so, use GodChoiceItemSprite
+            # Determine sprite type based on payload
+            sprite = None
             from farkle.gods.gods_manager import God
+            from farkle.shop.offer import ShopOffer
+            
             try:
-                # Try to instantiate to check if it's a god class
+                # Check if it's a god choice (payload is God class)
                 if hasattr(item.payload, '__mro__') and God in item.payload.__mro__:
                     # Create a temporary god instance for rendering (without activating)
                     temp_god = item.payload(game=None)
                     sprite = GodChoiceItemSprite(item, temp_god, g, self.groups())
+                # Check if it's a relic/shop choice (payload is ShopOffer)
+                elif isinstance(item.payload, ShopOffer):
+                    from farkle.ui.sprites.relic_choice_item_sprite import RelicChoiceItemSprite
+                    sprite = RelicChoiceItemSprite(item, self.choice_window, g, self.groups())
                 else:
                     sprite = ChoiceItemSprite(item, g, self.groups())
-            except:
+            except Exception:
                 # Fallback to generic choice item sprite
                 sprite = ChoiceItemSprite(item, g, self.groups())
             
