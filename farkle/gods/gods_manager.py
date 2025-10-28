@@ -27,6 +27,7 @@ class God(GameObject):
         self._rect: Optional[pygame.Rect] = None
         # Progression
         self.level: int = 1
+        self.progress: int = 0  # Generic progress counter for events
 
     def draw_card(self, surface: pygame.Surface, rect: pygame.Rect, font, small_font, selected: bool = False):
         """Draw a god card for choice windows or other displays.
@@ -58,18 +59,26 @@ class God(GameObject):
         
         y = rect.y + 12
         
+        # Try to load and display god icon - much larger now
+        from farkle.ui.god_icons import get_god_icon
+        icon = get_god_icon(self.name)
+        if icon:
+            # Scale icon to be much larger (120x120 pixels)
+            icon_size = 120
+            scaled_icon = pygame.transform.scale(icon, (icon_size, icon_size))
+            
+            # Center the icon horizontally
+            icon_x = rect.x + (rect.width - icon_size) // 2
+            surface.blit(scaled_icon, (icon_x, y))
+            y += icon_size + 8
+        
         # God name and level
         name_text = f"{self.name} (Lv{self.level})" if self.level > 0 else self.name
         name_surf = font.render(name_text, True, (255, 255, 255))
-        surface.blit(name_surf, (rect.x + 10, y))
+        # Center the name horizontally
+        name_x = rect.x + (rect.width - name_surf.get_width()) // 2
+        surface.blit(name_surf, (name_x, y))
         y += name_surf.get_height() + 8
-        
-        # Description
-        if self.description:
-            desc_color = (210, 210, 210)
-            desc_surf = small_font.render(self.description, True, desc_color)
-            surface.blit(desc_surf, (rect.x + 10, y))
-            y += desc_surf.get_height() + 8
         
         # Lore text with wrapping
         if self.lore:
@@ -99,17 +108,33 @@ class God(GameObject):
                 y += line_spacing
 
     def draw(self, surface):  # type: ignore[override]
-        # Draw the label for this god at its assigned rect (used in gods panel)
+        # Draw the god icon and name in the gods panel
         if not self._rect:
             return None
         g = getattr(self, 'game', None)
         if not g:
             return None
-        display = f"{self.name}"
+        
+        # Load and display god icon
+        from farkle.ui.god_icons import get_god_icon
+        icon = get_god_icon(self.name)
+        
+        x = self._rect.x
+        y = self._rect.y
+        
+        if icon:
+            # Scale icon to fit in the panel (48x48 pixels for panel display)
+            icon_size = 48
+            scaled_icon = pygame.transform.scale(icon, (icon_size, icon_size))
+            surface.blit(scaled_icon, (x, y))
+            x += icon_size + 8  # Move text to the right of the icon
+        
+        # God name and level
+        display = f"{self.name} (Lv{self.level})" if self.level > 0 else self.name
         color = TEXT_ACCENT
         try:
             surf = g.font.render(display, True, color)
-            surface.blit(surf, self._rect.topleft)
+            surface.blit(surf, (x, y + 12))  # Vertically center text relative to icon
         except Exception:
             pass
         return None

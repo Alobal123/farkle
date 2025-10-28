@@ -22,7 +22,7 @@ class CategoryGod(God):
         super().__init__(name=name, game=game, lore=lore, description=f"{category.capitalize()} deity")
         self.category = category
         self.level = 0  # Start at level 0
-        self.goals_completed = 0  # Track category goals completed
+        # progress is inherited from God base class
     
     def get_tooltip_lines(self):
         """Return tooltip lines for this god."""
@@ -33,7 +33,7 @@ class CategoryGod(God):
         lines.append("")  # Blank separator
         
         # Progress line
-        lines.append(f"Progress: {self.goals_completed} {self.category} goals completed")
+        lines.append(f"Progress: {self.progress} {self.category} goals completed")
         lines.append("")  # Blank separator
         
         # Level progression
@@ -77,14 +77,14 @@ class CategoryGod(God):
                 self._maybe_double_blessing_reward(event)
     
     def _level_up_from_goal(self):
-        """Increment goals_completed and level up if threshold reached."""
-        self.goals_completed += 1
+        """Increment progress and level up if threshold reached."""
+        self.progress += 1
         
         # Check if we should level up
         cumulative = 0
         for level_idx in range(GOD_MAX_LEVEL):
             cumulative += self.GOALS_PER_LEVEL[level_idx]
-            if self.goals_completed >= cumulative and self.level == level_idx:
+            if self.progress >= cumulative and self.level == level_idx:
                 self.level = level_idx + 1
                 self._emit_level_up_event()
                 
@@ -109,7 +109,7 @@ class CategoryGod(God):
                     "old_level": self.level - 1,
                     "new_level": self.level,
                     "category": self.category,
-                    "goals_completed": self.goals_completed,
+                    "progress": self.progress,
                     "goals_needed": sum(self.GOALS_PER_LEVEL[:self.level])
                 }
             ))

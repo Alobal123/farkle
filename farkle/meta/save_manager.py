@@ -165,6 +165,8 @@ class SaveManager:
                 {
                     'name': god.name,
                     'level': god.level,
+                    'progress': god.progress,
+                    'type': god.__class__.__name__,  # Save the actual class name
                 }
                 for god in game.gods.worshipped
             ],
@@ -347,17 +349,60 @@ class SaveManager:
                     print(f"Warning: Could not restore relic {relic_type}: {e}")
     
     def _restore_gods(self, game: Game, gods_data: dict[str, Any]) -> None:
-        """Restore worshipped gods and their progression."""
+        """Restore worshipped gods and their progression.
+        
+        Uses dynamic class discovery to support any God subclass.
+        Automatically finds god classes from the gods module.
+        """
+        import inspect
+        from farkle.gods import gods_manager
         from farkle.gods.gods_manager import God
+        
+        # Discover all God subclasses from the gods module
+        god_classes = {}
+        
+        # Also check individual god modules (ares, hermes, etc.)
+        try:
+            from farkle.gods import ares, hermes, hades, demeter
+            god_modules = [ares, hermes, hades, demeter]
+            
+            for module in god_modules:
+                for name, obj in inspect.getmembers(module, inspect.isclass):
+                    # Check if it's a subclass of God (but not God itself)
+                    if issubclass(obj, God) and obj is not God:
+                        god_classes[name] = obj
+        except ImportError:
+            pass
+        
+        # Also check the main gods_manager module
+        for name, obj in inspect.getmembers(gods_manager, inspect.isclass):
+            if issubclass(obj, God) and obj is not God:
+                god_classes[name] = obj
         
         worshipped_data = gods_data.get('worshipped', [])
         
         # Restore worshipped gods
         restored_gods = []
         for god_data in worshipped_data:
-            god = God(god_data.get('name', 'Unknown'), game)
-            god.level = god_data.get('level', 1)
-            restored_gods.append(god)
+            god_type = god_data.get('type', 'God')
+            god_name = god_data.get('name', 'Unknown')
+            god_level = god_data.get('level', 1)
+            god_progress = god_data.get('progress', 0)
+            
+            try:
+                # Try to instantiate the specific god class
+                if god_type in god_classes:
+                    god = god_classes[god_type](game=game)
+                else:
+                    # Fall back to base God class if type not found
+                    print(f"Warning: God class '{god_type}' not found, using base God class")
+                    god = God(god_name, game)
+                
+                god.level = god_level
+                god.progress = god_progress
+                restored_gods.append(god)
+            except Exception as e:
+                print(f"Warning: Could not restore god {god_name} ({god_type}): {e}")
         
         if restored_gods:
             game.gods.set_worshipped(restored_gods)

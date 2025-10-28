@@ -67,7 +67,7 @@ class GodLevelUpEventTests(unittest.TestCase):
         self.assertEqual(event.get('old_level'), 0)
         self.assertEqual(event.get('new_level'), 1)
         self.assertEqual(event.get('category'), 'nature')
-        self.assertEqual(event.get('goals_completed'), 2)
+        self.assertEqual(event.get('progress'), 2)
         self.assertEqual(event.get('goals_needed'), 2)
 
     def test_no_event_when_at_max_level(self):

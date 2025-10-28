@@ -79,28 +79,28 @@ class GodsPanelSprite(BaseSprite):
         
         font = g.font
         
-        # Compute needed width incrementally - only god name (no level)
-        name_surfs = []
-        max_name_h = 0
-        for i, god in enumerate(gm.worshipped):
-            base_display = f"{god.name}"
-            try:
-                surf = font.render(base_display, True, (180,210,250))
-            except Exception:
-                surf = font.render("?", True, (200,200,200))
-            name_surfs.append(surf)
-            max_name_h = max(max_name_h, surf.get_height())
+        # Load god icons - larger size, no names
+        from farkle.ui.god_icons import get_god_icon
+        icon_size = 64  # Larger icon size for the top panel
         
-        # Panel height is just the name height now (no XP bar)
-        panel_h = max_name_h + 4
+        # Collect god icons
+        god_icons = []
+        for god in gm.worshipped:
+            icon = get_god_icon(god.name)
+            if icon:
+                scaled_icon = pygame.transform.scale(icon, (icon_size, icon_size))
+                god_icons.append((god, scaled_icon))
         
-        # Compute width
-        spacing = 12
-        total_width = 0
-        for surf in name_surfs:
-            total_width += surf.get_width() + spacing
-        if name_surfs:
-            total_width -= spacing  # last spacing not needed
+        if not god_icons:
+            # No icons to display
+            self.image.fill((0,0,0,0))
+            self.dirty = 1
+            return
+        
+        # Panel dimensions
+        panel_h = icon_size + 8
+        god_spacing = 16  # Space between god icons
+        total_width = len(god_icons) * icon_size + (len(god_icons) - 1) * god_spacing
         
         x_start = (WIDTH - total_width) // 2
 
@@ -108,13 +108,15 @@ class GodsPanelSprite(BaseSprite):
         self.image = pygame.Surface((total_width, panel_h), pygame.SRCALPHA)
         self.rect = self.image.get_rect(topleft=(x_start, y_start))
         
-        # Draw gods
+        # Draw god icons only
         x = 0
-        for i, (surf, god) in enumerate(zip(name_surfs, gm.worshipped)):
-            rect = surf.get_rect(topleft=(x, 2))
-            god._rect = pygame.Rect(self.rect.x + rect.x, self.rect.y + rect.y, rect.width, rect.height)
-            self.image.blit(surf, rect.topleft)
-            x += rect.width + spacing
+        for god, icon in god_icons:
+            icon_y = 4
+            self.image.blit(icon, (x, icon_y))
+            # Set the god's rect for hover/tooltip purposes
+            god._rect = pygame.Rect(self.rect.x + x, self.rect.y + icon_y, icon_size, icon_size)
+            x += icon_size + god_spacing
+        
         self.dirty = 1
 
 __all__ = ["PlayerHUDSprite", "GodsPanelSprite"]

@@ -64,8 +64,6 @@ class RelicChoiceItemSprite(BaseSprite):
         pygame.draw.rect(self.image, bg_color, box_rect, border_radius=8)
         pygame.draw.rect(self.image, border_color, box_rect, width=border_width, border_radius=8)
         
-        print(f"DEBUG: RelicChoiceItemSprite - rect={self.rect}, layer={self._layer}, visible={self.alive()}")
-        
         y = 12
         
         # Relic name

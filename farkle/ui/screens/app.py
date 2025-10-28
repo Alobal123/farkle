@@ -86,7 +86,8 @@ class App:
             load_save: If True, attempt to load game from save file
         """
         if self.game is None:
-            self.game = Game(self.screen, self.font, self.clock, rng_seed=None)
+            # Skip god selection when loading from save
+            self.game = Game(self.screen, self.font, self.clock, rng_seed=None, skip_god_selection=load_save)
             # Game is auto-initialized by default
             
             # Load saved state if requested

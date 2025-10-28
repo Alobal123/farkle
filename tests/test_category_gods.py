@@ -62,7 +62,7 @@ class CategoryGodsTests(unittest.TestCase):
             payload={"goal": nature_goal}
         ))
         self.assertEqual(demeter.level, 0, "Demeter should still be level 0 after 1 goal")
-        self.assertEqual(demeter.goals_completed, 1)
+        self.assertEqual(demeter.progress, 1)
         
         # Complete 2nd goal - should level up to 1
         nature_goal2 = Goal(
@@ -77,7 +77,7 @@ class CategoryGodsTests(unittest.TestCase):
             payload={"goal": nature_goal2}
         ))
         self.assertEqual(demeter.level, 1, "Demeter should level up to 1 after 2 goals")
-        self.assertEqual(demeter.goals_completed, 2)
+        self.assertEqual(demeter.progress, 2)
     
     def test_ares_levels_on_warfare_goal(self):
         """Ares should level up when enough warfare goals are completed."""
@@ -108,7 +108,7 @@ class CategoryGodsTests(unittest.TestCase):
         
         # Ares should level up to 1 after 2 goals
         self.assertEqual(ares.level, 1, "Ares should level up to 1 after 2 goals")
-        self.assertEqual(ares.goals_completed, 2)
+        self.assertEqual(ares.progress, 2)
     
     def test_hades_levels_on_spirit_goal(self):
         """Hades should level up when enough spirit goals are completed."""
@@ -139,7 +139,7 @@ class CategoryGodsTests(unittest.TestCase):
         
         # Hades should level up to 1 after 2 goals
         self.assertEqual(hades.level, 1, "Hades should level up to 1 after 2 goals")
-        self.assertEqual(hades.goals_completed, 2)
+        self.assertEqual(hades.progress, 2)
     
     def test_god_does_not_level_on_wrong_category(self):
         """Gods should only level up for their specific category."""
@@ -198,7 +198,7 @@ class CategoryGodsTests(unittest.TestCase):
                 payload={"goal": nature_goal}
             ))
         self.assertEqual(demeter.level, 1)
-        self.assertEqual(demeter.goals_completed, 2)
+        self.assertEqual(demeter.progress, 2)
         
         # Complete 4 more goals (6 total) -> level 2
         for i in range(2, 6):
@@ -214,7 +214,7 @@ class CategoryGodsTests(unittest.TestCase):
                 payload={"goal": nature_goal}
             ))
         self.assertEqual(demeter.level, 2)
-        self.assertEqual(demeter.goals_completed, 6)
+        self.assertEqual(demeter.progress, 6)
         
         # Complete 6 more goals (12 total) -> level 3 (max)
         for i in range(6, 12):
@@ -230,7 +230,7 @@ class CategoryGodsTests(unittest.TestCase):
                 payload={"goal": nature_goal}
             ))
         self.assertEqual(demeter.level, 3)
-        self.assertEqual(demeter.goals_completed, 12)
+        self.assertEqual(demeter.progress, 12)
     
     def test_max_level_cap(self):
         """Gods should not exceed max level (3)."""
@@ -262,7 +262,7 @@ class CategoryGodsTests(unittest.TestCase):
         
         # Demeter should be capped at max level (3)
         self.assertEqual(demeter.level, GOD_MAX_LEVEL)
-        self.assertEqual(demeter.goals_completed, 15)  # Counter continues
+        self.assertEqual(demeter.progress, 15)  # Counter continues
     
     def test_hermes_not_in_default_worshipped(self):
         """Hermes (commerce god) should not be in default worshipped gods."""
@@ -315,7 +315,7 @@ class CategoryGodsTests(unittest.TestCase):
         # We only completed 1 goal per god, so they should still be at level 0
         for god in self.game.gods.worshipped:
             self.assertEqual(god.level, 0, f"{god.name} should still be level 0 after 1 goal")
-            self.assertEqual(god.goals_completed, 1)
+            self.assertEqual(god.progress, 1)
 
 
 if __name__ == '__main__':
