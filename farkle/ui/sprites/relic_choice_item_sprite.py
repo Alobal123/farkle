@@ -3,6 +3,11 @@
 import pygame
 from farkle.ui.sprites.sprite_base import BaseSprite, Layer
 from farkle.ui.choice_window import ChoiceWindowState
+from farkle.ui.settings import (
+    CARD_BG_NORMAL, CARD_BG_SELECTED, CARD_BORDER_NORMAL, CARD_BORDER_SELECTED,
+    CARD_GLOW_FILL, CARD_GLOW_BORDER, TEXT_WHITE, RELIC_COST_AFFORDABLE,
+    RELIC_COST_UNAFFORDABLE, RELIC_EFFECT_TEXT
+)
 
 
 class RelicChoiceItemSprite(BaseSprite):
@@ -49,15 +54,15 @@ class RelicChoiceItemSprite(BaseSprite):
         if selected:
             # Outer glow
             glow_rect = box_rect.inflate(8, 8)
-            pygame.draw.rect(self.image, (100, 150, 255), glow_rect, border_radius=10)
-            pygame.draw.rect(self.image, (120, 180, 255), glow_rect, width=3, border_radius=10)
+            pygame.draw.rect(self.image, CARD_GLOW_FILL, glow_rect, border_radius=10)
+            pygame.draw.rect(self.image, CARD_GLOW_BORDER, glow_rect, width=3, border_radius=10)
             
-            bg_color = (85, 110, 150)  # Brighter background
-            border_color = (180, 220, 255)  # Much brighter border
+            bg_color = CARD_BG_SELECTED
+            border_color = CARD_BORDER_SELECTED
             border_width = 4
         else:
-            bg_color = (65, 90, 120)
-            border_color = (120, 170, 210)
+            bg_color = CARD_BG_NORMAL
+            border_color = CARD_BORDER_NORMAL
             border_width = 2
         
         # Main card background and border
@@ -67,20 +72,19 @@ class RelicChoiceItemSprite(BaseSprite):
         y = 12
         
         # Relic name
-        name_surf = g.font.render(offer.name, True, (255, 255, 255))
+        name_surf = g.font.render(offer.name, True, TEXT_WHITE)
         self.image.blit(name_surf, (10, y))
         y += name_surf.get_height() + 8
         
         # Cost
         can_afford = g.player.gold >= offer.cost
-        cost_color = (230, 210, 100) if can_afford else (180, 100, 100)
+        cost_color = RELIC_COST_AFFORDABLE if can_afford else RELIC_COST_UNAFFORDABLE
         cost_surf = g.small_font.render(f"Cost: {offer.cost}g", True, cost_color)
         self.image.blit(cost_surf, (10, y))
         y += cost_surf.get_height() + 8
         
         # Effect text with wrapping
         if offer.effect_text:
-            effect_color = (210, 210, 210)
             line_spacing = g.small_font.get_linesize()
             max_width = card_width - 20
             
@@ -101,7 +105,7 @@ class RelicChoiceItemSprite(BaseSprite):
             for line in lines:
                 if y + line_spacing > box_rect.bottom - 10:
                     break
-                line_surf = g.small_font.render(line.strip(), True, effect_color)
+                line_surf = g.small_font.render(line.strip(), True, RELIC_EFFECT_TEXT)
                 self.image.blit(line_surf, (10, y))
                 y += line_spacing
         

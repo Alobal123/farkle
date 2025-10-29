@@ -17,7 +17,7 @@ class GodLevel1BonusTests(unittest.TestCase):
         cls.clock = pygame.time.Clock()
 
     def setUp(self):
-        self.game = Game(self.screen, self.font, self.clock, rng_seed=1)
+        self.game = Game(self.screen, self.font, self.clock, rng_seed=1, skip_god_selection=True)
         
         # Initialize default gods for testing (Demeter, Ares, Hades)
         from farkle.gods.demeter import Demeter
@@ -77,6 +77,8 @@ class GodLevel1BonusTests(unittest.TestCase):
 
     def test_ares_level_1_gives_20_percent_bonus_to_warfare_goals(self):
         """Ares at level 1 should give +20% to warfare goals."""
+        from farkle.goals.goal import Goal
+        
         # Find Ares in worshipped gods
         ares = None
         for god in self.game.gods.worshipped:
@@ -84,18 +86,18 @@ class GodLevel1BonusTests(unittest.TestCase):
                 ares = god
                 break
         
-        if not ares:
-            self.skipTest("Ares not in worshipped gods for this seed")
+        self.assertIsNotNone(ares, "Ares should be in worshipped gods")
         
-        # Find warfare goal
-        warfare_goal = None
-        for goal in self.game.level_state.goals:
-            if goal.category == 'warfare':
-                warfare_goal = goal
-                break
-        
-        if not warfare_goal:
-            self.skipTest("No warfare goal for this seed")
+        # Create a warfare goal
+        warfare_goal = Goal(
+            target_score=100,
+            game=self.game,
+            name="Test Warfare Petition",
+            is_disaster=False,
+            reward_gold=100,
+            category='warfare'
+        )
+        warfare_goal.activate(self.game)
         
         # Level up Ares to level 1 (requires 2 warfare goals)
         for i in range(2):

@@ -1,5 +1,6 @@
 import pygame
 from farkle.ui.sprites.sprite_base import BaseSprite, Layer
+from farkle.ui.settings import DICE_TARGET_SELECTION
 
 class GoalSprite(BaseSprite):
     """Sprite rendering for a Goal replicating Goal.draw logic.
@@ -147,8 +148,8 @@ class GoalSprite(BaseSprite):
         
         # Draw borders: ability target selection takes precedence
         if is_target_selected:
-            # Bright cyan/gold border for selected ability target
-            pygame.draw.rect(self.image, (100, 220, 255), self.image.get_rect(), width=4, border_radius=10)
+            # Same blue border as dice banking selection for consistency
+            pygame.draw.rect(self.image, DICE_TARGET_SELECTION, self.image.get_rect(), width=4, border_radius=10)
         elif g.active_goal_index == idx:
             pygame.draw.rect(self.image, GOAL_BORDER_ACTIVE, self.image.get_rect(), width=3, border_radius=10)
         

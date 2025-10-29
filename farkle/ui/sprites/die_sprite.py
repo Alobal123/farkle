@@ -1,7 +1,7 @@
 import pygame
 from farkle.ui.sprites.sprite_base import BaseSprite, Layer
 from farkle.dice.die import PIP_POSITIONS
-from farkle.ui.settings import DICE_SIZE
+from farkle.ui.settings import DICE_SIZE, DICE_SELECTED, DICE_HELD, DICE_NORMAL, DICE_TARGET_SELECTION
 
 # Local cache reused with same semantics as die._die_surface_cache but sprite-specific (could unify later)
 _die_sprite_cache: dict[tuple[int,bool,bool,bool], pygame.Surface] = {}
@@ -53,11 +53,11 @@ class DieSprite(BaseSprite):
         cached = _die_sprite_cache.get(key)
         if cached is None:
             if d.held:
-                color = (200, 80, 80)
+                color = DICE_HELD
             elif d.selected:
-                color = (80, 150, 250)
+                color = DICE_SELECTED
             else:
-                color = (230, 230, 230)
+                color = DICE_NORMAL
             surf = pygame.Surface((DICE_SIZE, DICE_SIZE), pygame.SRCALPHA)
             pygame.draw.rect(surf, color, surf.get_rect(), border_radius=8)
             pygame.draw.rect(surf, (0,0,0), surf.get_rect(), 3, border_radius=8)
@@ -77,8 +77,8 @@ class DieSprite(BaseSprite):
             abm = getattr(game, 'ability_manager', None)
             sel_ab = abm.selecting_ability() if abm else None
             if sel_ab and sel_ab.target_type == 'die' and not d.held:
-                # Unified target selection visuals (matching goal selection):
-                # - Selected dice: bright cyan border (same as goals)
+                # Unified target selection visuals (matching banking selection):
+                # - Selected dice: same blue border as banking selection
                 base = self.image.copy()
                 import pygame as _pg
                 die_index = None
@@ -88,9 +88,9 @@ class DieSprite(BaseSprite):
                     pass
                 collected = getattr(sel_ab, 'collected_targets', []) if sel_ab else []
                 if die_index is not None and die_index in collected:
-                    # Bright cyan border for selected targets (matches goal selection)
+                    # Same blue border as banking selection
                     ring = _pg.Surface(base.get_size(), _pg.SRCALPHA)
-                    _pg.draw.rect(ring, (100, 220, 255), ring.get_rect(), 4, border_radius=8)
+                    _pg.draw.rect(ring, DICE_TARGET_SELECTION, ring.get_rect(), 4, border_radius=8)
                     base.blit(ring, (0,0))
                     self.image = base
         except Exception:

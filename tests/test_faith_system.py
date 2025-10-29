@@ -143,19 +143,18 @@ class FaithSystemTests(unittest.TestCase):
     
     def test_player_gains_faith_from_priest_goal(self):
         """Player should gain faith when priest goal is fulfilled."""
-        # Give player some starting gold and find a priest goal
-        self.game.player.gold = 500
+        from farkle.goals.goal import Goal
         
-        # Find or create a priest goal
-        priest_goal = None
-        for goal in self.game.level_state.goals:
-            if hasattr(goal, 'reward_faith') and goal.reward_faith > 0:
-                priest_goal = goal
-                break
-        
-        # If no priest goal exists, skip this test
-        if not priest_goal:
-            self.skipTest("No priest goal in test level")
+        # Create a priest goal with faith reward
+        priest_goal = Goal(
+            target_score=100,
+            game=self.game,
+            name="Test Priest Petition",
+            is_disaster=False,
+            reward_faith=2,
+            persona="priest"
+        )
+        priest_goal.activate(self.game)
         
         # Manually fulfill the goal
         priest_goal.remaining = 0

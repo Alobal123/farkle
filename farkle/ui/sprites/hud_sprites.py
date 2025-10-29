@@ -1,5 +1,8 @@
 import pygame
 from farkle.ui.sprites.sprite_base import BaseSprite, Layer
+from farkle.ui.settings import (
+    HUD_BG, HUD_BORDER, TEXT_LIGHT, WIDTH
+)
 
 class PlayerHUDSprite(BaseSprite):
     def __init__(self, player, game, *groups):
@@ -32,15 +35,13 @@ class PlayerHUDSprite(BaseSprite):
         ]
         line_surfs = []
         for t in hud_lines:
-            color = (250,250,250)
-            line_surfs.append(g.small_font.render(t, True, color))
-        from farkle.ui.settings import WIDTH
+            line_surfs.append(g.small_font.render(t, True, TEXT_LIGHT))
         width_needed = max(s.get_width() for s in line_surfs) + hud_padding * 2
         height_needed = sum(s.get_height() for s in line_surfs) + hud_padding * 2 + 6
         self.image = pygame.Surface((width_needed, height_needed), pygame.SRCALPHA)
         self.rect = self.image.get_rect(topleft=(WIDTH - width_needed - 20, 20))
-        pygame.draw.rect(self.image, (40,55,70), self.image.get_rect(), border_radius=8)
-        pygame.draw.rect(self.image, (90,140,180), self.image.get_rect(), width=2, border_radius=8)
+        pygame.draw.rect(self.image, HUD_BG, self.image.get_rect(), border_radius=8)
+        pygame.draw.rect(self.image, HUD_BORDER, self.image.get_rect(), width=2, border_radius=8)
         y = hud_padding
         for s in line_surfs:
             self.image.blit(s, (hud_padding, y))

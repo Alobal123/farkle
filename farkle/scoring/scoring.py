@@ -230,3 +230,36 @@ class ScoringRules:
             rule = best[0][0]
             return getattr(rule, 'rule_key', rule.__class__.__name__)
         return None
+
+
+def create_default_rules() -> 'ScoringRules':
+    """Factory function to create a ScoringRules instance with standard Farkle rules.
+    
+    Returns:
+        ScoringRules instance populated with all standard scoring patterns.
+    """
+    rules = ScoringRules()
+    
+    # Base three-of-a-kind values
+    three_kind_values = {
+        1: 1000,
+        2: 200,
+        3: 300,
+        4: 400,
+        5: 500,
+        6: 600,
+    }
+    for v, pts in three_kind_values.items():
+        rules.add_rule(ThreeOfAKind(v, pts))
+        rules.add_rule(FourOfAKind(v, pts))   # double three-kind value
+        rules.add_rule(FiveOfAKind(v, pts))   # triple three-kind value
+        rules.add_rule(SixOfAKind(v, pts))    # quadruple three-kind value
+    
+    rules.add_rule(SingleValue(1, 100))
+    rules.add_rule(SingleValue(5, 50))
+    rules.add_rule(Straight6(1500))
+    # New 5-length partial straights
+    rules.add_rule(Straight1to5(1000))
+    rules.add_rule(Straight2to6(1000))
+    
+    return rules

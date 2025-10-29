@@ -14,11 +14,13 @@ class App:
     """High-level application controller managing screens.
 
     Screens:
-      - 'menu': main menu with New Game button
-      - 'game': normal gameplay loop (delegated to Game methods)
-
-    The previous separate ShopScreen has been deprecated: the shop renders as an overlay sprite inside the
-    main game screen (SHOP state gates gameplay). This simplifies input routing.
+      - 'menu': main menu with New Game / Continue options
+      - 'game': gameplay loop (delegated to Game class)
+      - 'game_over': game over screen with statistics
+      - 'statistics': persistent statistics viewer
+      
+    Shop and god selection are rendered as overlay sprites within the game screen
+    using the choice window system, not as separate screens.
     """
     def __init__(self, screen: pygame.Surface, font: pygame.font.Font, clock: pygame.time.Clock):
         """Initialize the App with pygame resources.

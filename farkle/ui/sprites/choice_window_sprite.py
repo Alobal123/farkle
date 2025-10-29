@@ -12,7 +12,7 @@ class GodChoiceItemSprite(BaseSprite):
     def __init__(self, item, god, game, *groups):
         super().__init__(Layer.TOOLTIP, item, *groups)  # Above MODAL to appear on top of choice window
         self.item = item
-        self.god = god  # Temporary god instance for rendering
+        self.god = god  # God instance used for rendering the card
         self.game = game
         # Only visible when choice window is open AND maximized
         self.visible_predicate = lambda g: (
@@ -138,22 +138,30 @@ class ChoiceItemSprite(BaseSprite):
         self.rect = self.image.get_rect(topleft=old_topleft)
         box_rect = self.image.get_rect()  # Local rect for drawing (0, 0 based)
         
+        # Import button colors from settings
+        from farkle.ui.settings import (
+            CARD_BG_NORMAL, CARD_BG_DISABLED, CARD_BORDER_NORMAL,
+            TEXT_WHITE, TEXT_MUTED, RELIC_EFFECT_TEXT,
+            CHOICE_BTN_TEXT_ENABLED, CHOICE_BTN_TEXT_DISABLED, CHOICE_BTN_TEXT_VERY_DISABLED,
+            RELIC_COST_AFFORDABLE, CHOICE_SELECT_BTN_ENABLED, CHOICE_SELECT_BTN_DISABLED, TEXT_DISABLED_NAME
+        )
+        
         # Card background
-        bg_color = (65, 90, 120) if item.enabled else (45, 55, 65)
+        bg_color = CARD_BG_NORMAL if item.enabled else CARD_BG_DISABLED
         pygame.draw.rect(self.image, bg_color, box_rect, border_radius=8)
-        pygame.draw.rect(self.image, (120, 170, 210), box_rect, width=2, border_radius=8)
+        pygame.draw.rect(self.image, CARD_BORDER_NORMAL, box_rect, width=2, border_radius=8)
         
         y = box_rect.y + 12
         
         # Item name
-        name_color = (255, 255, 255) if item.enabled else (140, 140, 140)
+        name_color = TEXT_WHITE if item.enabled else TEXT_DISABLED_NAME
         name_surf = g.font.render(item.name, True, name_color)
         self.image.blit(name_surf, (box_rect.x + 10, y))
         y += name_surf.get_height() + 8
         
         # Description with text wrapping
         desc_font = g.small_font
-        desc_color = (210, 210, 210) if item.enabled else (120, 120, 120)
+        desc_color = RELIC_EFFECT_TEXT if item.enabled else CHOICE_BTN_TEXT_VERY_DISABLED
         line_spacing = desc_font.get_linesize()
         max_width = box_rect.width - 20
         
@@ -190,7 +198,7 @@ class ChoiceItemSprite(BaseSprite):
         if item.cost is not None:
             cost_y = box_rect.bottom - btn_height - cost_height - 15
             cost_text = f"Cost: {item.cost}g"
-            cost_surf = desc_font.render(cost_text, True, (230, 210, 100))
+            cost_surf = desc_font.render(cost_text, True, RELIC_COST_AFFORDABLE)
             self.image.blit(cost_surf, (box_rect.x + 10, cost_y))
         
         # Select button
@@ -198,12 +206,12 @@ class ChoiceItemSprite(BaseSprite):
         btn_rect = pygame.Rect(box_rect.x + 10, btn_y, box_rect.width - 20, btn_height)
         
         if item.enabled:
-            btn_color = (80, 200, 110)
-            btn_text_color = (0, 0, 0)
+            btn_color = CHOICE_SELECT_BTN_ENABLED
+            btn_text_color = CHOICE_BTN_TEXT_ENABLED
             btn_text = "Select"
         else:
-            btn_color = (60, 70, 80)
-            btn_text_color = (100, 100, 100)
+            btn_color = CHOICE_SELECT_BTN_DISABLED
+            btn_text_color = CHOICE_BTN_TEXT_DISABLED
             btn_text = "Unavailable"
         
         pygame.draw.rect(self.image, btn_color, btn_rect, border_radius=6)
@@ -311,6 +319,11 @@ class ChoiceWindowSprite(BaseSprite):
         self.image.fill((0, 0, 0, 0))
         self._clear_item_sprites()
         
+        # Import colors from settings
+        from farkle.ui.settings import (
+            CHOICE_ICON_BG, CARD_BORDER_NORMAL, TEXT_WHITE, TEXT_HINT
+        )
+        
         # Create a small icon in the bottom-right corner
         icon_width = 180
         icon_height = 50
@@ -323,17 +336,17 @@ class ChoiceWindowSprite(BaseSprite):
         self._minimized_icon_rect = icon_rect
         
         # Draw the minimized window
-        pygame.draw.rect(self.image, (50, 70, 95), icon_rect, border_radius=8)
-        pygame.draw.rect(self.image, (120, 170, 210), icon_rect, width=2, border_radius=8)
+        pygame.draw.rect(self.image, CHOICE_ICON_BG, icon_rect, border_radius=8)
+        pygame.draw.rect(self.image, CARD_BORDER_NORMAL, icon_rect, width=2, border_radius=8)
         
         # Title text
-        title_surf = self.game.small_font.render(self.choice_window.title, True, (255, 255, 255))
+        title_surf = self.game.small_font.render(self.choice_window.title, True, TEXT_WHITE)
         title_x = icon_rect.centerx - title_surf.get_width() // 2
         title_y = icon_rect.centery - title_surf.get_height() // 2
         self.image.blit(title_surf, (title_x, title_y))
         
         # Maximize indicator (click to expand)
-        hint_surf = self.game.small_font.render("(Click to expand)", True, (180, 180, 180))
+        hint_surf = self.game.small_font.render("(Click to expand)", True, TEXT_HINT)
         hint_x = icon_rect.centerx - hint_surf.get_width() // 2
         hint_y = title_y + title_surf.get_height() + 2
         self.image.blit(hint_surf, (hint_x, hint_y))
@@ -366,12 +379,18 @@ class ChoiceWindowSprite(BaseSprite):
         panel_y = (self.screen_height - panel_height) // 2
         panel = pygame.Rect(panel_x, panel_y, panel_width, panel_height)
         
+        # Import panel colors from settings
+        from farkle.ui.settings import (
+            CHOICE_PANEL_BG, CHOICE_PANEL_BORDER, TEXT_WHITE,
+            CHOICE_MINIMIZE_BTN_BG, CHOICE_MINIMIZE_BTN_BORDER
+        )
+        
         # Panel background
-        pygame.draw.rect(self.image, (40, 60, 80), panel, border_radius=12)
-        pygame.draw.rect(self.image, (80, 110, 140), panel, width=3, border_radius=12)
+        pygame.draw.rect(self.image, CHOICE_PANEL_BG, panel, border_radius=12)
+        pygame.draw.rect(self.image, CHOICE_PANEL_BORDER, panel, width=3, border_radius=12)
         
         # Title
-        title_surf = g.font.render(window.title, True, (255, 255, 255))
+        title_surf = g.font.render(window.title, True, TEXT_WHITE)
         title_x = panel.centerx - title_surf.get_width() // 2
         title_y = panel.y + 20
         self.image.blit(title_surf, (title_x, title_y))
@@ -383,14 +402,14 @@ class ChoiceWindowSprite(BaseSprite):
             min_btn_y = panel.y + 15
             self._minimize_rect = pygame.Rect(min_btn_x, min_btn_y, min_btn_size, min_btn_size)
             
-            pygame.draw.rect(self.image, (80, 110, 140), self._minimize_rect, border_radius=4)
-            pygame.draw.rect(self.image, (140, 180, 220), self._minimize_rect, width=1, border_radius=4)
+            pygame.draw.rect(self.image, CHOICE_MINIMIZE_BTN_BG, self._minimize_rect, border_radius=4)
+            pygame.draw.rect(self.image, CHOICE_MINIMIZE_BTN_BORDER, self._minimize_rect, width=1, border_radius=4)
             
             # Minimize icon (horizontal line)
             line_y = self._minimize_rect.centery
             line_start_x = self._minimize_rect.left + 8
             line_end_x = self._minimize_rect.right - 8
-            pygame.draw.line(self.image, (255, 255, 255), 
+            pygame.draw.line(self.image, TEXT_WHITE, 
                            (line_start_x, line_y), (line_end_x, line_y), 2)
         else:
             self._minimize_rect = None
@@ -404,6 +423,12 @@ class ChoiceWindowSprite(BaseSprite):
         button_y = panel.bottom - button_height - 20
         button_spacing = 20
         
+        # Import button colors from settings
+        from farkle.ui.settings import (
+            CHOICE_CONFIRM_BTN_ENABLED, CHOICE_CONFIRM_BTN_DISABLED,
+            CHOICE_SKIP_BTN, CHOICE_BTN_TEXT_ENABLED, CHOICE_BTN_TEXT_VERY_DISABLED
+        )
+        
         # Calculate button positions (centered)
         num_buttons = 2 if window.allow_skip else 1
         total_button_width = num_buttons * button_width + (num_buttons - 1) * button_spacing
@@ -413,8 +438,8 @@ class ChoiceWindowSprite(BaseSprite):
         
         # Confirm button
         can_confirm = window.can_confirm()
-        confirm_color = (80, 200, 110) if can_confirm else (60, 80, 90)
-        confirm_text_color = (0, 0, 0) if can_confirm else (120, 120, 120)
+        confirm_color = CHOICE_CONFIRM_BTN_ENABLED if can_confirm else CHOICE_CONFIRM_BTN_DISABLED
+        confirm_text_color = CHOICE_BTN_TEXT_ENABLED if can_confirm else CHOICE_BTN_TEXT_VERY_DISABLED
         
         self._confirm_rect = pygame.Rect(button_x, button_y, button_width, button_height)
         pygame.draw.rect(self.image, confirm_color, self._confirm_rect, border_radius=8)
@@ -431,9 +456,9 @@ class ChoiceWindowSprite(BaseSprite):
         # Skip button
         if window.allow_skip:
             self._skip_rect = pygame.Rect(button_x, button_y, button_width, button_height)
-            pygame.draw.rect(self.image, (180, 80, 60), self._skip_rect, border_radius=8)
+            pygame.draw.rect(self.image, CHOICE_SKIP_BTN, self._skip_rect, border_radius=8)
             
-            skip_surf = g.font.render("Skip", True, (0, 0, 0))
+            skip_surf = g.font.render("Skip", True, CHOICE_BTN_TEXT_ENABLED)
             self.image.blit(skip_surf, (
                 self._skip_rect.centerx - skip_surf.get_width() // 2,
                 self._skip_rect.centery - skip_surf.get_height() // 2
@@ -499,9 +524,9 @@ class ChoiceWindowSprite(BaseSprite):
             try:
                 # Check if it's a god choice (payload is God class)
                 if hasattr(item.payload, '__mro__') and God in item.payload.__mro__:
-                    # Create a temporary god instance for rendering (without activating)
-                    temp_god = item.payload(game=None)
-                    sprite = GodChoiceItemSprite(item, temp_god, g, self.groups())
+                    # Create god instance for rendering card (without activating in game)
+                    god_instance = item.payload(game=None)
+                    sprite = GodChoiceItemSprite(item, god_instance, g, self.groups())
                 # Check if it's a relic/shop choice (payload is ShopOffer)
                 elif isinstance(item.payload, ShopOffer):
                     from farkle.ui.sprites.relic_choice_item_sprite import RelicChoiceItemSprite

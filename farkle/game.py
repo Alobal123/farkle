@@ -12,17 +12,7 @@ except Exception as _e:
     # Log silently in production; could hook into a logger.
     pass
 from farkle.core.game_state_manager import GameStateManager
-from farkle.scoring.scoring import (
-    ScoringRules,
-    SingleValue,
-    ThreeOfAKind,
-    FourOfAKind,
-    FiveOfAKind,
-    SixOfAKind,
-    Straight6,
-    Straight1to5,
-    Straight2to6,
-)
+from farkle.scoring.scoring import create_default_rules
 from farkle.dice.die import Die
 from farkle.dice.dice_container import DiceContainer
 from farkle.level.level import Level, LevelState
@@ -45,18 +35,18 @@ class Game:
     def __init__(self, screen, font, clock, level: Level | None = None, *, rng_seed: int | None = None, auto_initialize: bool = True, skip_god_selection: bool = False):
         """Core gameplay model: state, dice, scoring, events.
 
-        UI concerns (tooltips, hotkeys, modal shop rendering) are handled by screen
-        classes (`GameScreen`, `ShopScreen`). This class intentionally avoids direct
-        per-frame input side-effects beyond event publication so it remains testable
+        Manages core game mechanics and state. UI concerns (tooltips, hotkeys, 
+        modal rendering) are handled by screen classes. Designed to be testable
         with synthetic events.
         
         Args:
             screen: Pygame display surface
             font: Main font for rendering
             clock: Pygame clock for timing
-            level: Optional initial level (defaults to single-goal prototype)
+            level: Optional initial level (defaults to generated level)
             rng_seed: Optional seed for deterministic testing
-            auto_initialize: If True, calls initialize() immediately. Set False to defer initialization.
+            auto_initialize: If True, calls initialize() immediately
+            skip_god_selection: If True, skips god selection at start
         """
         # Store construction parameters
         self.screen = screen
@@ -109,8 +99,7 @@ class Game:
         )
         self.level_state = LevelState(self.level, self)
         self.active_goal_index: int = 0
-        self.rules = ScoringRules()
-        self._init_rules()
+        self.rules = create_default_rules()
         self.state_manager = GameStateManager(on_change=self._on_state_change)
         # Centralized scoring manager (replaces inline preview logic)
         self.scoring_manager = ScoringManager(self)
@@ -223,7 +212,6 @@ class Game:
             setattr(self.gods, 'has_sprite', True)
         except Exception:
             pass
-        # Removed transient GameStateDebugSprite used for debugging state visibility.
         # Event listener hub (create before abilities so filtered subscriptions can attach)
         self.event_listener = EventListener()
         # Statistics tracker for meta progression (achievements, upgrades, etc.)
@@ -308,28 +296,6 @@ class Game:
                     pass
         except Exception:
             pass
-
-    def _init_rules(self):
-        # Base three-of-a-kind values
-        three_kind_values = {
-            1: 1000,
-            2: 200,
-            3: 300,
-            4: 400,
-            5: 500,
-            6: 600,
-        }
-        for v, pts in three_kind_values.items():
-            self.rules.add_rule(ThreeOfAKind(v, pts))
-            self.rules.add_rule(FourOfAKind(v, pts))   # double three-kind value
-            self.rules.add_rule(FiveOfAKind(v, pts))   # triple three-kind value
-            self.rules.add_rule(SixOfAKind(v, pts))    # quadruple three-kind value
-        self.rules.add_rule(SingleValue(1, 100))
-        self.rules.add_rule(SingleValue(5, 50))
-        self.rules.add_rule(Straight6(1500))
-        # New 5-length partial straights
-        self.rules.add_rule(Straight1to5(1000))
-        self.rules.add_rule(Straight2to6(1000))
 
     # --- scoring preview helpers -------------------------------------------------
 

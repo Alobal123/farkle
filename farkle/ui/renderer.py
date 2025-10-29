@@ -211,26 +211,19 @@ class GameRenderer:
                 obj.draw(screen)  # type: ignore[attr-defined]
             except Exception:
                 pass
-        # Reroll selection overlay highlight over applicable dice (still manual until sprite effect added)
-        # Reroll highlight now handled by DieSprite overlay logic.
-        # (Button dynamic layout now occurs before sprite update; legacy block removed.)
-        # Draw buttons via GameObjects
-        # (Button drawing handled by UIButtonSprite now.)
-        # (Status message, turn score, and selection preview removed per new minimal UI requirement.)
-        # Goal drawing handled by GoalSprite instances.
-        # Gods panel is drawn via a GameObject added to ui_misc
+        # Reroll selection overlay highlight handled by DieSprite overlay logic
+        # Draw level index
         if not shop_open:
-            screen.blit(g.font.render(f"Level {g.level_index}", True, (180, 220, 255)), (10, 10))
-        # Legacy goal draw removed if sprites exist; if any goal lacks sprite fallback to old approach
-        # Fallback goal draw removed; all goals expected to have sprites.
-        # Note: display flipping is performed in App.run() (single flip per frame). Renderer does not flip.
-        # Bottom status message near help icon (small font). Truncate if too long.
+            from farkle.ui.settings import LEVEL_TEXT_COLOR
+            screen.blit(g.font.render(f"Level {g.level_index}", True, LEVEL_TEXT_COLOR), (10, 10))
+        # Bottom status message near help icon (small font, truncated if needed)
         if not shop_open:
             try:
+                from farkle.ui.settings import TEXT_SLIGHTLY_MUTED
                 msg = getattr(g, 'message', '') or ''
                 font_small = getattr(g, 'small_font', g.font)
                 max_width = 360
-                surf = font_small.render(msg, True, (230,235,240))
+                surf = font_small.render(msg, True, TEXT_SLIGHTLY_MUTED)
                 if surf.get_width() > max_width:
                     ellipsis = '…'
                     low, high = 0, len(msg)
@@ -238,19 +231,17 @@ class GameRenderer:
                     while low <= high:
                         mid = (low + high)//2
                         test = msg[:mid] + ellipsis
-                        if font_small.render(test, True, (230,235,240)).get_width() <= max_width:
+                        if font_small.render(test, True, TEXT_SLIGHTLY_MUTED).get_width() <= max_width:
                             fit = test
                             low = mid + 1
                         else:
                             high = mid - 1
-                    surf = font_small.render(fit, True, (230,235,240))
+                    surf = font_small.render(fit, True, TEXT_SLIGHTLY_MUTED)
                 pad = 8
                 y = screen.get_height() - surf.get_height() - pad
                 x = 60
                 screen.blit(surf, (x, y))
             except Exception:
                 pass
-        # Shop overlay (in-place) if open: draw modal panel over gameplay
-        # Shop overlay now fully handled by ShopOverlaySprite; legacy inline draw removed.
 
 # Note: Avoid importing Game for type checking to prevent circular dependency.

@@ -20,7 +20,8 @@ class BankingAndHotDiceTests(unittest.TestCase):
         cls.clock = pygame.time.Clock()
 
     def setUp(self):
-        self.game = Game(self.screen, self.font, self.clock)
+        # Initialize game but skip god selection for this test
+        self.game = Game(self.screen, self.font, self.clock, skip_god_selection=True)
 
     def make_goal_easy(self):
         # Use a petition goal (not disaster) since disasters have no rewards
@@ -36,36 +37,55 @@ class BankingAndHotDiceTests(unittest.TestCase):
 
     def test_bank_awards_gold(self):
         self.game.state_manager.transition_to_rolling()
-        petition = self.make_goal_easy()
         
-        # Skip test if the easy goal doesn't have a gold reward
-        if petition.reward_gold == 0:
-            self.skipTest("Easy goal has no gold reward")
-        
-        # Set active goal to the petition
-        self.game.active_goal_index = self.game.level_state.goals.index(petition)
-        
-        # Set up event collector
+        # Set up event collector FIRST, before any actions
         from farkle.core.game_event import GameEvent, GameEventType
         events = []
         def collect(e):
             events.append(e.type)
         self.game.event_listener.subscribe(collect)
         
+        # Use an existing petition goal and give it a gold reward
+        petition = None
+        for goal in self.game.level_state.goals:
+            if not goal.is_disaster:
+                petition = goal
+                break
+        
+        # If no petition exists, use the first goal (but this should be rare)
+        if not petition:
+            petition = self.game.level_state.goals[0]
+        
+        # Make it easy to fulfill and give it a gold reward
+        petition.remaining = 100
+        petition.reward_gold = 50
+        petition.persona = "merchant"
+        
+        # Set as active goal
+        self.game.active_goal_index = self.game.level_state.goals.index(petition)
+        
+        # Lock a die worth 100 points (single 1)
         die = self.game.dice[0]
         die.value = 1
         die.selected = True
         die.scoring_eligible = True
         self.assertTrue(self.game.selection_is_single_combo())
         self.assertTrue(self.game._auto_lock_selection("Locked"))
+        
+        # Check pending score was accumulated
+        self.assertGreater(petition.pending_raw, 0, f"Petition should have pending_raw > 0, got {petition.pending_raw}")
+        
         prev_gold = self.game.player.gold
         expected_reward = petition.reward_gold
-        handle_bank(self.game)
+        self.assertTrue(handle_bank(self.game), "Banking should succeed")
         
-        # Check if GOAL_FULFILLED was published
-        if GameEventType.GOAL_FULFILLED not in events:
-            self.fail(f"GOAL_FULFILLED not in events: {events}. Goal remaining: {petition.remaining}, fulfilled: {petition.is_fulfilled()}")
+        # Goal should now be fulfilled
+        self.assertTrue(petition.is_fulfilled(), f"Goal should be fulfilled. Remaining: {petition.remaining}")
         
+        # Check if GOAL_FULFILLED was published (it's emitted after TURN_END)
+        self.assertIn(GameEventType.GOAL_FULFILLED, events, f"GOAL_FULFILLED should be in events: {events}")
+        
+        # Check gold was awarded
         self.assertEqual(self.game.player.gold, prev_gold + expected_reward, 
                         f"Gold should increase by {expected_reward} (petition reward). Was {prev_gold}, now {self.game.player.gold}")
 

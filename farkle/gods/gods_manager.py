@@ -3,7 +3,11 @@ from typing import List, Optional
 import pygame
 from farkle.core.game_object import GameObject
 from farkle.core.game_event import GameEvent, GameEventType
-from farkle.ui.settings import TEXT_PRIMARY, TEXT_ACCENT, HEIGHT
+from farkle.ui.settings import (
+    TEXT_PRIMARY, TEXT_ACCENT, HEIGHT,
+    CARD_BG_NORMAL, CARD_BG_SELECTED, CARD_BORDER_NORMAL, CARD_BORDER_SELECTED,
+    CARD_GLOW_FILL, CARD_GLOW_BORDER, TEXT_WHITE, GOD_LORE_TEXT
+)
 
 # Gods progression constants
 GOD_MAX_LEVEL = 3
@@ -43,15 +47,15 @@ class God(GameObject):
         if selected:
             # Draw outer glow for selected card
             glow_rect = rect.inflate(8, 8)
-            pygame.draw.rect(surface, (100, 150, 255), glow_rect, border_radius=10)
-            pygame.draw.rect(surface, (120, 180, 255), glow_rect, width=3, border_radius=10)
+            pygame.draw.rect(surface, CARD_GLOW_FILL, glow_rect, border_radius=10)
+            pygame.draw.rect(surface, CARD_GLOW_BORDER, glow_rect, width=3, border_radius=10)
             
-            bg_color = (85, 110, 150)  # Brighter background
-            border_color = (180, 220, 255)  # Much brighter border
+            bg_color = CARD_BG_SELECTED
+            border_color = CARD_BORDER_SELECTED
             border_width = 4  # Thicker border
         else:
-            bg_color = (65, 90, 120)
-            border_color = (120, 170, 210)
+            bg_color = CARD_BG_NORMAL
+            border_color = CARD_BORDER_NORMAL
             border_width = 2
         
         pygame.draw.rect(surface, bg_color, rect, border_radius=8)
@@ -74,7 +78,7 @@ class God(GameObject):
         
         # God name and level
         name_text = f"{self.name} (Lv{self.level})" if self.level > 0 else self.name
-        name_surf = font.render(name_text, True, (255, 255, 255))
+        name_surf = font.render(name_text, True, TEXT_WHITE)
         # Center the name horizontally
         name_x = rect.x + (rect.width - name_surf.get_width()) // 2
         surface.blit(name_surf, (name_x, y))
@@ -82,7 +86,6 @@ class God(GameObject):
         
         # Lore text with wrapping
         if self.lore:
-            lore_color = (180, 200, 220)
             line_spacing = small_font.get_linesize()
             max_width = rect.width - 20
             
@@ -103,7 +106,7 @@ class God(GameObject):
             for line in lines:
                 if y + line_spacing > rect.bottom - 10:
                     break
-                line_surf = small_font.render(line.strip(), True, lore_color)
+                line_surf = small_font.render(line.strip(), True, GOD_LORE_TEXT)
                 surface.blit(line_surf, (rect.x + 10, y))
                 y += line_spacing
 
