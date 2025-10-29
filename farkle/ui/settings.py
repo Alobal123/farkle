@@ -103,6 +103,90 @@ DICE_SELECTED = (80, 150, 250)  # Blue color when dice selected for banking
 DICE_HELD = (200, 80, 80)  # Red color when dice are held/locked
 DICE_NORMAL = (230, 230, 230)  # Normal dice color
 DICE_TARGET_SELECTION = (80, 150, 250)  # Color for ability target selection (matches banking selection)
+DICE_BORDER = (0, 0, 0)  # Black border for dice
+DICE_PIPS = (0, 0, 0)  # Black pips on dice
+
+# Progress bar colors
+PROGRESS_BAR_TRACK = (50, 55, 60)  # Dark gray background track
+PROGRESS_BAR_APPLIED = (70, 180, 110)  # Green for applied/completed progress
+PROGRESS_BAR_PENDING = (200, 150, 60)  # Orange for pending progress
+PROGRESS_BAR_PREVIEW = (110, 140, 220)  # Blue for preview/projected progress
+
+# Goal summary text colors
+GOAL_SUMMARY_TEXT = (230, 230, 228)  # Light gray for progress text
+GOAL_REWARD_FAITH = (240, 230, 140)  # Golden yellow for faith rewards
+
+# Category colors (petitions) - vibrant when active
+CATEGORY_NATURE = ((60, 120, 60), (80, 160, 80))  # Green
+CATEGORY_WARFARE = ((140, 50, 50), (180, 70, 70))  # Red
+CATEGORY_SPIRIT = ((90, 70, 140), (120, 100, 180))  # Purple
+CATEGORY_COMMERCE = ((160, 120, 40), (200, 150, 60))  # Gold/Yellow
+CATEGORY_DEFAULT = ((80, 85, 90), (100, 105, 110))  # Neutral gray
+
+# Category colors (fulfilled/done) - darker and desaturated
+CATEGORY_NATURE_DONE = ((40, 70, 40), (50, 90, 50))
+CATEGORY_WARFARE_DONE = ((80, 35, 35), (100, 50, 50))
+CATEGORY_SPIRIT_DONE = ((50, 40, 80), (70, 60, 110))
+CATEGORY_COMMERCE_DONE = ((90, 70, 30), (120, 95, 45))
+CATEGORY_DEFAULT_DONE = ((60, 65, 70), (80, 85, 90))
+
+# Game over screen colors
+GAMEOVER_VICTORY_COLOR = (100, 220, 100)  # Green for victory
+GAMEOVER_DEFEAT_COLOR = (220, 100, 100)  # Red for defeat
+GAMEOVER_GOLD_STAT = (255, 215, 0)  # Gold color for gold stats
+GAMEOVER_FARKLE_STAT = (220, 100, 100)  # Red for farkle stats
+GAMEOVER_SCORE_STAT = (150, 200, 255)  # Blue for score stats
+GAMEOVER_HIGHEST_STAT = (200, 150, 255)  # Purple for highest score
+GAMEOVER_GENERAL_STAT = (180, 180, 180)  # Gray for general stats
+GAMEOVER_BUTTON_COLOR = (80, 120, 160)  # Button normal color
+GAMEOVER_BUTTON_HOVER = (100, 150, 200)  # Button hover color
+GAMEOVER_BUTTON_BORDER = (200, 200, 200)  # Button border
+GAMEOVER_HINT_TEXT = (150, 150, 150)  # Hint text color
+
+# Font sizes
+FONT_SIZE_TITLE = 60
+FONT_SIZE_SUBTITLE = 32
+FONT_SIZE_BUTTON = 36
+FONT_SIZE_STATS = 20
+FONT_SIZE_SMALL = 22
+FONT_SIZE_HINT = 20
+
+# Border radius values
+BORDER_RADIUS_DICE = 8
+BORDER_RADIUS_GOAL = 10
+BORDER_RADIUS_BUTTON = 6
+BORDER_RADIUS_HUD = 8
+BORDER_RADIUS_CARD = 8
+BORDER_RADIUS_PANEL = 12
+BORDER_RADIUS_MINIMIZE = 4
+BORDER_RADIUS_PROGRESS_BAR = 4
+
+# Border widths
+BORDER_WIDTH_DICE = 3
+BORDER_WIDTH_GOAL_ACTIVE = 3
+BORDER_WIDTH_TARGET_SELECTION = 4
+BORDER_WIDTH_HUD = 2
+BORDER_WIDTH_CARD = 2
+BORDER_WIDTH_PANEL = 3
+BORDER_WIDTH_MINIMIZE = 1
+BORDER_WIDTH_GOD_NORMAL = 2
+BORDER_WIDTH_GOD_SELECTED = 4
+
+# Layout dimensions
+CARD_WIDTH = 220
+ICON_WIDTH = 180
+BUTTON_WIDTH_CHOICE = 120
+SHOP_PANEL_WIDTH = 600
+BUTTON_WIDTH_MENU = 300
+BUTTON_HEIGHT_MENU = 80
+
+# Spacing constants
+CONTENT_SPACING = 8
+BAR_MARGIN = 6
+BAR_HEIGHT = 14
+
+# Dice rendering
+DICE_PIP_RADIUS_RATIO = 0.07  # Pips are 7% of die size
 
 # Button rectangles (created once; expect pygame.init before import)
 ROLL_BTN = pygame.Rect(WIDTH//2 - 130, HEIGHT - 120, 120, 50)

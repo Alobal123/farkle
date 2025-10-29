@@ -2,7 +2,16 @@
 import pygame
 from typing import Any
 from .base_screen import SimpleScreen
-from farkle.ui.settings import WIDTH, HEIGHT, BG_COLOR, TEXT_PRIMARY
+from farkle.ui.settings import (
+    WIDTH, HEIGHT, BG_COLOR, TEXT_PRIMARY,
+    GAMEOVER_VICTORY_COLOR, GAMEOVER_DEFEAT_COLOR,
+    GAMEOVER_GOLD_STAT, GAMEOVER_FARKLE_STAT, GAMEOVER_SCORE_STAT,
+    GAMEOVER_HIGHEST_STAT, GAMEOVER_GENERAL_STAT,
+    GAMEOVER_BUTTON_COLOR, GAMEOVER_BUTTON_HOVER, GAMEOVER_BUTTON_BORDER,
+    GAMEOVER_HINT_TEXT, BUTTON_WIDTH_MENU, BUTTON_HEIGHT_MENU,
+    FONT_SIZE_TITLE, FONT_SIZE_SUBTITLE, FONT_SIZE_BUTTON, FONT_SIZE_STATS,
+    FONT_SIZE_HINT, BORDER_RADIUS_DICE
+)
 
 
 class GameOverScreen(SimpleScreen):
@@ -22,10 +31,10 @@ class GameOverScreen(SimpleScreen):
         super().__init__()
         self.screen = screen
         self.font = font
-        self.title_font = pygame.font.SysFont("Arial", 60, bold=True)
-        self.subtitle_font = pygame.font.SysFont("Arial", 32)
-        self.button_font = pygame.font.SysFont("Arial", 36)
-        self.stats_font = pygame.font.SysFont("Arial", 20)  # Smaller font for stats
+        self.title_font = pygame.font.SysFont("Arial", FONT_SIZE_TITLE, bold=True)
+        self.subtitle_font = pygame.font.SysFont("Arial", FONT_SIZE_SUBTITLE)
+        self.button_font = pygame.font.SysFont("Arial", FONT_SIZE_BUTTON)
+        self.stats_font = pygame.font.SysFont("Arial", FONT_SIZE_STATS)
         
         self.success = success
         self.level_name = level_name
@@ -33,16 +42,14 @@ class GameOverScreen(SimpleScreen):
         self.statistics = statistics or {}
         
         # Return to Menu button
-        button_width = 300
-        button_height = 80
-        button_x = WIDTH // 2 - button_width // 2
+        button_x = WIDTH // 2 - BUTTON_WIDTH_MENU // 2
         button_y = HEIGHT - 150
-        self.menu_button = pygame.Rect(button_x, button_y, button_width, button_height)
+        self.menu_button = pygame.Rect(button_x, button_y, BUTTON_WIDTH_MENU, BUTTON_HEIGHT_MENU)
         
         # Button colors
-        self.button_color = (80, 120, 160)
-        self.button_hover_color = (100, 150, 200)
-        self.button_text_color = (255, 255, 255)
+        self.button_color = GAMEOVER_BUTTON_COLOR
+        self.button_hover_color = GAMEOVER_BUTTON_HOVER
+        self.button_text_color = TEXT_PRIMARY
         
         # Track hover state
         self.hovering = False
@@ -80,10 +87,10 @@ class GameOverScreen(SimpleScreen):
         # Title: Success or Failure
         if self.success:
             title_text = "VICTORY!"
-            title_color = (100, 220, 100)
+            title_color = GAMEOVER_VICTORY_COLOR
         else:
             title_text = "DEFEAT"
-            title_color = (220, 100, 100)
+            title_color = GAMEOVER_DEFEAT_COLOR
             
         title_surf = self.title_font.render(title_text, True, title_color)
         title_rect = title_surf.get_rect(center=(WIDTH // 2, HEIGHT // 4 - 40))
@@ -101,7 +108,7 @@ class GameOverScreen(SimpleScreen):
         # Display gold stats
         gold_data = self.statistics.get('gold', {})
         gold_text = f"Total Gold Gained: {gold_data.get('total', 0)}"
-        gold_surf = self.stats_font.render(gold_text, True, (255, 215, 0))
+        gold_surf = self.stats_font.render(gold_text, True, GAMEOVER_GOLD_STAT)
         gold_rect = gold_surf.get_rect(center=(WIDTH // 2, y_offset))
         surface.blit(gold_surf, gold_rect)
         y_offset += 35
@@ -109,7 +116,7 @@ class GameOverScreen(SimpleScreen):
         # Display farkle stats
         farkle_data = self.statistics.get('farkles', {})
         farkle_text = f"Total Farkles: {farkle_data.get('total', 0)}"
-        farkle_surf = self.stats_font.render(farkle_text, True, (220, 100, 100))
+        farkle_surf = self.stats_font.render(farkle_text, True, GAMEOVER_FARKLE_STAT)
         farkle_rect = farkle_surf.get_rect(center=(WIDTH // 2, y_offset))
         surface.blit(farkle_surf, farkle_rect)
         y_offset += 35
@@ -117,14 +124,14 @@ class GameOverScreen(SimpleScreen):
         # Display scoring stats
         scoring_data = self.statistics.get('scoring', {})
         score_text = f"Total Score: {scoring_data.get('total_score', 0)}"
-        score_surf = self.stats_font.render(score_text, True, (150, 200, 255))
+        score_surf = self.stats_font.render(score_text, True, GAMEOVER_SCORE_STAT)
         score_rect = score_surf.get_rect(center=(WIDTH // 2, y_offset))
         surface.blit(score_surf, score_rect)
         y_offset += 35
         
         # Display highest single score
         highest_text = f"Highest Single Score: {scoring_data.get('highest_single', 0)}"
-        highest_surf = self.stats_font.render(highest_text, True, (200, 150, 255))
+        highest_surf = self.stats_font.render(highest_text, True, GAMEOVER_HIGHEST_STAT)
         highest_rect = highest_surf.get_rect(center=(WIDTH // 2, y_offset))
         surface.blit(highest_surf, highest_rect)
         y_offset += 35
@@ -132,26 +139,26 @@ class GameOverScreen(SimpleScreen):
         # Display gameplay stats
         gameplay_data = self.statistics.get('gameplay', {})
         turns_text = f"Turns Played: {gameplay_data.get('turns_played', 0)}"
-        turns_surf = self.stats_font.render(turns_text, True, (180, 180, 180))
+        turns_surf = self.stats_font.render(turns_text, True, GAMEOVER_GENERAL_STAT)
         turns_rect = turns_surf.get_rect(center=(WIDTH // 2, y_offset))
         surface.blit(turns_surf, turns_rect)
         y_offset += 30
         
         relics_text = f"Relics Purchased: {gameplay_data.get('relics_purchased', 0)}"
-        relics_surf = self.stats_font.render(relics_text, True, (180, 180, 180))
+        relics_surf = self.stats_font.render(relics_text, True, GAMEOVER_GENERAL_STAT)
         relics_rect = relics_surf.get_rect(center=(WIDTH // 2, y_offset))
         surface.blit(relics_surf, relics_rect)
         y_offset += 30
         
         goals_text = f"Goals Completed: {gameplay_data.get('goals_completed', 0)}"
-        goals_surf = self.stats_font.render(goals_text, True, (180, 180, 180))
+        goals_surf = self.stats_font.render(goals_text, True, GAMEOVER_GENERAL_STAT)
         goals_rect = goals_surf.get_rect(center=(WIDTH // 2, y_offset))
         surface.blit(goals_surf, goals_rect)
         
         # Return to Menu button
         button_color = self.button_hover_color if self.hovering else self.button_color
-        pygame.draw.rect(surface, button_color, self.menu_button, border_radius=8)
-        pygame.draw.rect(surface, (200, 200, 200), self.menu_button, width=2, border_radius=8)
+        pygame.draw.rect(surface, button_color, self.menu_button, border_radius=BORDER_RADIUS_DICE)
+        pygame.draw.rect(surface, GAMEOVER_BUTTON_BORDER, self.menu_button, width=2, border_radius=BORDER_RADIUS_DICE)
         
         # Draw button text
         button_text = "Return to Menu"
@@ -161,6 +168,6 @@ class GameOverScreen(SimpleScreen):
         
         # Hint text
         hint_text = "Press SPACE or ESC to continue"
-        hint_surf = pygame.font.SysFont("Arial", 20).render(hint_text, True, (150, 150, 150))
+        hint_surf = pygame.font.SysFont("Arial", FONT_SIZE_HINT).render(hint_text, True, GAMEOVER_HINT_TEXT)
         hint_rect = hint_surf.get_rect(center=(WIDTH // 2, HEIGHT - 50))
         surface.blit(hint_surf, hint_rect)

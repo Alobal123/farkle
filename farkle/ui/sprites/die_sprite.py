@@ -1,7 +1,11 @@
 import pygame
 from farkle.ui.sprites.sprite_base import BaseSprite, Layer
 from farkle.dice.die import PIP_POSITIONS
-from farkle.ui.settings import DICE_SIZE, DICE_SELECTED, DICE_HELD, DICE_NORMAL, DICE_TARGET_SELECTION
+from farkle.ui.settings import (
+    DICE_SIZE, DICE_SELECTED, DICE_HELD, DICE_NORMAL, DICE_TARGET_SELECTION,
+    DICE_BORDER, DICE_PIPS, BORDER_RADIUS_DICE, BORDER_WIDTH_DICE,
+    BORDER_WIDTH_TARGET_SELECTION, DICE_PIP_RADIUS_RATIO
+)
 
 # Local cache reused with same semantics as die._die_surface_cache but sprite-specific (could unify later)
 _die_sprite_cache: dict[tuple[int,bool,bool,bool], pygame.Surface] = {}
@@ -59,13 +63,13 @@ class DieSprite(BaseSprite):
             else:
                 color = DICE_NORMAL
             surf = pygame.Surface((DICE_SIZE, DICE_SIZE), pygame.SRCALPHA)
-            pygame.draw.rect(surf, color, surf.get_rect(), border_radius=8)
-            pygame.draw.rect(surf, (0,0,0), surf.get_rect(), 3, border_radius=8)
+            pygame.draw.rect(surf, color, surf.get_rect(), border_radius=BORDER_RADIUS_DICE)
+            pygame.draw.rect(surf, DICE_BORDER, surf.get_rect(), BORDER_WIDTH_DICE, border_radius=BORDER_RADIUS_DICE)
             if not d.held and not d.scoring_eligible:
                 surf.set_alpha(130)
             for px, py in PIP_POSITIONS[d.value]:
-                pip_radius = int(DICE_SIZE * 0.07) # Pips are 7% of die size
-                pygame.draw.circle(surf, (0,0,0), (px * DICE_SIZE, py * DICE_SIZE), pip_radius)
+                pip_radius = int(DICE_SIZE * DICE_PIP_RADIUS_RATIO)
+                pygame.draw.circle(surf, DICE_PIPS, (px * DICE_SIZE, py * DICE_SIZE), pip_radius)
             _die_sprite_cache[key] = surf
             cached = surf
         self.image = cached
@@ -90,7 +94,7 @@ class DieSprite(BaseSprite):
                 if die_index is not None and die_index in collected:
                     # Same blue border as banking selection
                     ring = _pg.Surface(base.get_size(), _pg.SRCALPHA)
-                    _pg.draw.rect(ring, DICE_TARGET_SELECTION, ring.get_rect(), 4, border_radius=8)
+                    _pg.draw.rect(ring, DICE_TARGET_SELECTION, ring.get_rect(), BORDER_WIDTH_TARGET_SELECTION, border_radius=BORDER_RADIUS_DICE)
                     base.blit(ring, (0,0))
                     self.image = base
         except Exception:

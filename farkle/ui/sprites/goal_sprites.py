@@ -1,6 +1,10 @@
 import pygame
 from farkle.ui.sprites.sprite_base import BaseSprite, Layer
-from farkle.ui.settings import DICE_TARGET_SELECTION
+from farkle.ui.settings import (
+    DICE_TARGET_SELECTION, PROGRESS_BAR_TRACK, PROGRESS_BAR_APPLIED,
+    PROGRESS_BAR_PENDING, PROGRESS_BAR_PREVIEW, GOAL_SUMMARY_TEXT,
+    GOAL_REWARD_FAITH, BORDER_RADIUS_PROGRESS_BAR, BAR_MARGIN, BAR_HEIGHT
+)
 
 class GoalSprite(BaseSprite):
     """Sprite rendering for a Goal replicating Goal.draw logic.
@@ -174,13 +178,10 @@ class GoalSprite(BaseSprite):
         y_pos += content_spacing
 
         # 2. Render Progress Bar
-        bar_margin = 6
-        bar_height = 14
-        bar_x = bar_margin
+        bar_x = BAR_MARGIN
         bar_y = y_pos
-        bar_width = self.image.get_width() - bar_margin * 2
-        track_color = (50, 55, 60)
-        pygame.draw.rect(self.image, track_color, pygame.Rect(bar_x, bar_y, bar_width, bar_height), border_radius=4)
+        bar_width = self.image.get_width() - BAR_MARGIN * 2
+        pygame.draw.rect(self.image, PROGRESS_BAR_TRACK, pygame.Rect(bar_x, bar_y, bar_width, BAR_HEIGHT), border_radius=BORDER_RADIUS_PROGRESS_BAR)
         total = max(1, goal.target_score)
         applied_w = int(bar_width * applied / total)
         pending_w = int(bar_width * projected_pending / total)
@@ -198,25 +199,22 @@ class GoalSprite(BaseSprite):
             'preview': preview_w,
             'total': bar_width
         }
-        applied_color = (70, 180, 110)
-        pending_color = (200, 150, 60)
-        preview_color = (110, 140, 220)
         if applied_w > 0:
-            pygame.draw.rect(self.image, applied_color, pygame.Rect(bar_x, bar_y, applied_w, bar_height), border_radius=4)
+            pygame.draw.rect(self.image, PROGRESS_BAR_APPLIED, pygame.Rect(bar_x, bar_y, applied_w, BAR_HEIGHT), border_radius=BORDER_RADIUS_PROGRESS_BAR)
         if pending_w > 0:
-            pygame.draw.rect(self.image, pending_color, pygame.Rect(bar_x + applied_w, bar_y, pending_w, bar_height))
+            pygame.draw.rect(self.image, PROGRESS_BAR_PENDING, pygame.Rect(bar_x + applied_w, bar_y, pending_w, BAR_HEIGHT))
         if preview_w > 0:
-            pygame.draw.rect(self.image, preview_color, pygame.Rect(bar_x + applied_w + pending_w, bar_y, preview_w, bar_height))
+            pygame.draw.rect(self.image, PROGRESS_BAR_PREVIEW, pygame.Rect(bar_x + applied_w + pending_w, bar_y, preview_w, BAR_HEIGHT))
         summary = f"{applied}/{goal.target_score}"
         if projected_pending:
             summary += f"+{projected_pending}"
         if preview_add:
             summary += f"+{preview_add}"
-        summary_surf = g.small_font.render(summary, True, (230,230,228))
+        summary_surf = g.small_font.render(summary, True, GOAL_SUMMARY_TEXT)
         summary_x = (self.image.get_width() - summary_surf.get_width()) // 2
         self.image.blit(summary_surf, (summary_x, bar_y - 1))
 
-        y_pos += bar_height + content_spacing
+        y_pos += BAR_HEIGHT + content_spacing
 
         # 3. Render Reward Text
         if goal.reward_gold > 0:
@@ -243,7 +241,7 @@ class GoalSprite(BaseSprite):
             self.image.blit(reward_surf, (reward_x, reward_y))
         elif goal.reward_faith > 0:
             reward_text = f"+{goal.reward_faith} Faith"
-            reward_surf = g.small_font.render(reward_text, True, (240, 230, 140))  # Golden color for faith
+            reward_surf = g.small_font.render(reward_text, True, GOAL_REWARD_FAITH)
             reward_x = (self.image.get_width() - reward_surf.get_width()) // 2
             reward_y = y_pos
             self.image.blit(reward_surf, (reward_x, reward_y))
